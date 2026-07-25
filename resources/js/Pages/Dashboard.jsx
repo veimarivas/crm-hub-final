@@ -61,7 +61,14 @@ const STATUS_STYLES = {
     lost: 'bg-red-50 text-red-700 ring-red-200',
 };
 
-export default function Dashboard({ stats, recentLeads, myTasks, currency }) {
+function waitLabel(mins) {
+    if (mins < 60) return `${mins} min`;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+export default function Dashboard({ stats, recentLeads, myTasks, currency, urgentLeads = [], slaMinutes = 30 }) {
     const avgTicket = stats.wonThisMonth > 0 ? stats.wonValueThisMonth / stats.wonThisMonth : 0;
 
     return (
@@ -90,6 +97,59 @@ export default function Dashboard({ stats, recentLeads, myTasks, currency }) {
                         </Link>
                     </div>
                 </div>
+
+                {/* Widget de urgencia: leads que necesitan respuesta */}
+                {urgentLeads.length > 0 && (
+                    <div className="bg-gradient-to-br from-red-50 via-white to-orange-50 border-2 border-red-200 rounded-2xl shadow-lg overflow-hidden">
+                        <div className="p-5 border-b border-red-100 flex items-center justify-between gap-3 bg-gradient-to-r from-red-500/5 to-transparent">
+                            <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-red-500 to-rose-600 flex items-center justify-center text-white shadow-lg shadow-red-500/30 shrink-0">
+                                    <svg className="w-5 h-5 animate-pulse" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" /></svg>
+                                </div>
+                                <div className="min-w-0">
+                                    <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                                        Necesitan respuesta ya
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-600 text-white shadow tabular-nums">
+                                            {stats.urgentLeads}
+                                        </span>
+                                    </h3>
+                                    <p className="text-xs text-gray-600 mt-0.5">Leads con mensaje entrante sin respuesta hace más de {slaMinutes} min</p>
+                                </div>
+                            </div>
+                            <Link href={route('inbox', { filter: 'unresponded' })} className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-red-600 to-rose-600 hover:opacity-90 shadow-md shadow-red-500/20 shrink-0">
+                                Ir al Inbox
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+                            </Link>
+                        </div>
+                        <ul className="divide-y divide-red-100/60">
+                            {urgentLeads.map((l) => (
+                                <li key={l.id}>
+                                    <Link href={route('leads.show', l.id)} className="flex items-center gap-3 px-5 py-3 hover:bg-red-50/60 transition-colors">
+                                        <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
+                                        <div className="min-w-0 flex-1">
+                                            <p className="font-semibold text-sm text-gray-900 truncate">{l.contact?.name || l.contact?.phone || 'Sin contacto'}</p>
+                                            <p className="text-[11px] text-gray-500 truncate">
+                                                {l.title}
+                                                {l.stage && <span className="text-gray-300"> · <span style={{ color: l.stage.color }}>{l.stage.name}</span></span>}
+                                            </p>
+                                        </div>
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold text-red-700 bg-red-100 border border-red-200 tabular-nums shrink-0">
+                                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                            {waitLabel(l.waiting_minutes)}
+                                        </span>
+                                    </Link>
+                                </li>
+                            ))}
+                        </ul>
+                        {stats.urgentLeads > urgentLeads.length && (
+                            <div className="px-5 py-2.5 bg-red-50/50 border-t border-red-100 text-center">
+                                <Link href={route('inbox', { filter: 'unresponded' })} className="text-xs font-bold text-red-700 hover:text-red-900">
+                                    Ver los {stats.urgentLeads - urgentLeads.length} restantes en el Inbox →
+                                </Link>
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {/* KPIs */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
