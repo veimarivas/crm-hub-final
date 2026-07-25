@@ -17,6 +17,9 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
     'source_ref', 'source_url', 'meta_leadgen_id',
     'status', 'closed_at', 'wacrm_conversation_id', 'ai_pending',
     'invoiced_cents', 'collected_cents',
+    'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
+    'gclid', 'fbclid', 'ttclid', 'msclkid',
+    'landing_url', 'referrer_url', 'first_touch_at',
 ])]
 class Lead extends Model
 {
@@ -33,7 +36,56 @@ class Lead extends Model
             'closed_at' => 'datetime',
             'ai_enabled' => 'boolean',
             'ai_pending' => 'boolean',
+            'first_touch_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Campos que forman el "toque" de atribución. Todos son first-touch:
+     * una vez seteados no se sobreescriben. Ver applyTracking().
+     */
+    public const TRACKING_FIELDS = [
+        'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
+        'gclid', 'fbclid', 'ttclid', 'msclkid',
+        'landing_url', 'referrer_url',
+    ];
+
+    /**
+     * Aplica atribución al lead. Política first-touch: si el lead ya tiene
+     * `first_touch_at`, solo se rellenan los campos que aún estén vacíos
+     * (nunca se pisa un valor previo). Devuelve true si al menos un campo
+     * cambió — útil para decidir si persistir o no.
+     *
+     * @param  array<string,string|null>  $tracking  claves de TRACKING_FIELDS
+     */
+    public function applyTracking(array $tracking): bool
+    {
+        $wasFirstTouch = $this->first_touch_at === null;
+        $changes = [];
+
+        foreach (self::TRACKING_FIELDS as $field) {
+            $value = $tracking[$field] ?? null;
+            if ($value === null || $value === '') {
+                continue;
+            }
+            // First-touch: no pisar valores existentes.
+            if (! empty($this->{$field})) {
+                continue;
+            }
+            $changes[$field] = mb_substr((string) $value, 0, $field === 'landing_url' || $field === 'referrer_url' ? 2048 : 191);
+        }
+
+        if ($wasFirstTouch && $changes !== []) {
+            $changes['first_touch_at'] = now();
+        }
+
+        if ($changes === []) {
+            return false;
+        }
+
+        $this->fill($changes)->save();
+
+        return true;
     }
 
     protected static function booted(): void

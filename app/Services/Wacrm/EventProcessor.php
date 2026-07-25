@@ -162,9 +162,25 @@ class EventProcessor
                 'wacrm_conversation_id' => $data['conversation_id'] ?? null,
             ]);
 
+            // Atribución de anuncios Click-to-WhatsApp de Meta: los mensajes
+            // que traen `referral` vinieron de un ad. Derivamos utm_source /
+            // utm_medium estándar (así el reporte por utm agrupa CTWA con
+            // los demás canales) y persistimos el fbclid si viene.
+            if ($referral) {
+                $lead->applyTracking(array_filter([
+                    'utm_source' => 'meta_ads',
+                    'utm_medium' => 'cpc',
+                    'utm_campaign' => $referral['source_id'] ?? null,
+                    'utm_content' => $referral['ad_id'] ?? null,
+                    'fbclid' => $referral['ctwa_clid'] ?? null,
+                    'landing_url' => $referral['source_url'] ?? null,
+                ]));
+            }
+
             $lead->recordEvent('created', null, array_filter([
                 'source' => 'whatsapp',
                 'ad_id' => $referral['source_id'] ?? null,
+                'utm_source' => $lead->utm_source,
             ]));
 
             // Aviso al owner: entró un lead nuevo por WhatsApp.

@@ -36,10 +36,23 @@
                 <h1>{{ $form->headline ?? $form->name }}</h1>
                 <p>Déjanos tus datos y te contactamos</p>
             </div>
-            <form method="POST" action="{{ route('webforms.submit', $form->token) }}">
+            <form method="POST" action="{{ route('webforms.submit', $form->token) }}" id="komoForm">
                 @csrf
                 {{-- Honeypot anti-bots --}}
                 <input class="hp" type="text" name="website" tabindex="-1" autocomplete="off">
+
+                {{-- Tracking oculto: JS lo puebla al cargar (querystring, referrer, localStorage) --}}
+                <input type="hidden" name="utm_source">
+                <input type="hidden" name="utm_medium">
+                <input type="hidden" name="utm_campaign">
+                <input type="hidden" name="utm_content">
+                <input type="hidden" name="utm_term">
+                <input type="hidden" name="gclid">
+                <input type="hidden" name="fbclid">
+                <input type="hidden" name="ttclid">
+                <input type="hidden" name="msclkid">
+                <input type="hidden" name="landing_url">
+                <input type="hidden" name="referrer_url">
 
                 <label for="name">Nombre *</label>
                 <input id="name" name="name" value="{{ old('name') }}" required maxlength="120">
@@ -58,6 +71,32 @@
 
                 <button type="submit">{{ $form->button_label }}</button>
             </form>
+
+            {{-- Captura de tracking inline. Ver también /track.js (snippet embebible
+                 para landings externas): guarda el first-touch en localStorage y
+                 esta captura lo prefiere sobre el querystring actual. --}}
+            <script>
+            (function () {
+                var UTM_KEYS = ['utm_source','utm_medium','utm_campaign','utm_content','utm_term',
+                                'gclid','fbclid','ttclid','msclkid'];
+                var LS_KEY = 'komo_first_touch_v1';
+                var qs = new URLSearchParams(window.location.search);
+                var stored = null;
+                try { stored = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (e) {}
+                var form = document.getElementById('komoForm');
+                if (!form) return;
+                function set(name, value) {
+                    var el = form.querySelector('[name="' + name + '"]');
+                    if (el && value) el.value = value;
+                }
+                UTM_KEYS.forEach(function (k) {
+                    var v = (stored && stored[k]) || qs.get(k) || '';
+                    if (v) set(k, v);
+                });
+                set('landing_url', (stored && stored.landing_url) || window.location.href);
+                set('referrer_url', (stored && stored.referrer_url) || document.referrer || '');
+            })();
+            </script>
         @endif
     </div>
 </body>

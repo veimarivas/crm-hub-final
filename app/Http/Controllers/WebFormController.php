@@ -90,7 +90,20 @@ class WebFormController extends Controller
             'phone' => 'required|string|max:32',
             'email' => 'nullable|email|max:255',
             'message' => 'nullable|string|max:2000',
+            'utm_source' => 'nullable|string|max:120',
+            'utm_medium' => 'nullable|string|max:120',
+            'utm_campaign' => 'nullable|string|max:191',
+            'utm_content' => 'nullable|string|max:191',
+            'utm_term' => 'nullable|string|max:191',
+            'gclid' => 'nullable|string|max:191',
+            'fbclid' => 'nullable|string|max:191',
+            'ttclid' => 'nullable|string|max:191',
+            'msclkid' => 'nullable|string|max:191',
+            'landing_url' => 'nullable|string|max:2048',
+            'referrer_url' => 'nullable|string|max:2048',
         ]);
+
+        $tracking = array_intersect_key($validated, array_flip(Lead::TRACKING_FIELDS));
 
         $normalized = Contact::normalizePhone($validated['phone']);
 
@@ -116,7 +129,14 @@ class WebFormController extends Controller
                 'source' => 'web_form',
             ]);
 
-            $lead->recordEvent('created', null, ['source' => 'web_form', 'form' => $form->name]);
+            $lead->applyTracking($tracking);
+
+            $lead->recordEvent('created', null, array_filter([
+                'source' => 'web_form',
+                'form' => $form->name,
+                'utm_source' => $lead->utm_source,
+                'utm_campaign' => $lead->utm_campaign,
+            ]));
 
             \App\Models\AppNotification::notify(
                 $form->account_id,

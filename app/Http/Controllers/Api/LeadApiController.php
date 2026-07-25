@@ -46,6 +46,8 @@ class LeadApiController extends Controller
                 'collected_cents' => (int) $lead->collected_cents,
                 'source' => $lead->source,
                 'source_ref' => $lead->source_ref,
+                'utm_source' => $lead->utm_source,
+                'utm_campaign' => $lead->utm_campaign,
                 'created_at' => $lead->created_at?->toIso8601String(),
                 'closed_at' => $lead->closed_at?->toIso8601String(),
             ]),
@@ -72,13 +74,33 @@ class LeadApiController extends Controller
             'stage_id' => 'nullable|uuid',
             'custom_fields' => 'nullable|array',
             'meta_leadgen_id' => 'nullable|string|max:64',
+            'tracking' => 'nullable|array',
+            'tracking.utm_source' => 'nullable|string|max:120',
+            'tracking.utm_medium' => 'nullable|string|max:120',
+            'tracking.utm_campaign' => 'nullable|string|max:191',
+            'tracking.utm_content' => 'nullable|string|max:191',
+            'tracking.utm_term' => 'nullable|string|max:191',
+            'tracking.gclid' => 'nullable|string|max:191',
+            'tracking.fbclid' => 'nullable|string|max:191',
+            'tracking.ttclid' => 'nullable|string|max:191',
+            'tracking.msclkid' => 'nullable|string|max:191',
+            'tracking.landing_url' => 'nullable|string|max:2048',
+            'tracking.referrer_url' => 'nullable|string|max:2048',
         ]);
 
-        // Idempotencia: un Lead Ad reenviado no duplica el lead.
+        $tracking = $validated['tracking'] ?? [];
+
+        // Idempotencia: un Lead Ad reenviado no duplica el lead. Aun así
+        // aprovechamos para intentar completar el tracking si algún campo
+        // aún está vacío (first-touch, no pisa nada existente).
         if ($leadgenId = $validated['meta_leadgen_id'] ?? null) {
             $existing = Lead::forAccount($accountId)->where('meta_leadgen_id', $leadgenId)->first();
 
             if ($existing) {
+                if ($tracking !== []) {
+                    $existing->applyTracking($tracking);
+                }
+
                 return response()->json(['data' => $existing->only(['id', 'title', 'status']), 'duplicated' => true]);
             }
         }
@@ -135,9 +157,15 @@ class LeadApiController extends Controller
             'meta_leadgen_id' => $validated['meta_leadgen_id'] ?? null,
         ]);
 
+        if ($tracking !== []) {
+            $lead->applyTracking($tracking);
+        }
+
         $lead->recordEvent('created', null, array_filter([
             'source' => $source,
             'ad_id' => $validated['source_ref'] ?? null,
+            'utm_source' => $lead->utm_source,
+            'utm_campaign' => $lead->utm_campaign,
         ]));
 
         // Los campos extra del formulario quedan visibles como nota.
@@ -164,6 +192,44 @@ class LeadApiController extends Controller
         );
 
         return response()->json(['data' => $lead->only(['id', 'title', 'status', 'source', 'source_ref'])], 201);
+    }
+
+    /**
+     * PATCH /api/v1/leads/{id}/tracking — asocia UTMs / click IDs a un
+     * lead existente. First-touch: solo rellena campos vacíos, no pisa
+     * atribución previa. Útil cuando la conversión ocurre en un flujo
+     * asíncrono (el JS captura UTMs, luego un backend externo crea el
+     * lead sin ellos y los completa después).
+     */
+    public function updateTracking(Request $request, string $id): JsonResponse
+    {
+        $lead = Lead::forAccount($this->accountId($request))->findOrFail($id);
+
+        $validated = $request->validate([
+            'utm_source' => 'nullable|string|max:120',
+            'utm_medium' => 'nullable|string|max:120',
+            'utm_campaign' => 'nullable|string|max:191',
+            'utm_content' => 'nullable|string|max:191',
+            'utm_term' => 'nullable|string|max:191',
+            'gclid' => 'nullable|string|max:191',
+            'fbclid' => 'nullable|string|max:191',
+            'ttclid' => 'nullable|string|max:191',
+            'msclkid' => 'nullable|string|max:191',
+            'landing_url' => 'nullable|string|max:2048',
+            'referrer_url' => 'nullable|string|max:2048',
+        ]);
+
+        $changed = $lead->applyTracking($validated);
+
+        return response()->json([
+            'data' => $lead->only([
+                'id', 'first_touch_at',
+                'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
+                'gclid', 'fbclid', 'ttclid', 'msclkid',
+                'landing_url', 'referrer_url',
+            ]),
+            'changed' => $changed,
+        ]);
     }
 
     /**

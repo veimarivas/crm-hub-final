@@ -26,6 +26,11 @@ Route::prefix('v1')->middleware('throttle:public-api')->group(function () {
     Route::patch('/leads/{id}/revenue', [LeadApiController::class, 'updateRevenue'])
         ->middleware('api.key:leads:write');
 
+    // Atribución multi-canal: aplica UTMs / click IDs a un lead existente
+    // (first-touch: no pisa valores previos). Ver LeadApiController@updateTracking.
+    Route::patch('/leads/{id}/tracking', [LeadApiController::class, 'updateTracking'])
+        ->middleware('api.key:leads:write');
+
     Route::get('/contacts', [ContactApiController::class, 'index'])
         ->middleware('api.key:contacts:read');
 

@@ -20,6 +20,11 @@ Route::get('/f/{token}', [\App\Http\Controllers\WebFormController::class, 'show'
 Route::post('/f/{token}', [\App\Http\Controllers\WebFormController::class, 'submit'])
     ->middleware('throttle:web-form')->name('webforms.submit');
 
+// Snippet embebible para landings externas — captura UTMs / click IDs
+// en localStorage (first-touch) y auto-inyecta hidden inputs a forms con
+// [data-komo-track]. Público, CDN-friendly. Ver TrackController.
+Route::get('/track.js', [\App\Http\Controllers\TrackController::class, 'snippet'])->name('track.js');
+
 Route::get('/dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])
     ->middleware(['auth', 'verified'])->name('dashboard');
 

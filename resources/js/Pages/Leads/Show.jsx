@@ -25,6 +25,40 @@ function speakText(text, onEnd) {
     ttsState.current = { text, onEnd };
 }
 
+function OriginCard({ lead }) {
+    const has = lead.utm_source || lead.utm_medium || lead.utm_campaign || lead.gclid || lead.fbclid || lead.ttclid || lead.msclkid || lead.landing_url || lead.referrer_url;
+    if (!has) return null;
+    const clickId = lead.gclid ? ['Google (gclid)', lead.gclid] : lead.fbclid ? ['Meta (fbclid)', lead.fbclid] : lead.ttclid ? ['TikTok (ttclid)', lead.ttclid] : lead.msclkid ? ['Bing (msclkid)', lead.msclkid] : null;
+    const trunc = (s, n = 60) => (s && s.length > n ? s.slice(0, n) + '…' : s);
+    return (
+        <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-2xl border border-indigo-100 p-5">
+            <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">📊 Origen del lead</h3>
+            <p className="text-[11px] text-gray-500 mt-0.5 mb-3">Atribución first-touch — no cambia si vuelve por otro canal.</p>
+            <dl className="space-y-2 text-xs">
+                {lead.utm_source && <div className="flex justify-between gap-3"><dt className="text-gray-500">Canal</dt><dd className="font-semibold text-gray-900">{lead.utm_source}</dd></div>}
+                {lead.utm_medium && <div className="flex justify-between gap-3"><dt className="text-gray-500">Medio</dt><dd className="font-semibold text-gray-900">{lead.utm_medium}</dd></div>}
+                {lead.utm_campaign && <div className="flex justify-between gap-3"><dt className="text-gray-500">Campaña</dt><dd className="font-mono text-gray-900 text-right" title={lead.utm_campaign}>{trunc(lead.utm_campaign, 30)}</dd></div>}
+                {lead.utm_content && <div className="flex justify-between gap-3"><dt className="text-gray-500">Contenido</dt><dd className="font-mono text-gray-900 text-right" title={lead.utm_content}>{trunc(lead.utm_content, 30)}</dd></div>}
+                {lead.utm_term && <div className="flex justify-between gap-3"><dt className="text-gray-500">Término</dt><dd className="font-mono text-gray-900 text-right">{trunc(lead.utm_term, 30)}</dd></div>}
+                {clickId && <div className="flex justify-between gap-3"><dt className="text-gray-500">{clickId[0]}</dt><dd className="font-mono text-[10px] text-gray-700 text-right" title={clickId[1]}>{trunc(clickId[1], 20)}</dd></div>}
+                {lead.landing_url && (
+                    <div className="pt-2 border-t border-indigo-100">
+                        <dt className="text-gray-500 mb-0.5">Landing</dt>
+                        <dd className="text-[10px] break-all"><a href={lead.landing_url} target="_blank" rel="noreferrer" className="text-indigo-700 hover:underline">{trunc(lead.landing_url, 80)}</a></dd>
+                    </div>
+                )}
+                {lead.referrer_url && (
+                    <div>
+                        <dt className="text-gray-500 mb-0.5">Referrer</dt>
+                        <dd className="text-[10px] break-all text-gray-700">{trunc(lead.referrer_url, 80)}</dd>
+                    </div>
+                )}
+                {lead.first_touch_at && <div className="flex justify-between gap-3 pt-1 text-[10px] text-gray-400"><dt>Primer toque</dt><dd>{new Date(lead.first_touch_at).toLocaleString('es')}</dd></div>}
+            </dl>
+        </div>
+    );
+}
+
 function money(value, currency) {
     return new Intl.NumberFormat('es', { style: 'currency', currency: currency || 'USD', maximumFractionDigits: 0 }).format(value || 0);
 }
@@ -499,6 +533,7 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                     {/* Columna izquierda: datos del lead (colapsable) */}
                     {showLeadPanel && (
                     <div className="space-y-6">
+                        <OriginCard lead={lead} />
                         <form onSubmit={saveEdit} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
                             <h3 className="text-sm font-bold text-gray-900">Datos del lead</h3>
                             <div>

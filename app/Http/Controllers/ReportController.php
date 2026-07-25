@@ -106,6 +106,56 @@ class ReportController extends Controller
             ];
         })->filter(fn ($s) => $s['total'] > 0)->sortByDesc('total')->values();
 
+        // Conversión por utm_source (Google, Meta, TikTok, orgánico, email, …).
+        // Deriva de la columna utm_source (first-touch): las 12 fuentes con
+        // más leads. Los sin UTM se agrupan bajo "(direct)" para separar
+        // el tráfico orgánico/directo del atribuido. El COALESCE se hace en
+        // PHP para no chocar con ONLY_FULL_GROUP_BY de MariaDB.
+        $utmSourceRows = $leadScope(Lead::forAccount($accountId))
+            ->selectRaw("utm_source, count(*) as total,
+                sum(case when status='won' then 1 else 0 end) as won,
+                sum(case when status='lost' then 1 else 0 end) as lost,
+                sum(case when status='open' then 1 else 0 end) as open_count,
+                sum(case when status='won' then value else 0 end) as won_value")
+            ->groupBy('utm_source')
+            ->orderByDesc('total')
+            ->limit(12)
+            ->get()
+            ->map(fn ($r) => [
+                'label' => $r->utm_source ?: '(direct)',
+                'total' => (int) $r->total,
+                'won' => (int) $r->won,
+                'lost' => (int) $r->lost,
+                'open' => (int) $r->open_count,
+                'won_value' => (float) $r->won_value,
+                'conversion_rate' => ($r->won + $r->lost) > 0
+                    ? round(($r->won / ($r->won + $r->lost)) * 100, 1) : 0,
+            ])->values();
+
+        // Conversión por campaña (utm_campaign) — top 10. Ideal para ver
+        // qué campañas específicas de Google/Meta/TikTok convierten mejor.
+        $utmCampaignRows = $leadScope(Lead::forAccount($accountId))
+            ->whereNotNull('utm_campaign')
+            ->where('utm_campaign', '!=', '')
+            ->selectRaw("utm_campaign, utm_source, count(*) as total,
+                sum(case when status='won' then 1 else 0 end) as won,
+                sum(case when status='lost' then 1 else 0 end) as lost,
+                sum(case when status='won' then value else 0 end) as won_value")
+            ->groupBy('utm_campaign', 'utm_source')
+            ->orderByDesc('total')
+            ->limit(10)
+            ->get()
+            ->map(fn ($r) => [
+                'label' => $r->utm_campaign,
+                'source' => $r->utm_source ?: '(sin fuente)',
+                'total' => (int) $r->total,
+                'won' => (int) $r->won,
+                'lost' => (int) $r->lost,
+                'won_value' => (float) $r->won_value,
+                'conversion_rate' => ($r->won + $r->lost) > 0
+                    ? round(($r->won / ($r->won + $r->lost)) * 100, 1) : 0,
+            ])->values();
+
         return Inertia::render('Reports/Index', [
             'pipelines' => $pipelines->map(fn ($p) => ['id' => $p->id, 'name' => $p->name]),
             'pipelineId' => $selected?->id,
@@ -122,6 +172,8 @@ class ReportController extends Controller
             ],
             'isAdmin' => $isAdmin,
             'bySource' => $bySource,
+            'byUtmSource' => $utmSourceRows,
+            'byUtmCampaign' => $utmCampaignRows,
             'currency' => $user->account->default_currency,
         ]);
     }
