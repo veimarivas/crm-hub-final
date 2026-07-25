@@ -462,72 +462,118 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
             <Head title={lead.title} />
 
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
-                {/* Header */}
-                <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setShowLeadPanel(!showLeadPanel)}
-                                title={showLeadPanel ? 'Ocultar datos del lead' : 'Mostrar datos del lead'}
-                                className={`p-2 rounded-lg transition-colors ${
-                                    showLeadPanel
-                                        ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                                }`}
-                            >
-                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-                                </svg>
-                            </button>
-                            <Link href={route('leads.index')} className="text-sm text-emerald-600 hover:text-emerald-700 font-medium inline-flex items-center gap-1">
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" /></svg>
-                                Volver a leads
-                            </Link>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-3 mt-1">
-                            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{lead.title}</h1>
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold text-white shadow-sm" style={{ backgroundColor: lead.stage?.color }}>
-                                {lead.stage?.name}
-                            </span>
-                        </div>
-                        <p className="text-sm text-gray-400 mt-1">
-                            {money(lead.value, lead.currency)} · pipeline {lead.pipeline?.name}
-                            {lead.source === 'whatsapp' && ' · 💬 llegó por WhatsApp'}
-                            {lead.source === 'lead_ad' && ' · 📣 llegó por Lead Ad'}
-                        </p>
-                        {lead.source_ref && (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 mt-2 rounded-full text-xs font-bold ring-1 bg-blue-50 text-blue-800 ring-blue-200">
-                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                                Vino del anuncio {lead.source_ref}
-                                {lead.source_url && <a href={lead.source_url} target="_blank" rel="noreferrer" className="underline hover:text-blue-600 font-semibold">ver anuncio ↗</a>}
-                            </span>
-                        )}
-                    </div>
+                {/* Barra superior: back + toggle panel */}
+                <div className="flex items-center justify-between gap-3">
+                    <Link href={route('leads.index')} className="text-sm text-emerald-600 hover:text-emerald-700 font-medium inline-flex items-center gap-1">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" /></svg>
+                        Volver a leads
+                    </Link>
+                    <button
+                        type="button"
+                        onClick={() => setShowLeadPanel(!showLeadPanel)}
+                        title={showLeadPanel ? 'Ocultar panel' : 'Mostrar panel'}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${showLeadPanel ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                    >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                        </svg>
+                        {showLeadPanel ? 'Ocultar panel' : 'Mostrar panel'}
+                    </button>
+                </div>
 
-                    <div className="flex items-center gap-2 flex-wrap shrink-0">
-                        <select value={lead.stage_id} onChange={(e) => moveTo(e.target.value)} className="px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm font-medium bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all shadow-sm">
-                            {stages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                        </select>
-                        {lead.status === 'open' && wonStage && (
-                            <button onClick={() => moveTo(wonStage.id)} className="px-4 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-emerald-600 to-teal-600 rounded-xl hover:from-emerald-500 hover:to-teal-500 transition-all shadow-lg shadow-emerald-500/20">
-                                🏆 Ganado
-                            </button>
-                        )}
-                        {lead.status === 'open' && lostStage && (
-                            <button onClick={() => moveTo(lostStage.id)} className="px-4 py-2.5 text-sm font-semibold text-red-600 bg-white border border-red-200 rounded-xl hover:bg-red-50 transition-all shadow-sm">
-                                Perdido
-                            </button>
-                        )}
+                {/* Header pro: contacto + título + acciones destacadas */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div className={`h-1.5 ${lead.status === 'won' ? 'bg-gradient-to-r from-emerald-500 to-teal-600' : lead.status === 'lost' ? 'bg-gradient-to-r from-red-400 to-rose-500' : 'bg-gradient-to-r from-sky-500 to-blue-600'}`} />
+                    <div className="p-5 sm:p-6">
+                        <div className="flex flex-col lg:flex-row lg:items-start gap-5">
+                            {/* Avatar + info del contacto */}
+                            <div className="flex items-center gap-4 min-w-0 flex-1">
+                                <Avatar name={contactName} size="lg" />
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                                        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{lead.title}</h1>
+                                        {lead.status === 'won' && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white bg-gradient-to-r from-emerald-500 to-teal-600 shadow-sm">🏆 Ganado</span>}
+                                        {lead.status === 'lost' && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white bg-gradient-to-r from-red-400 to-rose-500 shadow-sm">✕ Perdido</span>}
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-500">
+                                        <span className="font-semibold text-gray-700">{contactName}</span>
+                                        {lead.contact?.phone && (
+                                            <span className="inline-flex items-center gap-1 font-mono text-xs">
+                                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" /></svg>
+                                                {lead.contact.phone}
+                                            </span>
+                                        )}
+                                        <span className="text-gray-300">·</span>
+                                        <span className="text-lg font-extrabold text-gray-900 tabular-nums">{money(lead.value, lead.currency)}</span>
+                                    </div>
+                                    {lead.source_ref && (
+                                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 mt-2 rounded-full text-[10px] font-bold ring-1 bg-blue-50 text-blue-800 ring-blue-200">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                                            Anuncio {lead.source_ref}
+                                            {lead.source_url && <a href={lead.source_url} target="_blank" rel="noreferrer" className="underline hover:text-blue-600 font-semibold ml-1">ver ↗</a>}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Acciones destacadas */}
+                            {lead.status === 'open' && (
+                                <div className="flex items-center gap-2 flex-wrap shrink-0">
+                                    {wonStage && (
+                                        <button onClick={() => moveTo(wonStage.id)} className="px-4 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 rounded-xl hover:opacity-90 transition-all shadow-lg shadow-emerald-500/30 inline-flex items-center gap-1.5">
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.562.562 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" /></svg>
+                                            Ganado
+                                        </button>
+                                    )}
+                                    {lostStage && (
+                                        <button onClick={() => moveTo(lostStage.id)} className="px-4 py-2.5 text-sm font-semibold text-red-600 bg-white border border-red-200 rounded-xl hover:bg-red-50 transition-all shadow-sm">
+                                            Perdido
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Stage stepper visual — reemplaza el dropdown por breadcrumb clickeable */}
+                        <div className="mt-5 pt-5 border-t border-gray-100">
+                            <div className="flex items-center gap-1 overflow-x-auto pb-1">
+                                {stages.filter((s) => s.stage_type === 'open').map((s, idx, arr) => {
+                                    const isCurrent = s.id === lead.stage_id;
+                                    const currentIdx = arr.findIndex((st) => st.id === lead.stage_id);
+                                    const isPast = currentIdx >= 0 && idx < currentIdx;
+                                    return (
+                                        <button
+                                            key={s.id}
+                                            onClick={() => !isCurrent && moveTo(s.id)}
+                                            disabled={isCurrent || lead.status !== 'open'}
+                                            className={`group flex-1 min-w-[100px] relative flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+                                                isCurrent
+                                                    ? 'text-white shadow-md cursor-default'
+                                                    : isPast
+                                                        ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                                        : 'bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                                            }`}
+                                            style={isCurrent ? { backgroundColor: s.color } : {}}
+                                        >
+                                            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                                                isCurrent ? 'bg-white/25 text-white' : isPast ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-500'
+                                            }`}>
+                                                {isPast ? '✓' : idx + 1}
+                                            </span>
+                                            <span className="truncate">{s.name}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            <p className="text-[10px] text-gray-400 mt-1.5">
+                                Pipeline: <span className="font-semibold text-gray-600">{lead.pipeline?.name}</span>
+                                {lead.status === 'open' && ' · click en una etapa para mover el lead'}
+                            </p>
+                        </div>
                     </div>
                 </div>
 
                 {flash?.success && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700 shadow-sm">{flash.success}</div>}
-                {pendingTasks.length === 0 && lead.status === 'open' && (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 shadow-sm">
-                        ⚠️ Este lead no tiene ninguna tarea pendiente — agenda el siguiente paso para que no se enfríe.
-                    </div>
-                )}
 
                 <div className={`grid gap-6 ${showLeadPanel ? 'lg:grid-cols-3' : 'lg:grid-cols-1'}`}>
                     {/* Columna izquierda: datos del lead (colapsable) */}
@@ -586,6 +632,55 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                                                 </div>
                                             </div>
                                         )}
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
+                        {/* Próxima acción — regla Kommo destacada */}
+                        {lead.status === 'open' && (() => {
+                            const nextTask = pendingTasks.slice().sort((a, b) => new Date(a.due_at) - new Date(b.due_at))[0];
+                            if (nextTask) {
+                                const overdue = new Date(nextTask.due_at) < new Date();
+                                const meta = { call: '📞', meet: '🤝', follow_up: '🔔', email: '✉️', other: '📋' }[nextTask.task_type] ?? '📋';
+                                return (
+                                    <div className={`rounded-2xl border-2 shadow-sm overflow-hidden ${overdue ? 'border-red-300 bg-red-50/50' : 'border-emerald-200 bg-emerald-50/50'}`}>
+                                        <div className={`px-4 py-2 text-white text-[10px] font-bold uppercase tracking-wider ${overdue ? 'bg-gradient-to-r from-red-500 to-rose-600' : 'bg-gradient-to-r from-emerald-500 to-teal-600'}`}>
+                                            {overdue ? '🚨 Tarea vencida' : '⏭ Próxima acción'}
+                                        </div>
+                                        <div className="p-4">
+                                            <div className="flex items-start gap-3">
+                                                <span className="text-2xl shrink-0">{meta}</span>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-sm font-bold text-gray-900 leading-snug">{nextTask.text}</p>
+                                                    <p className={`text-xs mt-1 tabular-nums font-semibold ${overdue ? 'text-red-600' : 'text-emerald-700'}`}>
+                                                        {new Date(nextTask.due_at).toLocaleString('es', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                                        {overdue && <span className="ml-1">· vencida</span>}
+                                                    </p>
+                                                    {nextTask.assignee && <p className="text-[10px] text-gray-500 mt-1">👤 {nextTask.assignee.name}</p>}
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => setTab('tasks')}
+                                                className="mt-3 w-full text-xs font-semibold text-emerald-700 bg-white hover:bg-emerald-100 border border-emerald-200 rounded-lg py-1.5 transition-colors"
+                                            >
+                                                Completar en tareas →
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            }
+                            return (
+                                <div className="rounded-2xl border-2 border-amber-200 bg-amber-50/50 shadow-sm overflow-hidden">
+                                    <div className="px-4 py-2 text-white text-[10px] font-bold uppercase tracking-wider bg-gradient-to-r from-amber-500 to-orange-500">⚠ Sin próxima acción</div>
+                                    <div className="p-4">
+                                        <p className="text-sm text-amber-900 leading-snug">Este lead no tiene tareas pendientes — se puede enfriar rápido.</p>
+                                        <button
+                                            onClick={() => setTab('tasks')}
+                                            className="mt-3 w-full text-xs font-bold text-white bg-gradient-to-r from-amber-500 to-orange-600 hover:opacity-90 rounded-lg py-2 shadow shadow-amber-500/20 transition-all"
+                                        >
+                                            + Agendar siguiente paso
+                                        </button>
                                     </div>
                                 </div>
                             );
