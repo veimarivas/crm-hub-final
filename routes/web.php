@@ -98,6 +98,7 @@ Route::middleware('auth')->group(function () {
 
         // Equipo
         Route::get('/settings/team', [\App\Http\Controllers\TeamController::class, 'index'])->name('settings.team');
+        Route::post('/settings/team/auto-assign', [\App\Http\Controllers\TeamController::class, 'toggleAutoAssign'])->name('team.auto-assign');
         Route::post('/settings/team/invitations', [\App\Http\Controllers\TeamController::class, 'invite'])->name('team.invite');
         Route::delete('/settings/team/invitations/{invitation}', [\App\Http\Controllers\TeamController::class, 'revokeInvitation'])->name('team.invitations.revoke');
         Route::post('/settings/team/invitations/{invitation}/regenerate', [\App\Http\Controllers\TeamController::class, 'regenerateInvitation'])->name('team.invitations.regenerate');

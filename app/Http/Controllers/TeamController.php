@@ -38,7 +38,19 @@ class TeamController extends Controller
             'isOwner' => $user->isOwner(),
             'newInviteUrl' => session('invite_url'),
             'newApiKey' => session('api_key_plaintext'),
+            'autoAssignLeads' => (bool) $user->account->auto_assign_leads,
         ]);
+    }
+
+    public function toggleAutoAssign(Request $request): RedirectResponse
+    {
+        $this->requireAdmin($request);
+
+        $account = $request->user()->account;
+        $account->auto_assign_leads = ! $account->auto_assign_leads;
+        $account->save();
+
+        return back();
     }
 
     // ---- API keys (consumidas por meta_ads para atribución y Lead Ads) ----

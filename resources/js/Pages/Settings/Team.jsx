@@ -15,7 +15,7 @@ const SCOPE_LABELS = {
     'contacts:read': 'Leer contactos',
 };
 
-export default function Team({ members, invitations, apiKeys = [], apiScopes = [], isAdmin, isOwner, newInviteUrl, newApiKey }) {
+export default function Team({ members, invitations, apiKeys = [], apiScopes = [], isAdmin, isOwner, newInviteUrl, newApiKey, autoAssignLeads = false }) {
     const { flash, errors, auth } = usePage().props;
     const [copied, setCopied] = useState(false);
     const [copiedKey, setCopiedKey] = useState(false);
@@ -73,6 +73,39 @@ export default function Team({ members, invitations, apiKeys = [], apiScopes = [
                                 {copied ? '✓' : 'Copiar'}
                             </button>
                         </div>
+                    </div>
+                )}
+
+                {/* Round-robin: asignacion automatica de leads entrantes */}
+                {isAdmin && (
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6">
+                        <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0 flex-1">
+                                <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                                    <span className="text-lg">🔄</span>
+                                    Distribución automática de leads
+                                </h3>
+                                <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                                    Cuando un lead entra por <strong>WhatsApp, formulario o Lead Ad</strong> sin responsable, se asigna al agente con menos leads abiertos.
+                                    Los leads creados manualmente no se tocan.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => router.post(route('team.auto-assign'), {}, { preserveScroll: true })}
+                                className={`shrink-0 relative inline-flex h-7 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/30 ${autoAssignLeads ? 'bg-emerald-500' : 'bg-gray-300'}`}
+                                role="switch"
+                                aria-checked={autoAssignLeads}
+                            >
+                                <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${autoAssignLeads ? 'translate-x-8' : 'translate-x-1'}`} />
+                            </button>
+                        </div>
+                        {autoAssignLeads && (
+                            <div className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                Activo — los nuevos leads se reparten automáticamente
+                            </div>
+                        )}
                     </div>
                 )}
 

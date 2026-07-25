@@ -93,6 +93,21 @@ class Lead extends Model
         // Digital Pipeline: crear un lead también cuenta como "entrar"
         // a su primera etapa (cubre creación manual, WhatsApp y web forms).
         static::created(function (Lead $lead) {
+            // Round-robin: si la cuenta lo tiene activo y el lead entra sin
+            // responsable via source automatico (whatsapp/web_form/lead_ad/api),
+            // asignarlo al agente con menos leads abiertos.
+            $assignee = app(\App\Services\LeadAssignment\RoundRobin::class)->assignIfEligible($lead);
+            if ($assignee) {
+                \App\Models\AppNotification::notify(
+                    $lead->account_id,
+                    $assignee->id,
+                    'lead_assigned',
+                    'Nuevo lead asignado (auto): '.$lead->title,
+                    null,
+                    $lead->id,
+                );
+            }
+
             \App\Jobs\RunStageAutomationsJob::dispatch($lead->id, $lead->stage_id);
         });
     }

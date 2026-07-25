@@ -9,10 +9,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
-#[Fillable(['name', 'owner_user_id', 'default_currency'])]
+#[Fillable(['name', 'owner_user_id', 'default_currency', 'auto_assign_leads'])]
 class Account extends Model
 {
     use HasUuids;
+
+    protected $casts = [
+        'auto_assign_leads' => 'boolean',
+    ];
 
     public function owner(): BelongsTo
     {
