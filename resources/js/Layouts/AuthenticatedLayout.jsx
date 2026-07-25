@@ -1,4 +1,5 @@
 import Dropdown from '@/Components/Dropdown';
+import UndoToast from '@/Components/UndoToast';
 import { Link, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 
@@ -306,6 +307,7 @@ export default function AuthenticatedLayout({ header, children }) {
                     <main className="flex-1 overflow-y-auto bg-gray-50">{children}</main>
                 </div>
             </div>
+            <UndoToast />
         </div>
     );
 }

@@ -79,6 +79,87 @@ class LeadController extends Controller
      * Agrega last_message_at, last_message_direction y waiting_minutes a cada lead.
      * Usa una sola query batched para evitar N+1.
      */
+    /**
+     * Bulk actions sobre multiples leads: move (etapa), assign (responsable),
+     * tag (agregar/quitar), delete. Scopeado por rol.
+     */
+    public function bulk(Request $request): RedirectResponse
+    {
+        $accountId = $request->user()->account_id;
+        $user = $request->user();
+        $isAdmin = $user->hasRoleAtLeast(User::ROLE_ADMIN);
+
+        $validated = $request->validate([
+            'ids' => 'required|array|min:1|max:200',
+            'ids.*' => 'uuid',
+            'action' => 'required|in:move,assign,tag,delete',
+            'stage_id' => 'nullable|uuid|required_if:action,move',
+            'responsible_user_id' => 'nullable|uuid|required_if:action,assign',
+            'tag_id' => 'nullable|uuid|required_if:action,tag',
+            'tag_mode' => 'nullable|in:add,remove',
+        ]);
+
+        $leads = Lead::forAccount($accountId)
+            ->whereIn('id', $validated['ids'])
+            ->when(! $isAdmin, fn ($q) => $q->where('responsible_user_id', $user->id))
+            ->get();
+
+        if ($leads->isEmpty()) {
+            return back()->with('success', '0 leads afectados.');
+        }
+
+        $count = 0;
+        switch ($validated['action']) {
+            case 'move':
+                $stage = \App\Models\PipelineStage::whereHas('pipeline', fn ($q) => $q->where('account_id', $accountId))
+                    ->findOrFail($validated['stage_id']);
+                foreach ($leads as $lead) {
+                    if ($lead->pipeline_id === $stage->pipeline_id && $lead->stage_id !== $stage->id) {
+                        $lead->moveToStage($stage, $user);
+                        $count++;
+                    }
+                }
+                break;
+            case 'assign':
+                // Agent no puede reasignar
+                abort_unless($isAdmin, 403, 'Solo admin puede reasignar en bulk.');
+                $newResp = $validated['responsible_user_id'];
+                abort_unless(User::where('account_id', $accountId)->where('id', $newResp)->exists(), 422);
+                foreach ($leads as $lead) {
+                    if ($lead->responsible_user_id !== $newResp) {
+                        $lead->update(['responsible_user_id' => $newResp]);
+                        \App\Models\AppNotification::notify(
+                            $accountId, $newResp, 'lead_assigned',
+                            "Lead reasignado: {$lead->title}", null, $lead->id, $user->id,
+                        );
+                        $count++;
+                    }
+                }
+                break;
+            case 'tag':
+                $tag = \App\Models\Tag::forAccount($accountId)->findOrFail($validated['tag_id']);
+                $mode = $validated['tag_mode'] ?? 'add';
+                foreach ($leads as $lead) {
+                    if ($mode === 'add') {
+                        $lead->tags()->syncWithoutDetaching([$tag->id]);
+                    } else {
+                        $lead->tags()->detach($tag->id);
+                    }
+                    $count++;
+                }
+                break;
+            case 'delete':
+                abort_unless($isAdmin, 403, 'Solo admin puede borrar en bulk.');
+                foreach ($leads as $lead) {
+                    $lead->delete();
+                    $count++;
+                }
+                break;
+        }
+
+        return back()->with('success', "{$count} leads afectados.");
+    }
+
     private function enrichLeadsWithSla($leads)
     {
         $ids = $leads->pluck('id')->all();

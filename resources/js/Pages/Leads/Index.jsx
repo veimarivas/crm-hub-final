@@ -1,5 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Modal from '@/Components/Modal';
+import { showUndo } from '@/Components/UndoToast';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -31,7 +32,7 @@ const SOURCE_META = {
     other: { icon: '❓', label: 'Otro' },
 };
 
-function LeadCard({ lead, currency, slaMinutes }) {
+function LeadCard({ lead, currency, slaMinutes, selected, onToggleSelect, anySelected }) {
     const contactName = lead.contact?.name || lead.contact?.phone || 'Sin contacto';
     const av = avatarFor(contactName);
     const src = SOURCE_META[lead.source] ?? SOURCE_META.other;
@@ -40,13 +41,22 @@ function LeadCard({ lead, currency, slaMinutes }) {
 
     return (
         <div
-            draggable
+            draggable={!anySelected}
             onDragStart={(e) => { e.dataTransfer.setData('text/lead-id', lead.id); e.dataTransfer.effectAllowed = 'move'; }}
-            className={`group rounded-xl border bg-white p-3 shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing ${isUrgent ? 'border-red-300 ring-1 ring-red-200' : 'border-gray-100 hover:border-gray-300'}`}
+            className={`group relative rounded-xl border bg-white p-3 shadow-sm hover:shadow-md transition-all ${anySelected ? '' : 'cursor-grab active:cursor-grabbing'} ${selected ? 'border-emerald-400 ring-2 ring-emerald-200 bg-emerald-50/30' : isUrgent ? 'border-red-300 ring-1 ring-red-200' : 'border-gray-100 hover:border-gray-300'}`}
         >
-            <Link href={route('leads.show', lead.id)} className="block">
+            <div className={`absolute top-2 left-2 z-10 transition-opacity ${selected || anySelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                <input
+                    type="checkbox"
+                    checked={selected}
+                    onChange={(e) => { e.stopPropagation(); onToggleSelect(lead.id); }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 shadow"
+                />
+            </div>
+            <Link href={route('leads.show', lead.id)} className="block" onClick={(e) => { if (anySelected) { e.preventDefault(); onToggleSelect(lead.id); } }}>
                 {/* Header: avatar + contacto + fuente */}
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-2 pl-5">
                     <div className={`w-7 h-7 rounded-full bg-gradient-to-br ${av.gradient} flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow-sm`}>
                         {av.initials}
                     </div>
@@ -113,14 +123,21 @@ function LeadCard({ lead, currency, slaMinutes }) {
     );
 }
 
-function LeadRow({ lead, currency, slaMinutes }) {
+function LeadRow({ lead, currency, slaMinutes, selected, onToggleSelect, anySelected }) {
     const contactName = lead.contact?.name || lead.contact?.phone || 'Sin contacto';
     const av = avatarFor(contactName);
     const src = SOURCE_META[lead.source] ?? SOURCE_META.other;
     const isUrgent = lead.waiting_minutes >= slaMinutes && lead.last_message_direction === 'in';
 
     return (
-        <Link href={route('leads.show', lead.id)} className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors border-l-4 ${isUrgent ? 'border-red-500 bg-red-50/40' : 'border-transparent'}`}>
+        <div className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors border-l-4 ${selected ? 'border-emerald-500 bg-emerald-50/40' : isUrgent ? 'border-red-500 bg-red-50/40' : 'border-transparent'}`}>
+            <input
+                type="checkbox"
+                checked={selected}
+                onChange={() => onToggleSelect(lead.id)}
+                className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 shrink-0"
+            />
+            <Link href={route('leads.show', lead.id)} onClick={(e) => { if (anySelected) { e.preventDefault(); onToggleSelect(lead.id); } }} className="flex items-center gap-3 flex-1 min-w-0">
             <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${av.gradient} flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-sm`}>
                 {av.initials}
             </div>
@@ -155,7 +172,110 @@ function LeadRow({ lead, currency, slaMinutes }) {
             <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-gray-500 shrink-0 w-24 truncate">
                 {lead.responsible ? <>👤 {lead.responsible.name.split(' ')[0]}</> : <span className="text-sky-600 font-semibold">Sin asignar</span>}
             </div>
-        </Link>
+            </Link>
+        </div>
+    );
+}
+
+function BulkBar({ count, onClear, pipeline, members, allTags, isAdmin }) {
+    const [mode, setMode] = useState(null); // 'move' | 'assign' | 'tag' | null
+
+    const perform = (action, payload) => {
+        router.post(route('leads.bulk'), { ids: Array.from(count.ids), action, ...payload }, {
+            preserveScroll: true,
+            onSuccess: () => { onClear(); setMode(null); },
+        });
+    };
+
+    return (
+        <div className="fixed inset-x-0 bottom-4 z-40 pointer-events-none flex justify-center">
+            <div className="pointer-events-auto bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-700 px-4 py-3 flex flex-wrap items-center gap-2 max-w-3xl mx-4">
+                <div className="flex items-center gap-2">
+                    <span className="w-7 h-7 rounded-lg bg-emerald-500 flex items-center justify-center text-xs font-bold">{count.n}</span>
+                    <span className="text-sm font-semibold">seleccionados</span>
+                </div>
+                <div className="h-6 w-px bg-slate-700 mx-1" />
+                {mode === null ? (
+                    <>
+                        <button onClick={() => setMode('move')} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 transition-colors">
+                            ➡ Mover a etapa
+                        </button>
+                        {isAdmin && (
+                            <button onClick={() => setMode('assign')} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 transition-colors">
+                                👤 Reasignar
+                            </button>
+                        )}
+                        <button onClick={() => setMode('tag')} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 transition-colors">
+                            🏷 Etiquetar
+                        </button>
+                        {isAdmin && (
+                            <button
+                                onClick={() => { if (confirm(`¿Eliminar ${count.n} leads y todo su historial?`)) perform('delete', {}); }}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-700 hover:bg-red-600 transition-colors"
+                            >
+                                🗑 Eliminar
+                            </button>
+                        )}
+                    </>
+                ) : mode === 'move' ? (
+                    <>
+                        <select
+                            onChange={(e) => e.target.value && perform('move', { stage_id: e.target.value })}
+                            defaultValue=""
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                        >
+                            <option value="" disabled>Elegir etapa…</option>
+                            {pipeline?.stages?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                        <button onClick={() => setMode(null)} className="text-xs text-slate-400 hover:text-white px-2">← Volver</button>
+                    </>
+                ) : mode === 'assign' ? (
+                    <>
+                        <select
+                            onChange={(e) => e.target.value && perform('assign', { responsible_user_id: e.target.value })}
+                            defaultValue=""
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                        >
+                            <option value="" disabled>Elegir responsable…</option>
+                            {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                        <button onClick={() => setMode(null)} className="text-xs text-slate-400 hover:text-white px-2">← Volver</button>
+                    </>
+                ) : mode === 'tag' ? (
+                    <>
+                        <select
+                            id="bulk-tag-select"
+                            defaultValue=""
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                        >
+                            <option value="" disabled>Elegir etiqueta…</option>
+                            {allTags.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                        <button
+                            onClick={() => {
+                                const v = document.getElementById('bulk-tag-select').value;
+                                if (v) perform('tag', { tag_id: v, tag_mode: 'add' });
+                            }}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500"
+                        >
+                            + Agregar
+                        </button>
+                        <button
+                            onClick={() => {
+                                const v = document.getElementById('bulk-tag-select').value;
+                                if (v) perform('tag', { tag_id: v, tag_mode: 'remove' });
+                            }}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-700 hover:bg-slate-600"
+                        >
+                            − Quitar
+                        </button>
+                        <button onClick={() => setMode(null)} className="text-xs text-slate-400 hover:text-white px-2">← Volver</button>
+                    </>
+                ) : null}
+                <div className="h-6 w-px bg-slate-700 mx-1" />
+                <button onClick={onClear} className="text-xs text-slate-400 hover:text-white px-2">Cancelar</button>
+            </div>
+        </div>
     );
 }
 
@@ -231,11 +351,21 @@ function NewLeadModal({ open, onClose, pipeline, contacts, members }) {
 }
 
 export default function Index({ pipelines, pipeline, leads, members, contacts, allTags = [], filters, currency, slaMinutes = 30 }) {
-    const { flash } = usePage().props;
+    const { flash, auth } = usePage().props;
+    const isAdmin = auth?.user?.account_role === 'owner' || auth?.user?.account_role === 'admin';
     const [showNew, setShowNew] = useState(false);
     const [dragOver, setDragOver] = useState(null);
     const [view, setView] = useState(() => localStorage.getItem('leads.view') || 'kanban');
     const [query, setQuery] = useState(filters?.q || '');
+    const [selectedIds, setSelectedIds] = useState(() => new Set());
+
+    const toggleSelect = (id) => setSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+    });
+    const clearSelection = () => setSelectedIds(new Set());
+    const anySelected = selectedIds.size > 0;
 
     useEffect(() => { localStorage.setItem('leads.view', view); }, [view]);
 
@@ -268,7 +398,16 @@ export default function Index({ pipelines, pipeline, leads, members, contacts, a
         const leadId = e.dataTransfer.getData('text/lead-id');
         const lead = leads.find((l) => l.id === leadId);
         if (lead && lead.stage_id !== stageId) {
-            router.patch(route('leads.move', leadId), { stage_id: stageId }, { preserveScroll: true });
+            const previousStageId = lead.stage_id;
+            const previousStageName = pipeline?.stages?.find((s) => s.id === previousStageId)?.name;
+            const newStageName = pipeline?.stages?.find((s) => s.id === stageId)?.name;
+            router.patch(route('leads.move', leadId), { stage_id: stageId }, {
+                preserveScroll: true,
+                onSuccess: () => showUndo({
+                    message: `«${lead.title}» → ${newStageName}`,
+                    onUndo: () => router.patch(route('leads.move', leadId), { stage_id: previousStageId }, { preserveScroll: true }),
+                }),
+            });
         }
     };
 
@@ -415,7 +554,7 @@ export default function Index({ pipelines, pipeline, leads, members, contacts, a
                                         <p className="text-xs font-medium text-white/85 mt-1 tabular-nums">{money(stageTotal, currency)}</p>
                                     </div>
                                     <div className="flex flex-1 flex-col gap-2 p-2.5 min-h-[180px]">
-                                        {stageLeads.map((lead) => <LeadCard key={lead.id} lead={lead} currency={currency} slaMinutes={slaMinutes} />)}
+                                        {stageLeads.map((lead) => <LeadCard key={lead.id} lead={lead} currency={currency} slaMinutes={slaMinutes} selected={selectedIds.has(lead.id)} onToggleSelect={toggleSelect} anySelected={anySelected} />)}
                                         {stageLeads.length === 0 && (
                                             <p className="py-8 text-center text-xs text-gray-400 font-medium">{isTerminal ? '—' : 'Arrastra leads aquí'}</p>
                                         )}
@@ -430,7 +569,7 @@ export default function Index({ pipelines, pipeline, leads, members, contacts, a
                             <div className="p-14 text-center text-sm text-gray-400">Sin leads con estos filtros</div>
                         ) : (
                             <ul className="divide-y divide-gray-50">
-                                {leads.map((l) => <li key={l.id}><LeadRow lead={l} currency={currency} slaMinutes={slaMinutes} /></li>)}
+                                {leads.map((l) => <li key={l.id}><LeadRow lead={l} currency={currency} slaMinutes={slaMinutes} selected={selectedIds.has(l.id)} onToggleSelect={toggleSelect} anySelected={anySelected} /></li>)}
                             </ul>
                         )}
                     </div>
@@ -438,6 +577,17 @@ export default function Index({ pipelines, pipeline, leads, members, contacts, a
             </div>
 
             <NewLeadModal open={showNew} onClose={() => setShowNew(false)} pipeline={pipeline} contacts={contacts} members={members} />
+
+            {anySelected && (
+                <BulkBar
+                    count={{ n: selectedIds.size, ids: selectedIds }}
+                    onClear={clearSelection}
+                    pipeline={pipeline}
+                    members={members}
+                    allTags={allTags}
+                    isAdmin={isAdmin}
+                />
+            )}
         </AuthenticatedLayout>
     );
 }

@@ -1,5 +1,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Modal from '@/Components/Modal';
+import SnoozeButton from '@/Components/SnoozeButton';
+import { showUndo } from '@/Components/UndoToast';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
 
@@ -222,7 +224,10 @@ function DayPanel({ day, tasks, onClose, onAddClick }) {
                                     <button
                                         onClick={() => {
                                             const note = prompt('Resultado (opcional):');
-                                            if (note !== null) router.post(route('tasks.complete', task.id), { result_note: note || null }, { preserveScroll: true });
+                                            if (note !== null) router.post(route('tasks.complete', task.id), { result_note: note || null }, {
+                                                preserveScroll: true,
+                                                onSuccess: () => showUndo({ message: `Tarea "${task.text.slice(0, 40)}" completada`, onUndo: () => router.post(route('tasks.uncomplete', task.id), {}, { preserveScroll: true }) }),
+                                            });
                                         }}
                                         className="mt-0.5 w-5 h-5 shrink-0 rounded-full border-2 border-gray-300 hover:border-emerald-500 hover:bg-emerald-50 transition-all"
                                         title="Completar"
@@ -245,6 +250,7 @@ function DayPanel({ day, tasks, onClose, onAddClick }) {
                                         {task.result_note && ` · ${task.result_note}`}
                                     </p>
                                 </div>
+                                {!task.completed_at && <SnoozeButton taskId={task.id} size="sm" />}
                                 <button
                                     onClick={() => { if (confirm('¿Eliminar esta tarea?')) router.delete(route('tasks.destroy', task.id), { preserveScroll: true }); }}
                                     className="p-1 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded shrink-0"
@@ -271,7 +277,7 @@ function ListView({ tasks }) {
                         <li key={task.id} className={`flex items-center gap-4 px-5 py-4 ${overdue ? 'bg-red-50/40' : ''}`}>
                             {!task.completed_at ? (
                                 <button
-                                    onClick={() => { const note = prompt('Resultado (opcional):'); if (note !== null) router.post(route('tasks.complete', task.id), { result_note: note || null }, { preserveScroll: true }); }}
+                                    onClick={() => { const note = prompt('Resultado (opcional):'); if (note !== null) router.post(route('tasks.complete', task.id), { result_note: note || null }, { preserveScroll: true, onSuccess: () => showUndo({ message: `Tarea "${task.text.slice(0, 40)}" completada`, onUndo: () => router.post(route('tasks.uncomplete', task.id), {}, { preserveScroll: true }) }) }); }}
                                     className="w-5 h-5 shrink-0 rounded-full border-2 border-gray-300 hover:border-emerald-500 hover:bg-emerald-50 transition-all"
                                 />
                             ) : (
@@ -292,6 +298,7 @@ function ListView({ tasks }) {
                                 </p>
                                 {overdue && <p className="text-[10px] font-bold text-red-400 uppercase">vencida</p>}
                             </div>
+                            {!task.completed_at && <SnoozeButton taskId={task.id} size="md" />}
                             <button
                                 onClick={() => { if (confirm('¿Eliminar esta tarea?')) router.delete(route('tasks.destroy', task.id), { preserveScroll: true }); }}
                                 className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg shrink-0"

@@ -36,6 +36,7 @@ Route::middleware('auth')->group(function () {
     // Leads (Kanban + ficha)
     Route::get('/leads', [\App\Http\Controllers\LeadController::class, 'index'])->name('leads.index');
     Route::post('/leads', [\App\Http\Controllers\LeadController::class, 'store'])->name('leads.store');
+    Route::post('/leads/bulk', [\App\Http\Controllers\LeadController::class, 'bulk'])->name('leads.bulk');
     Route::get('/leads/{lead}', [\App\Http\Controllers\LeadController::class, 'show'])->name('leads.show');
     Route::patch('/leads/{lead}', [\App\Http\Controllers\LeadController::class, 'update'])->name('leads.update');
     Route::patch('/leads/{lead}/move', [\App\Http\Controllers\LeadController::class, 'move'])->name('leads.move');
@@ -57,6 +58,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/tasks', [\App\Http\Controllers\TaskController::class, 'index'])->name('tasks.index');
     Route::post('/tasks', [\App\Http\Controllers\TaskController::class, 'store'])->name('tasks.store');
     Route::post('/tasks/{task}/complete', [\App\Http\Controllers\TaskController::class, 'complete'])->name('tasks.complete');
+    Route::post('/tasks/{task}/uncomplete', [\App\Http\Controllers\TaskController::class, 'uncomplete'])->name('tasks.uncomplete');
+    Route::post('/tasks/{task}/snooze', [\App\Http\Controllers\TaskController::class, 'snooze'])->name('tasks.snooze');
     Route::delete('/tasks/{task}', [\App\Http\Controllers\TaskController::class, 'destroy'])->name('tasks.destroy');
 
     // Contactos y empresas

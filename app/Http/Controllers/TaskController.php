@@ -129,6 +129,43 @@ class TaskController extends Controller
         return back()->with('success', 'Tarea completada.');
     }
 
+    /** Reabrir tarea (undo del complete). */
+    public function uncomplete(Request $request, Task $task): RedirectResponse
+    {
+        abort_if($task->account_id !== $request->user()->account_id, 403);
+
+        $task->update(['completed_at' => null, 'result_note' => null]);
+
+        return back()->with('success', 'Tarea reabierta.');
+    }
+
+    /** Posponer una tarea N minutos hacia adelante desde su due_at actual. */
+    public function snooze(Request $request, Task $task): RedirectResponse
+    {
+        abort_if($task->account_id !== $request->user()->account_id, 403);
+        abort_if($task->completed_at !== null, 422, 'Tarea ya completada.');
+
+        $validated = $request->validate([
+            'minutes' => 'nullable|integer|min:5|max:20160', // hasta 14 dias
+            'until' => 'nullable|date',
+        ]);
+
+        $newDue = null;
+        if (! empty($validated['until'])) {
+            $newDue = \Carbon\Carbon::parse($validated['until']);
+        } elseif (! empty($validated['minutes'])) {
+            // Suma desde el maximo entre due_at actual y ahora (evita snoozes que quedan en el pasado)
+            $base = max($task->due_at, now());
+            $newDue = $base->copy()->addMinutes($validated['minutes']);
+        } else {
+            abort(422, 'Debe indicar minutes o until.');
+        }
+
+        $task->update(['due_at' => $newDue]);
+
+        return back()->with('success', 'Tarea pospuesta.');
+    }
+
     public function destroy(Request $request, Task $task): RedirectResponse
     {
         abort_if($task->account_id !== $request->user()->account_id, 403);
