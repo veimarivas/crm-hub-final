@@ -708,6 +708,19 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                                         if (it.kind === 'bubble') return <ChatBubble key={it.event.id} event={it.event} contactName={contactName} />;
                                         return <SystemEvent key={it.event.id} event={it.event} />;
                                     })}
+                                    {lead.ai_pending && (
+                                        <div className="flex flex-col items-end">
+                                            <span className="text-[10px] font-bold mb-0.5 mr-2 text-violet-600">✨ IA</span>
+                                            <div className="rounded-2xl px-4 py-3 text-sm bg-gradient-to-br from-violet-500/90 to-purple-600/90 text-white rounded-br-md shadow-md shadow-violet-500/20 flex items-center gap-2">
+                                                <span className="flex items-center gap-1">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-white/80 animate-bounce" style={{ animationDelay: '0ms' }} />
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-white/80 animate-bounce" style={{ animationDelay: '150ms' }} />
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-white/80 animate-bounce" style={{ animationDelay: '300ms' }} />
+                                                </span>
+                                                <span className="italic text-white/90">Pensando respuesta…</span>
+                                            </div>
+                                        </div>
+                                    )}
                                     <div ref={bottomRef} />
                                 </div>
 

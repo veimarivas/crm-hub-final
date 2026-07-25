@@ -28,8 +28,25 @@ class EventProcessor
             'message.received' => $this->handleInboundMessage($integration, $data),
             'message.sent' => $this->handleOutboundMessage($integration, $data),
             'message.transcribed' => $this->handleTranscribed($integration, $data),
+            'ai.pending_changed' => $this->handleAiPending($integration, $data),
             default => null, // eventos que no nos interesan se ignoran
         };
+    }
+
+    /**
+     * La IA del wacrm empezó/terminó de pensar una respuesta para este lead.
+     * Actualiza el flag ai_pending del lead → la UI muestra/oculta la burbuja
+     * "IA pensando..." (polling de 2s ya está tomando este cambio).
+     */
+    private function handleAiPending(Integration $integration, array $data): void
+    {
+        $convId = $data['conversation_id'] ?? null;
+        $pending = (bool) ($data['pending'] ?? false);
+        if (! $convId) return;
+
+        Lead::forAccount($integration->account_id)
+            ->where('wacrm_conversation_id', $convId)
+            ->update(['ai_pending' => $pending]);
     }
 
     /**

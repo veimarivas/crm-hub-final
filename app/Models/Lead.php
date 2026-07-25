@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
     'account_id', 'pipeline_id', 'stage_id', 'contact_id', 'company_id',
     'responsible_user_id', 'ai_enabled', 'title', 'value', 'currency', 'source',
     'source_ref', 'source_url', 'meta_leadgen_id',
-    'status', 'closed_at', 'wacrm_conversation_id',
+    'status', 'closed_at', 'wacrm_conversation_id', 'ai_pending',
     'invoiced_cents', 'collected_cents',
 ])]
 class Lead extends Model
@@ -32,6 +32,7 @@ class Lead extends Model
             'value' => 'decimal:2',
             'closed_at' => 'datetime',
             'ai_enabled' => 'boolean',
+            'ai_pending' => 'boolean',
         ];
     }
 
