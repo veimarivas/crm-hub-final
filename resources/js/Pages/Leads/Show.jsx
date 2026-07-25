@@ -532,117 +532,249 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                 <div className={`grid gap-6 ${showLeadPanel ? 'lg:grid-cols-3' : 'lg:grid-cols-1'}`}>
                     {/* Columna izquierda: datos del lead (colapsable) */}
                     {showLeadPanel && (
-                    <div className="space-y-6">
-                        <OriginCard lead={lead} />
-                        <form onSubmit={saveEdit} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
-                            <h3 className="text-sm font-bold text-gray-900">Datos del lead</h3>
-                            <div>
-                                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Título</label>
-                                <input value={editForm.data.title} onChange={(e) => editForm.setData('title', e.target.value)} className={inputClass} />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Valor ({lead.currency})</label>
-                                <input type="number" step="0.01" min="0" value={editForm.data.value} onChange={(e) => editForm.setData('value', e.target.value)} className={inputClass} />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Contacto</label>
-                                <select value={editForm.data.contact_id} onChange={(e) => editForm.setData('contact_id', e.target.value)} className={inputClass}>
-                                    <option value="">— Sin contacto —</option>
-                                    {contacts.map((c) => <option key={c.id} value={c.id}>{c.name || c.phone}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Empresa</label>
-                                <select value={editForm.data.company_id} onChange={(e) => editForm.setData('company_id', e.target.value)} className={inputClass}>
-                                    <option value="">— Sin empresa —</option>
-                                    {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Responsable</label>
-                                {isAdmin ? (
-                                    <select value={editForm.data.responsible_user_id} onChange={(e) => editForm.setData('responsible_user_id', e.target.value)} className={inputClass}>
-                                        <option value="">— Nadie —</option>
-                                        {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                                    </select>
-                                ) : (
-                                    <div className="flex items-center gap-2 px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 text-gray-700">
-                                        <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                                        {lead.responsible?.name || 'Sin asignar'}
+                    <div className="space-y-5">
+                        {/* Hero card del lead */}
+                        {(() => {
+                            const daysOpen = Math.max(0, Math.floor((new Date() - new Date(lead.created_at)) / 86400000));
+                            const statusInfo = lead.status === 'won'
+                                ? { icon: '🏆', label: 'Ganado', color: 'from-emerald-500 to-teal-600', ring: 'ring-emerald-200' }
+                                : lead.status === 'lost'
+                                    ? { icon: '✕', label: 'Perdido', color: 'from-red-400 to-rose-500', ring: 'ring-red-200' }
+                                    : { icon: '⏳', label: 'Abierto', color: 'from-sky-500 to-blue-600', ring: 'ring-sky-200' };
+                            return (
+                                <div className={`rounded-2xl border border-gray-100 shadow-sm bg-white overflow-hidden`}>
+                                    <div className={`h-1.5 bg-gradient-to-r ${statusInfo.color}`} />
+                                    <div className="p-5">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0 flex-1">
+                                                <div className="inline-flex items-center gap-2 mb-2">
+                                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white bg-gradient-to-r ${statusInfo.color} shadow-sm`}>
+                                                        {statusInfo.icon} {statusInfo.label}
+                                                    </span>
+                                                    {lead.stage && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm" style={{ backgroundColor: `${lead.stage.color}15`, color: lead.stage.color, border: `1px solid ${lead.stage.color}40` }}>
+                                                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: lead.stage.color }} />
+                                                            {lead.stage.name}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <h3 className="text-lg font-bold text-gray-900 leading-snug">{lead.title}</h3>
+                                            </div>
+                                        </div>
+
+                                        <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                                            <div className="p-2 rounded-lg bg-gray-50">
+                                                <div className="text-sm font-extrabold text-gray-900 tabular-nums truncate" title={money(lead.value, lead.currency)}>{money(lead.value, lead.currency)}</div>
+                                                <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wide mt-0.5">Valor</div>
+                                            </div>
+                                            <div className="p-2 rounded-lg bg-gray-50">
+                                                <div className="text-sm font-extrabold text-gray-900 tabular-nums">{daysOpen}d</div>
+                                                <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wide mt-0.5">Antigüedad</div>
+                                            </div>
+                                            <div className="p-2 rounded-lg bg-gray-50">
+                                                <div className="text-sm font-extrabold text-gray-900 tabular-nums">{tasks?.length ?? 0}</div>
+                                                <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wide mt-0.5">Tareas</div>
+                                            </div>
+                                        </div>
+
+                                        {lead.responsible && (
+                                            <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-2 text-xs">
+                                                <Avatar name={lead.responsible.name} size="sm" />
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="text-[10px] text-gray-400 uppercase font-semibold tracking-wide">Responsable</div>
+                                                    <div className="text-sm font-semibold text-gray-800 truncate">{lead.responsible.name}</div>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                )}
-                            </div>
-                            {customFields.map((field) => (
-                                <div key={field.id}>
-                                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">{field.name}</label>
-                                    {field.field_type === 'select' ? (
-                                        <select
-                                            value={editForm.data.custom_values[field.id] ?? ''}
-                                            onChange={(e) => editForm.setData('custom_values', { ...editForm.data.custom_values, [field.id]: e.target.value })}
-                                            className={inputClass}
-                                        >
-                                            <option value="">—</option>
-                                            {(field.options ?? []).map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                                </div>
+                            );
+                        })()}
+
+                        <OriginCard lead={lead} />
+
+                        <form onSubmit={saveEdit} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                            {/* Sección: Datos básicos */}
+                            <details open className="group">
+                                <summary className="px-5 py-3.5 cursor-pointer list-none flex items-center justify-between border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                                    <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                                        <span className="w-1 h-4 bg-[#045474] rounded-full" />
+                                        Datos del lead
+                                    </h3>
+                                    <svg className="w-4 h-4 text-gray-400 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                                </summary>
+                                <div className="p-5 space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Título</label>
+                                        <input value={editForm.data.title} onChange={(e) => editForm.setData('title', e.target.value)} className={inputClass} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Valor ({lead.currency})</label>
+                                        <input type="number" step="0.01" min="0" value={editForm.data.value} onChange={(e) => editForm.setData('value', e.target.value)} className={inputClass} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Responsable</label>
+                                        {isAdmin ? (
+                                            <select value={editForm.data.responsible_user_id} onChange={(e) => editForm.setData('responsible_user_id', e.target.value)} className={inputClass}>
+                                                <option value="">— Nadie —</option>
+                                                {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                            </select>
+                                        ) : (
+                                            <div className="flex items-center gap-2 px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 text-gray-700">
+                                                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                                                {lead.responsible?.name || 'Sin asignar'}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </details>
+
+                            {/* Sección: Vinculado con */}
+                            <details open className="group border-t border-gray-100">
+                                <summary className="px-5 py-3.5 cursor-pointer list-none flex items-center justify-between hover:bg-gray-50 transition-colors">
+                                    <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                                        <span className="w-1 h-4 bg-emerald-500 rounded-full" />
+                                        Vinculado con
+                                    </h3>
+                                    <svg className="w-4 h-4 text-gray-400 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                                </summary>
+                                <div className="px-5 pb-5 space-y-4 border-t border-gray-100 pt-4">
+                                    <div>
+                                        <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Contacto</label>
+                                        <select value={editForm.data.contact_id} onChange={(e) => editForm.setData('contact_id', e.target.value)} className={inputClass}>
+                                            <option value="">— Sin contacto —</option>
+                                            {contacts.map((c) => <option key={c.id} value={c.id}>{c.name || c.phone}</option>)}
                                         </select>
-                                    ) : (
-                                        <input
-                                            type={field.field_type === 'number' ? 'number' : field.field_type === 'date' ? 'date' : 'text'}
-                                            value={editForm.data.custom_values[field.id] ?? ''}
-                                            onChange={(e) => editForm.setData('custom_values', { ...editForm.data.custom_values, [field.id]: e.target.value })}
-                                            className={inputClass}
-                                        />
-                                    )}
+                                        {lead.contact?.id && (
+                                            <a href={route('contacts.timeline', lead.contact.id)} className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 hover:text-emerald-700">
+                                                Ver timeline 360° del contacto →
+                                            </a>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Empresa</label>
+                                        <select value={editForm.data.company_id} onChange={(e) => editForm.setData('company_id', e.target.value)} className={inputClass}>
+                                            <option value="">— Sin empresa —</option>
+                                            {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                        </select>
+                                    </div>
                                 </div>
-                            ))}
+                            </details>
 
-                            <div>
-                                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Etiquetas</label>
-                                <div className="flex flex-wrap gap-1.5">
-                                    {allTags.map((tag) => {
-                                        const active = (lead.tags ?? []).some((t) => t.id === tag.id);
-                                        return (
-                                            <button
-                                                key={tag.id}
-                                                type="button"
-                                                onClick={() => toggleTag(tag.id)}
-                                                className={`rounded-full px-2.5 py-1 text-xs font-medium transition-all ${active ? 'text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-                                                style={active ? { backgroundColor: tag.color } : {}}
-                                            >
-                                                {tag.name}
+                            {/* Sección: Custom fields */}
+                            {customFields.length > 0 && (
+                                <details open className="group border-t border-gray-100">
+                                    <summary className="px-5 py-3.5 cursor-pointer list-none flex items-center justify-between hover:bg-gray-50 transition-colors">
+                                        <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                                            <span className="w-1 h-4 bg-purple-500 rounded-full" />
+                                            Campos personalizados
+                                            <span className="text-[10px] font-medium text-gray-400 normal-case">({customFields.length})</span>
+                                        </h3>
+                                        <svg className="w-4 h-4 text-gray-400 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                                    </summary>
+                                    <div className="px-5 pb-5 space-y-4 border-t border-gray-100 pt-4">
+                                        {customFields.map((field) => (
+                                            <div key={field.id}>
+                                                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">{field.name}</label>
+                                                {field.field_type === 'select' ? (
+                                                    <select
+                                                        value={editForm.data.custom_values[field.id] ?? ''}
+                                                        onChange={(e) => editForm.setData('custom_values', { ...editForm.data.custom_values, [field.id]: e.target.value })}
+                                                        className={inputClass}
+                                                    >
+                                                        <option value="">—</option>
+                                                        {(field.options ?? []).map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                                                    </select>
+                                                ) : (
+                                                    <input
+                                                        type={field.field_type === 'number' ? 'number' : field.field_type === 'date' ? 'date' : 'text'}
+                                                        value={editForm.data.custom_values[field.id] ?? ''}
+                                                        onChange={(e) => editForm.setData('custom_values', { ...editForm.data.custom_values, [field.id]: e.target.value })}
+                                                        className={inputClass}
+                                                    />
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </details>
+                            )}
+
+                            {/* Sección: Etiquetas */}
+                            <details open className="group border-t border-gray-100">
+                                <summary className="px-5 py-3.5 cursor-pointer list-none flex items-center justify-between hover:bg-gray-50 transition-colors">
+                                    <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                                        <span className="w-1 h-4 bg-amber-500 rounded-full" />
+                                        Etiquetas
+                                        {(lead.tags?.length ?? 0) > 0 && <span className="text-[10px] font-medium text-gray-400 normal-case">({lead.tags.length})</span>}
+                                    </h3>
+                                    <svg className="w-4 h-4 text-gray-400 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                                </summary>
+                                <div className="px-5 pb-5 border-t border-gray-100 pt-4">
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {allTags.map((tag) => {
+                                            const active = (lead.tags ?? []).some((t) => t.id === tag.id);
+                                            return (
+                                                <button
+                                                    key={tag.id}
+                                                    type="button"
+                                                    onClick={() => toggleTag(tag.id)}
+                                                    className={`rounded-full px-2.5 py-1 text-xs font-medium transition-all ${active ? 'text-white shadow-md scale-105' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                                                    style={active ? { backgroundColor: tag.color } : {}}
+                                                >
+                                                    {tag.name}
+                                                </button>
+                                            );
+                                        })}
+                                        {newTag === null ? (
+                                            <button type="button" onClick={() => setNewTag('')} className="rounded-full px-2.5 py-1 text-xs font-medium border border-dashed border-gray-300 text-gray-400 hover:border-emerald-400 hover:text-emerald-600 transition-all">
+                                                + Nueva
                                             </button>
-                                        );
-                                    })}
-                                    {newTag === null ? (
-                                        <button type="button" onClick={() => setNewTag('')} className="rounded-full px-2.5 py-1 text-xs font-medium border border-dashed border-gray-300 text-gray-400 hover:border-emerald-400 hover:text-emerald-600 transition-all">
-                                            + Nueva
-                                        </button>
-                                    ) : (
-                                        <span className="inline-flex items-center gap-1">
-                                            <input
-                                                autoFocus
-                                                value={newTag}
-                                                onChange={(e) => setNewTag(e.target.value)}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') {
-                                                        e.preventDefault();
-                                                        if (newTag.trim()) router.post(route('tags.store'), { name: newTag.trim() }, { preserveScroll: true, onSuccess: () => setNewTag(null) });
-                                                    }
-                                                    if (e.key === 'Escape') setNewTag(null);
-                                                }}
-                                                placeholder="nombre + Enter"
-                                                className="w-28 px-2 py-1 border border-emerald-300 rounded-full text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                                            />
-                                        </span>
-                                    )}
+                                        ) : (
+                                            <span className="inline-flex items-center gap-1">
+                                                <input
+                                                    autoFocus
+                                                    value={newTag}
+                                                    onChange={(e) => setNewTag(e.target.value)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            if (newTag.trim()) router.post(route('tags.store'), { name: newTag.trim() }, { preserveScroll: true, onSuccess: () => setNewTag(null) });
+                                                        }
+                                                        if (e.key === 'Escape') setNewTag(null);
+                                                    }}
+                                                    placeholder="nombre + Enter"
+                                                    className="w-28 px-2 py-1 border border-emerald-300 rounded-full text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                                                />
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
+                            </details>
+
+                            {/* Acciones */}
+                            <div className="border-t border-gray-100 p-5 space-y-2 bg-gray-50/50">
+                                <button type="submit" disabled={editForm.processing} className="w-full px-4 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-[#045474] to-[#1c486c] rounded-xl hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-[#045474]/20 inline-flex items-center justify-center gap-2">
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                                    {editForm.processing ? 'Guardando…' : 'Guardar cambios'}
+                                </button>
                             </div>
 
-                            <button type="submit" disabled={editForm.processing} className="w-full px-4 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-[#045474] to-[#1c486c] rounded-xl hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-[#045474]/20">
-                                Guardar cambios
-                            </button>
-                            <button type="button" onClick={() => { if (confirm('¿Eliminar este lead y su historial?')) router.delete(route('leads.destroy', lead.id)); }} className="w-full text-xs text-red-500 hover:text-red-700 font-medium">
-                                Eliminar lead
-                            </button>
+                            {/* Danger zone */}
+                            <details className="group border-t border-red-100 bg-red-50/30">
+                                <summary className="px-5 py-2.5 cursor-pointer list-none flex items-center justify-between text-xs font-semibold text-red-500 hover:text-red-700 transition-colors">
+                                    <span className="inline-flex items-center gap-1.5">
+                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+                                        Zona peligrosa
+                                    </span>
+                                    <svg className="w-3.5 h-3.5 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                                </summary>
+                                <div className="px-5 pb-4 pt-1">
+                                    <button type="button" onClick={() => { if (confirm('¿Eliminar este lead y su historial?')) router.delete(route('leads.destroy', lead.id)); }} className="w-full px-3 py-2 text-xs font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-all inline-flex items-center justify-center gap-1.5">
+                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
+                                        Eliminar lead y todo su historial
+                                    </button>
+                                </div>
+                            </details>
                         </form>
                     </div>
                     )}
