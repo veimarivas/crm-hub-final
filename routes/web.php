@@ -99,6 +99,10 @@ Route::middleware('auth')->group(function () {
         // Equipo
         Route::get('/settings/team', [\App\Http\Controllers\TeamController::class, 'index'])->name('settings.team');
         Route::post('/settings/team/auto-assign', [\App\Http\Controllers\TeamController::class, 'toggleAutoAssign'])->name('team.auto-assign');
+
+        // Horario de atencion + auto-respuesta fuera de hora
+        Route::get('/settings/business-hours', [\App\Http\Controllers\BusinessHoursController::class, 'edit'])->name('settings.business-hours');
+        Route::patch('/settings/business-hours', [\App\Http\Controllers\BusinessHoursController::class, 'update'])->name('settings.business-hours.update');
         Route::post('/settings/team/invitations', [\App\Http\Controllers\TeamController::class, 'invite'])->name('team.invite');
         Route::delete('/settings/team/invitations/{invitation}', [\App\Http\Controllers\TeamController::class, 'revokeInvitation'])->name('team.invitations.revoke');
         Route::post('/settings/team/invitations/{invitation}/regenerate', [\App\Http\Controllers\TeamController::class, 'regenerateInvitation'])->name('team.invitations.regenerate');

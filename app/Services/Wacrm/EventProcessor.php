@@ -214,6 +214,68 @@ class EventProcessor
             'wamid' => $data['message']['wamid'] ?? null,
             'media_id' => $data['message']['media_id'] ?? null,
         ]);
+
+        $this->maybeSendOutOfHoursReply($integration, $lead, $contact);
+    }
+
+    /**
+     * Auto-respuesta fuera de horario: solo si la cuenta lo tiene activo,
+     * estamos fuera del schedule, y no le mandamos otro auto-reply al mismo
+     * lead en las ultimas 8h (evita spam en conversaciones largas).
+     */
+    private function maybeSendOutOfHoursReply(Integration $integration, Lead $lead, $contact): void
+    {
+        $account = $integration->account;
+
+        if (! $account?->business_hours_enabled || ! $account?->out_of_hours_reply_enabled) {
+            return;
+        }
+
+        $schedule = app(\App\Services\BusinessHours\Schedule::class);
+        if ($schedule->isOpenNow($account)) {
+            return;
+        }
+
+        $message = trim((string) $account->out_of_hours_message);
+        if ($message === '') {
+            $message = \App\Services\BusinessHours\Schedule::DEFAULT_MESSAGE;
+        }
+
+        // Anti-spam: no reenviar si ya se despacho un auto-reply a este lead
+        // en las ultimas 8h (marcado por payload.auto_reply=true).
+        $recentAutoReply = $lead->events()
+            ->where('event_type', 'message_out')
+            ->where('created_at', '>=', now()->subHours(8))
+            ->get(['payload'])
+            ->contains(fn ($e) => ($e->payload['auto_reply'] ?? false) === true);
+
+        if ($recentAutoReply) {
+            return;
+        }
+
+        $phone = $contact->phone_normalized ?? $contact->phone;
+        if (! $phone) {
+            return;
+        }
+
+        try {
+            \App\Services\Wacrm\Client::for($integration)->sendMessage($phone, $message);
+
+            // Registro anticipado del evento (el wacrm dispararia message.sent, pero
+            // marcamos el payload con auto_reply=true para el guard anti-spam. El
+            // handleOutboundMessage es idempotente por wamid asi que no se duplica.)
+            $lead->recordEvent('message_out', null, [
+                'text' => mb_substr($message, 0, 500),
+                'auto_reply' => true,
+                'sender' => 'bot',
+                'sender_name' => 'Auto-respuesta',
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('out_of_hours_reply.failed', [
+                'lead_id' => $lead->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
