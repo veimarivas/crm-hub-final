@@ -77,6 +77,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/automations/{automation}/toggle', [\App\Http\Controllers\StageAutomationController::class, 'toggle'])->name('automations.toggle');
     Route::delete('/automations/{automation}', [\App\Http\Controllers\StageAutomationController::class, 'destroy'])->name('automations.destroy');
 
+    // Inbox unificado (bandeja de conversaciones activas)
+    Route::get('/inbox', [\App\Http\Controllers\InboxController::class, 'index'])->name('inbox');
+
     // Reportes
     Route::get('/reports', [\App\Http\Controllers\ReportController::class, 'index'])->name('reports.index');
 
