@@ -62,6 +62,12 @@ class LeadController extends Controller
         // Tags disponibles del pipeline para el filtro
         $tags = \App\Models\Tag::forAccount($accountId)->orderBy('name')->get(['id', 'name', 'color']);
 
+        // Segments accesibles: propios o compartidos del equipo
+        $segments = \App\Models\SavedSegment::forAccount($accountId)
+            ->where(fn ($q) => $q->where('user_id', $user->id)->orWhere('is_shared', true))
+            ->orderBy('name')
+            ->get(['id', 'name', 'filters', 'user_id', 'is_shared']);
+
         return Inertia::render('Leads/Index', [
             'pipelines' => $pipelines->map(fn ($p) => ['id' => $p->id, 'name' => $p->name]),
             'pipeline' => $selected ? ['id' => $selected->id, 'name' => $selected->name, 'stages' => $selected->stages] : null,
@@ -70,6 +76,7 @@ class LeadController extends Controller
             'contacts' => Contact::forAccount($accountId)->orderBy('name')->limit(500)->get(['id', 'name', 'phone']),
             'allTags' => $tags,
             'filters' => $filters,
+            'segments' => $segments,
             'currency' => $request->user()->account->default_currency,
             'slaMinutes' => 30,
         ]);

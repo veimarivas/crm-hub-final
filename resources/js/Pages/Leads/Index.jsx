@@ -350,7 +350,7 @@ function NewLeadModal({ open, onClose, pipeline, contacts, members }) {
     );
 }
 
-export default function Index({ pipelines, pipeline, leads, members, contacts, allTags = [], filters, currency, slaMinutes = 30 }) {
+export default function Index({ pipelines, pipeline, leads, members, contacts, allTags = [], filters, segments = [], currency, slaMinutes = 30 }) {
     const { flash, auth } = usePage().props;
     const isAdmin = auth?.user?.account_role === 'owner' || auth?.user?.account_role === 'admin';
     const [showNew, setShowNew] = useState(false);
@@ -474,6 +474,36 @@ export default function Index({ pipelines, pipeline, leads, members, contacts, a
                     </div>
                 </div>
 
+                {/* Segments guardados */}
+                {segments.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 items-center">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 pr-1">Mis listas:</span>
+                        {segments.map((s) => {
+                            const isOwn = s.user_id === auth?.user?.id;
+                            return (
+                                <div key={s.id} className="inline-flex items-center rounded-lg bg-white border border-gray-200 shadow-sm overflow-hidden group">
+                                    <button
+                                        onClick={() => router.get(route('leads.index'), { pipeline: pipeline?.id, ...s.filters }, { preserveState: false })}
+                                        className="px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-emerald-50 hover:text-emerald-700"
+                                    >
+                                        📋 {s.name}
+                                        {s.is_shared && <span className="ml-1 text-[9px] text-gray-400">·compartida</span>}
+                                    </button>
+                                    {isOwn && (
+                                        <button
+                                            onClick={() => { if (confirm(`¿Borrar la lista "${s.name}"?`)) router.delete(route('segments.destroy', s.id), { preserveScroll: true }); }}
+                                            className="px-1.5 py-1 text-gray-300 hover:text-red-600 hover:bg-red-50 border-l border-gray-100"
+                                            title="Borrar lista"
+                                        >
+                                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                        </button>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+
                 {/* Barra de filtros */}
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex flex-wrap gap-2 items-center">
                     <div className="relative flex-1 min-w-[200px] max-w-xs">
@@ -507,9 +537,27 @@ export default function Index({ pipelines, pipeline, leads, members, contacts, a
                         Sin tarea
                     </button>
                     {hasActiveFilters && (
-                        <button onClick={clearFilters} className="text-xs font-semibold text-gray-500 hover:text-gray-700 px-2 underline">
-                            Limpiar
-                        </button>
+                        <>
+                            <button
+                                onClick={() => {
+                                    const name = prompt('Nombre de la lista:', 'Mi filtro');
+                                    if (!name?.trim()) return;
+                                    const share = confirm('¿Compartir con todo el equipo? (Cancelar = solo para vos)');
+                                    router.post(route('segments.store'), {
+                                        name: name.trim(),
+                                        filters: { responsible: filters?.responsible, tag: filters?.tag, source: filters?.source, no_task: filters?.no_task ? 1 : 0, q: filters?.q },
+                                        is_shared: share,
+                                    }, { preserveScroll: true });
+                                }}
+                                className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 px-2 inline-flex items-center gap-1"
+                                title="Guardar estos filtros como lista"
+                            >
+                                💾 Guardar
+                            </button>
+                            <button onClick={clearFilters} className="text-xs font-semibold text-gray-500 hover:text-gray-700 px-2 underline">
+                                Limpiar
+                            </button>
+                        </>
                     )}
                 </div>
 

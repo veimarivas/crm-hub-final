@@ -37,6 +37,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/leads', [\App\Http\Controllers\LeadController::class, 'index'])->name('leads.index');
     Route::post('/leads', [\App\Http\Controllers\LeadController::class, 'store'])->name('leads.store');
     Route::post('/leads/bulk', [\App\Http\Controllers\LeadController::class, 'bulk'])->name('leads.bulk');
+
+    // Segments (listas guardadas de leads segmentados)
+    Route::post('/segments', [\App\Http\Controllers\SavedSegmentController::class, 'store'])->name('segments.store');
+    Route::delete('/segments/{savedSegment}', [\App\Http\Controllers\SavedSegmentController::class, 'destroy'])->name('segments.destroy');
     Route::get('/leads/{lead}', [\App\Http\Controllers\LeadController::class, 'show'])->name('leads.show');
     Route::patch('/leads/{lead}', [\App\Http\Controllers\LeadController::class, 'update'])->name('leads.update');
     Route::patch('/leads/{lead}/move', [\App\Http\Controllers\LeadController::class, 'move'])->name('leads.move');
@@ -85,6 +89,15 @@ Route::middleware('auth')->group(function () {
 
     // Reportes
     Route::get('/reports', [\App\Http\Controllers\ReportController::class, 'index'])->name('reports.index');
+
+    // Broadcasts (envio masivo por WhatsApp usando segments)
+    Route::middleware('admin.only')->group(function () {
+        Route::get('/broadcasts', [\App\Http\Controllers\BroadcastController::class, 'index'])->name('broadcasts.index');
+        Route::get('/broadcasts/create', [\App\Http\Controllers\BroadcastController::class, 'create'])->name('broadcasts.create');
+        Route::post('/broadcasts/preview', [\App\Http\Controllers\BroadcastController::class, 'preview'])->name('broadcasts.preview');
+        Route::post('/broadcasts', [\App\Http\Controllers\BroadcastController::class, 'store'])->name('broadcasts.store');
+        Route::get('/broadcasts/{broadcast}', [\App\Http\Controllers\BroadcastController::class, 'show'])->name('broadcasts.show');
+    });
 
     // Notificaciones (accesible a todos los usuarios logueados)
     Route::get('/notifications', [\App\Http\Controllers\NotificationController::class, 'index'])->name('notifications');
