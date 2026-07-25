@@ -15,12 +15,50 @@ class TaskController extends Controller
     public function index(Request $request): Response
     {
         $accountId = $request->user()->account_id;
+        $userId = $request->user()->id;
+        $view = $request->query('view', 'calendar'); // calendar | list
         $filter = $request->query('filter', 'pending');
         $mine = $request->boolean('mine', true);
 
+        $baseScope = fn ($q) => $mine ? $q->where('assigned_to', $userId) : $q;
+
+        if ($view === 'calendar') {
+            // Rango del mes visible (incluye dias de semanas parciales anteriores/posteriores)
+            $month = $request->query('month'); // YYYY-MM
+            $anchor = $month ? \Carbon\Carbon::createFromFormat('Y-m', $month)->startOfMonth() : now()->startOfMonth();
+            $from = $anchor->copy()->startOfMonth()->startOfWeek(\Carbon\Carbon::MONDAY);
+            $to = $anchor->copy()->endOfMonth()->endOfWeek(\Carbon\Carbon::SUNDAY);
+
+            $rangeTasks = Task::forAccount($accountId)
+                ->with(['lead:id,title', 'contact:id,name', 'assignee:id,name'])
+                ->when($mine, fn ($q) => $q->where('assigned_to', $userId))
+                ->whereBetween('due_at', [$from, $to])
+                ->orderBy('due_at')
+                ->get();
+
+            return Inertia::render('Tasks/Index', [
+                'view' => 'calendar',
+                'calendar' => [
+                    'anchor' => $anchor->format('Y-m'),
+                    'from' => $from->toIso8601String(),
+                    'to' => $to->toIso8601String(),
+                    'tasks' => $rangeTasks,
+                ],
+                'filters' => ['filter' => $filter, 'mine' => $mine, 'view' => 'calendar'],
+                'members' => User::where('account_id', $accountId)->get(['id', 'name']),
+                'counts' => [
+                    'overdue' => Task::forAccount($accountId)->overdue()->when($mine, $baseScope)->count(),
+                    'today' => Task::forAccount($accountId)->pending()
+                        ->whereBetween('due_at', [now()->startOfDay(), now()->endOfDay()])
+                        ->when($mine, $baseScope)->count(),
+                ],
+            ]);
+        }
+
+        // Vista lista (comportamiento anterior)
         $tasks = Task::forAccount($accountId)
             ->with(['lead:id,title', 'contact:id,name', 'assignee:id,name'])
-            ->when($mine, fn ($q) => $q->where('assigned_to', $request->user()->id))
+            ->when($mine, $baseScope)
             ->when($filter === 'pending', fn ($q) => $q->pending())
             ->when($filter === 'overdue', fn ($q) => $q->overdue())
             ->when($filter === 'today', fn ($q) => $q->pending()->whereBetween('due_at', [now()->startOfDay(), now()->endOfDay()]))
@@ -30,15 +68,15 @@ class TaskController extends Controller
             ->withQueryString();
 
         return Inertia::render('Tasks/Index', [
+            'view' => 'list',
             'tasks' => $tasks,
-            'filters' => ['filter' => $filter, 'mine' => $mine],
+            'filters' => ['filter' => $filter, 'mine' => $mine, 'view' => 'list'],
             'members' => User::where('account_id', $accountId)->get(['id', 'name']),
             'counts' => [
-                'overdue' => Task::forAccount($accountId)->overdue()
-                    ->when($mine, fn ($q) => $q->where('assigned_to', $request->user()->id))->count(),
+                'overdue' => Task::forAccount($accountId)->overdue()->when($mine, $baseScope)->count(),
                 'today' => Task::forAccount($accountId)->pending()
                     ->whereBetween('due_at', [now()->startOfDay(), now()->endOfDay()])
-                    ->when($mine, fn ($q) => $q->where('assigned_to', $request->user()->id))->count(),
+                    ->when($mine, $baseScope)->count(),
             ],
         ]);
     }

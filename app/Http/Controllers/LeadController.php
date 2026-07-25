@@ -28,25 +28,86 @@ class LeadController extends Controller
         $user = $request->user();
         $isAdmin = $user->hasRoleAtLeast(User::ROLE_ADMIN);
 
-        $leads = $selected
-            ? $selected->leads()
-                ->with(['contact:id,name,phone', 'responsible:id,name'])
-                ->withCount(['tasks as pending_tasks_count' => fn ($q) => $q->whereNull('completed_at')])
-                // Restricción por rol: agent/viewer solo ve los leads asignados
-                // a ellos. admin/owner ven todo el pipeline.
-                ->when(! $isAdmin, fn ($q) => $q->where('responsible_user_id', $user->id))
-                ->orderByDesc('created_at')
-                ->get()
-            : collect();
+        // Filtros (persisten via query string)
+        $filters = [
+            'responsible' => $request->query('responsible'),
+            'tag' => $request->query('tag'),
+            'source' => $request->query('source'),
+            'no_task' => (bool) $request->query('no_task'),
+            'q' => trim((string) $request->query('q', '')),
+        ];
+
+        $query = $selected?->leads()
+            ->with(['contact:id,name,phone,phone_normalized', 'responsible:id,name', 'tags'])
+            ->withCount(['tasks as pending_tasks_count' => fn ($q) => $q->whereNull('completed_at')])
+            ->when(! $isAdmin, fn ($q) => $q->where('responsible_user_id', $user->id))
+            ->when($filters['responsible'], fn ($q, $v) => $v === 'none' ? $q->whereNull('responsible_user_id') : $q->where('responsible_user_id', $v))
+            ->when($filters['source'], fn ($q, $v) => $q->where('source', $v))
+            ->when($filters['no_task'], fn ($q) => $q->whereDoesntHave('tasks', fn ($t) => $t->whereNull('completed_at')))
+            ->when($filters['tag'], fn ($q, $tagId) => $q->whereHas('tags', fn ($tq) => $tq->where('tags.id', $tagId)))
+            ->when($filters['q'] !== '', function ($q) use ($filters) {
+                $t = $filters['q'];
+                $q->where(function ($qq) use ($t) {
+                    $qq->where('title', 'like', "%{$t}%")
+                        ->orWhereHas('contact', fn ($cq) => $cq->where('name', 'like', "%{$t}%")->orWhere('phone', 'like', "%{$t}%")->orWhere('phone_normalized', 'like', "%{$t}%"));
+                });
+            })
+            ->orderByDesc('created_at');
+
+        $leads = $query ? $query->get() : collect();
+
+        // Enriquecimiento SLA: ultimo mensaje entrante y minutos de espera
+        $enrichedLeads = $this->enrichLeadsWithSla($leads);
+
+        // Tags disponibles del pipeline para el filtro
+        $tags = \App\Models\Tag::forAccount($accountId)->orderBy('name')->get(['id', 'name', 'color']);
 
         return Inertia::render('Leads/Index', [
             'pipelines' => $pipelines->map(fn ($p) => ['id' => $p->id, 'name' => $p->name]),
             'pipeline' => $selected ? ['id' => $selected->id, 'name' => $selected->name, 'stages' => $selected->stages] : null,
-            'leads' => $leads,
+            'leads' => $enrichedLeads,
             'members' => User::where('account_id', $accountId)->get(['id', 'name']),
             'contacts' => Contact::forAccount($accountId)->orderBy('name')->limit(500)->get(['id', 'name', 'phone']),
+            'allTags' => $tags,
+            'filters' => $filters,
             'currency' => $request->user()->account->default_currency,
+            'slaMinutes' => 30,
         ]);
+    }
+
+    /**
+     * Agrega last_message_at, last_message_direction y waiting_minutes a cada lead.
+     * Usa una sola query batched para evitar N+1.
+     */
+    private function enrichLeadsWithSla($leads)
+    {
+        $ids = $leads->pluck('id')->all();
+        if (empty($ids)) {
+            return $leads;
+        }
+
+        $lastMessages = \App\Models\LeadEvent::whereIn('lead_id', $ids)
+            ->whereIn('event_type', ['message_in', 'message_out'])
+            ->select('lead_id', 'event_type', 'created_at')
+            ->orderByDesc('created_at')
+            ->get()
+            ->groupBy('lead_id')
+            ->map(fn ($g) => $g->first());
+
+        $now = now();
+
+        return $leads->map(function ($lead) use ($lastMessages, $now) {
+            $last = $lastMessages->get($lead->id);
+            $waiting = 0;
+            if ($last && $last->event_type === 'message_in') {
+                $waiting = (int) $now->diffInMinutes($last->created_at, true);
+            }
+            $lead->setAttribute('last_message_at', $last?->created_at);
+            $lead->setAttribute('last_message_direction', $last ? ($last->event_type === 'message_in' ? 'in' : 'out') : null);
+            $lead->setAttribute('waiting_minutes', $waiting);
+
+            return $lead;
+        });
     }
 
     public function store(Request $request): RedirectResponse
