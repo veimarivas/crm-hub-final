@@ -194,9 +194,24 @@ Dos bugs de producción corregidos juntos porque son el mismo flujo (suite 77/77
   - `Lead::booted()` created → tras el round-robin automático.
   - `LeadController@update` → cambio manual en la ficha.
   - `LeadController@bulk` acción `assign` → reasignación masiva (también le faltaba).
-- **Requisito operativo que sigue vigente**: la correlación es **por email**; el agente debe existir en el wacrm con el mismo email o el endpoint responde 422 `user_not_found` (queda en el log, no rompe el flujo). La auto-provisión al aceptar la invitación lo cubre; los agentes viejos hay que provisionarlos a mano.
-- **Red de seguridad**: `php artisan komo:sync-assignments` reenvía todas las asignaciones existentes al wacrm (útil para reparar los leads que quedaron desincronizados antes de este fix).
-- Tests en `LeadAssignmentTest` (7): no asigna a owner/admin, sin agentes queda null, elige al agente con menos leads abiertos, los leads manuales no se reasignan, el espejo se dispara en automático y en manual, y no llama al wacrm si el lead no tiene conversación.
+- **La correlación es por email** y ya no exige provisión previa: si el wacrm responde 422 `user_not_found`, el job da de alta al agente con `POST /team/provision` (rol `admin` si es owner/admin en Komo, si no `agent`) y reintenta el assign una vez. **La API key de la integración necesita el scope `team:write` además de `conversations:write`** — sin él el fallback no puede provisionar y la conversación se queda "Sin asignar".
+- **`handle()` traga y loguea; `sync()` lanza.** El comando de reparación usa `sync()` para poder reportar de verdad qué leads fallaron; la cola usa `handle()` para que un wacrm caído no llene `failed_jobs`.
+- **Red de seguridad**: `php artisan komo:sync-assignments` reenvía todas las asignaciones existentes al wacrm (útil para reparar los leads que quedaron desincronizados antes de este fix). Reusa el job, así que también auto-provisiona.
+- Tests en `LeadAssignmentTest` (8): no asigna a owner/admin, sin agentes queda null, elige al agente con menos leads abiertos, los leads manuales no se reasignan, el espejo se dispara en automático y en manual, no llama al wacrm si el lead no tiene conversación, y el fallback de provisión + reintento.
+
+## Seguimiento del admin (2026-07-26) — `/supervision`
+
+Panel admin-only (`admin.only` en la ruta) para supervisar **el proceso**, no el resultado: Reportes ya mide ganados/conversión/embudo, esto mide si el equipo está atendiendo. `SupervisionController` + `Services\Supervision\ResponseMetrics` + `Pages/Supervision/Index.jsx`. Ventanas de 7/15/30/90 días por query `?days=`.
+
+Todo sale de `lead_events` (`message_in`/`message_out`) — no consulta al wacrm. **Definiciones que hay que respetar si se toca el cálculo** (los tests de `SupervisionMetricsTest` las fijan):
+
+- **La respuesta de la IA NO cierra la espera.** Para el admin lo relevante es si contestó un humano; la IA solo gana tiempo. Por eso un lead con auto-respuesta de IA y sin humano sigue contando como "esperando" y como "sin respuesta humana".
+- **El reloj arranca en el PRIMER mensaje de la ráfaga.** Si el contacto manda cinco seguidos, esperó desde el primero, no desde el último.
+- **Un saliente humano sin espera abierta es seguimiento proactivo, no respuesta** — no entra en los promedios.
+- **"Quién contestó 1º"** distingue `responsable` de `otro_agente`: es lo que deja ver si el dueño del lead lo trabaja o se lo están cubriendo. Requiere saber *qué* usuario mandó cada saliente.
+- La ventana recorta los eventos: una conversación anterior al periodo se mide solo por lo que pasó dentro de él.
+
+**Cambio en el wacrm que esto exigió**: `Messenger::dispatchOutbound()` ahora manda `sender_email` en el webhook `message.sent`. `EventProcessor::resolveSender()` lo resuelve a un `User` de la cuenta y lo guarda en `lead_events.user_id` (antes siempre null para salientes). Sin eso no se puede atribuir la respuesta a nadie. Para eventos viejos sin `sender_email` cae a coincidencia exacta de `sender_name` dentro de la cuenta — los que no matcheen quedan como `sin_identificar` (cuentan como respuesta humana para los tiempos, pero no se le adjudican a nadie).
 
 ## Pendiente (futuro, no bloquea)
 

@@ -99,6 +99,11 @@ Route::middleware('auth')->group(function () {
     // Reportes
     Route::get('/reports', [\App\Http\Controllers\ReportController::class, 'index'])->name('reports.index');
 
+    // Seguimiento de la atencion por responsable (admin-only)
+    Route::get('/supervision', [\App\Http\Controllers\SupervisionController::class, 'index'])
+        ->middleware('admin.only')
+        ->name('supervision.index');
+
     // Pipeline builder (admin-only)
     Route::middleware('admin.only')->group(function () {
         Route::get('/settings/pipelines', [\App\Http\Controllers\PipelineController::class, 'index'])->name('settings.pipelines');

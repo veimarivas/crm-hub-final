@@ -2,10 +2,14 @@
 
 namespace App\Services\Wacrm;
 
+use App\Models\AppNotification;
 use App\Models\Contact;
 use App\Models\Integration;
 use App\Models\Lead;
 use App\Models\Pipeline;
+use App\Models\User;
+use App\Services\BusinessHours\Schedule;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Convierte los eventos del wacrm en actividad del CRM de leads:
@@ -42,7 +46,9 @@ class EventProcessor
     {
         $convId = $data['conversation_id'] ?? null;
         $pending = (bool) ($data['pending'] ?? false);
-        if (! $convId) return;
+        if (! $convId) {
+            return;
+        }
 
         Lead::forAccount($integration->account_id)
             ->where('wacrm_conversation_id', $convId)
@@ -184,7 +190,7 @@ class EventProcessor
             ]));
 
             // Aviso al owner: entró un lead nuevo por WhatsApp.
-            \App\Models\AppNotification::notify(
+            AppNotification::notify(
                 $integration->account_id,
                 $integration->account->owner_user_id,
                 'lead_created_whatsapp',
@@ -231,14 +237,14 @@ class EventProcessor
             return;
         }
 
-        $schedule = app(\App\Services\BusinessHours\Schedule::class);
+        $schedule = app(Schedule::class);
         if ($schedule->isOpenNow($account)) {
             return;
         }
 
         $message = trim((string) $account->out_of_hours_message);
         if ($message === '') {
-            $message = \App\Services\BusinessHours\Schedule::DEFAULT_MESSAGE;
+            $message = Schedule::DEFAULT_MESSAGE;
         }
 
         // Anti-spam: no reenviar si ya se despacho un auto-reply a este lead
@@ -259,7 +265,7 @@ class EventProcessor
         }
 
         try {
-            \App\Services\Wacrm\Client::for($integration)->sendMessage($phone, $message);
+            Client::for($integration)->sendMessage($phone, $message);
 
             // Registro anticipado del evento (el wacrm dispararia message.sent, pero
             // marcamos el payload con auto_reply=true para el guard anti-spam. El
@@ -271,7 +277,7 @@ class EventProcessor
                 'sender_name' => 'Auto-respuesta',
             ]);
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('out_of_hours_reply.failed', [
+            Log::warning('out_of_hours_reply.failed', [
                 'lead_id' => $lead->id,
                 'error' => $e->getMessage(),
             ]);
@@ -310,7 +316,7 @@ class EventProcessor
             return;
         }
 
-        $lead->recordEvent('message_out', null, [
+        $lead->recordEvent('message_out', $this->resolveSender($integration, $data['message'] ?? []), [
             'text' => mb_substr($data['message']['text'] ?? '', 0, 500),
             'type' => $data['message']['type'] ?? 'text',
             'wamid' => $wamid,
@@ -318,6 +324,36 @@ class EventProcessor
             'sender' => $data['message']['sender_type'] ?? 'agent', // 'agent' | 'bot'
             'sender_name' => $data['message']['sender_name'] ?? null,
             'sender_role' => $data['message']['sender_role'] ?? null,
+            'sender_email' => $data['message']['sender_email'] ?? null,
         ]);
+    }
+
+    /**
+     * Qué usuario de Komo mandó el mensaje saliente. Se guarda en
+     * lead_events.user_id para que el panel de Seguimiento pueda medir quién
+     * respondió sin depender del payload.
+     *
+     * Por email (el wacrm y Komo comparten el email de cada agente); si el
+     * evento viene sin email — mensajes anteriores a que el wacrm lo enviara —
+     * se cae a coincidencia exacta de nombre dentro de la cuenta. Los mensajes
+     * de la IA no tienen sender y devuelven null a propósito.
+     */
+    private function resolveSender(Integration $integration, array $message): ?User
+    {
+        if (($message['sender_type'] ?? 'agent') === 'bot') {
+            return null;
+        }
+
+        $query = User::where('account_id', $integration->account_id);
+
+        if ($email = $message['sender_email'] ?? null) {
+            return (clone $query)->where('email', $email)->first();
+        }
+
+        if ($name = $message['sender_name'] ?? null) {
+            return (clone $query)->where('name', $name)->first();
+        }
+
+        return null;
     }
 }
