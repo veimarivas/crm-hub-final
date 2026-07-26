@@ -13,16 +13,21 @@ use Illuminate\Support\Collection;
  * Ventana de servicio de WhatsApp: cuánto queda para escribirle al contacto
  * SIN que Meta cobre.
  *
- * Las dos reglas de Meta:
- *  - **24 h de servicio**: cada mensaje entrante del cliente abre (o renueva)
- *    24 h de texto libre gratis. Vencida, solo se puede escribir con una
- *    plantilla aprobada — y eso se factura.
- *  - **72 h de free entry point**: si el cliente llegó tocando un anuncio
- *    Click-to-WhatsApp, esa conversación sale gratis durante 72 h.
+ * Las dos reglas de Meta, que se comportan DISTINTO:
  *
- * Corren en paralelo, así que vale **la que venza más tarde**: un clic en el
- * anuncio hace 60 h sigue cubriendo aunque las 24 h del último mensaje ya
- * hayan pasado, y al revés.
+ *  - **24 h de servicio — se reinicia con cada mensaje.** Cada entrante del
+ *    cliente abre (o renueva) 24 h de texto libre gratis contadas desde ese
+ *    mensaje. Vencida, solo se puede escribir con plantilla aprobada, y eso
+ *    se factura.
+ *  - **72 h de free entry point — NO se reinicia.** Corren desde el clic en
+ *    el anuncio Click-to-WhatsApp y punto: que el cliente siga escribiendo no
+ *    las estira. Dentro de esas 72 h todo es gratis, incluidas las plantillas.
+ *    Solo un clic NUEVO en un anuncio abre otras 72 h.
+ *
+ * Corren en paralelo, así que vale **la que venza más tarde**. El caso que
+ * hay que tener claro: si el cliente toca el anuncio y escribe recién en la
+ * hora 71, al vencer las 72 h la conversación NO se corta — quedan las 24 h
+ * estándar desde su último mensaje, o sea hasta la hora 95.
  *
  * Se calcula desde `lead_events` (el espejo local de la conversación): no se
  * consulta al wacrm ni a Meta, así que sirve en listados sin costo de red.

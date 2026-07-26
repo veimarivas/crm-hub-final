@@ -145,6 +145,51 @@ class ServiceWindowTest extends TestCase
         $this->assertSame(24, $w['window_hours']);
     }
 
+    public function test_el_mensaje_de_la_hora_71_deja_24h_mas_al_vencer_el_anuncio(): void
+    {
+        // El caso que hay que tener claro: el cliente toca el anuncio (72 h
+        // gratis) y escribe recién en la hora 71. Cuando el anuncio vence en
+        // la hora 72, NO se corta: quedan las 24 h estándar contadas desde su
+        // último mensaje, o sea hasta la hora 95.
+        $lead = $this->makeLead();
+        $this->inbound($lead, now()->subHours(71)->toDateTimeString(), fromAd: true);
+        $this->inbound($lead, now()->toDateTimeString()); // mensaje en la hora 71
+
+        // Nos paramos en la hora 73: el anuncio ya vencio.
+        $this->travel(2)->hours();
+
+        $w = $this->window($lead);
+
+        $this->assertTrue($w['is_open'], 'Sigue abierta por la ventana estandar.');
+        $this->assertSame('whatsapp', $w['source']);
+        $this->assertSame(24, $w['window_hours']);
+        $this->assertEqualsWithDelta(22 * 3600, $w['remaining_seconds'], 120);
+    }
+
+    public function test_las_72h_no_se_reinician_cuando_el_cliente_escribe(): void
+    {
+        // Regla clave del free entry point: solo un clic NUEVO en el anuncio
+        // reabre las 72 h. Que el cliente siga escribiendo no las estira.
+        $lead = $this->makeLead();
+        $this->inbound($lead, now()->subHours(50)->toDateTimeString(), fromAd: true);
+        $this->inbound($lead, now()->subHours(40)->toDateTimeString());
+        $this->inbound($lead, now()->subHours(30)->toDateTimeString());
+
+        $this->assertEqualsWithDelta(22 * 3600, $this->window($lead)['remaining_seconds'], 120);
+    }
+
+    public function test_un_clic_nuevo_en_el_anuncio_si_abre_otras_72h(): void
+    {
+        $lead = $this->makeLead();
+        $this->inbound($lead, now()->subHours(70)->toDateTimeString(), fromAd: true);
+        $this->inbound($lead, now()->subHour()->toDateTimeString(), fromAd: true);
+
+        $w = $this->window($lead);
+
+        $this->assertSame('meta_ad', $w['source']);
+        $this->assertEqualsWithDelta(71 * 3600, $w['remaining_seconds'], 120);
+    }
+
     public function test_los_leads_viejos_sin_la_marca_usan_el_anuncio_del_lead(): void
     {
         // Antes de guardar `ad_referral` por evento, lo único que quedaba era

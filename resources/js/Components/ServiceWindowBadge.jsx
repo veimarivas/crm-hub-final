@@ -120,8 +120,17 @@ export function ServiceWindowCard({ window: w }) {
                 )}
             </dl>
 
-            <p className="text-[11px] text-gray-400 mt-3">
-                La ventana se renueva cada vez que el contacto escribe.
+            {/* Las dos ventanas se comportan distinto y confundirlas cuesta
+                plata: la de 24 h se reinicia con cada mensaje, la del anuncio
+                corre desde el clic y no se estira. */}
+            <p className="text-[11px] text-gray-400 mt-3 leading-relaxed">
+                {fromAd ? (
+                    <>Las 72 h corren desde el clic en el anuncio y <strong>no se reinician</strong> aunque el contacto
+                    escriba. Dentro de ellas todo es gratis, incluidas las plantillas. Al vencer, si el contacto escribió
+                    hace poco te quedan sus 24 h estándar.</>
+                ) : (
+                    <>La ventana de 24 h <strong>se reinicia cada vez</strong> que el contacto escribe.</>
+                )}
             </p>
         </div>
     );

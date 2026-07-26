@@ -241,11 +241,12 @@ Todo sale de `lead_events` (`message_in`/`message_out`) — no consulta al wacrm
 
 `Services\WhatsApp\ServiceWindow` calcula cuánto queda para escribirle a un contacto **sin que Meta cobre**. Existe el gemelo `Services\WhatsApp\ServiceWindow` en el wacrm con el mismo cálculo — **si cambia una regla hay que tocar los dos** (y sus dos `ServiceWindowTest`).
 
-Las reglas de Meta que implementa:
+Las reglas de Meta que implementa. **Las dos ventanas NO se comportan igual — confundirlas cuesta plata:**
 
-- **24 h de servicio**: cada mensaje entrante del cliente abre/renueva 24 h de texto libre gratis. Vencidas, solo se puede escribir con plantilla aprobada — y eso se factura.
-- **72 h de free entry point**: si el cliente llegó tocando un anuncio Click-to-WhatsApp, la conversación sale gratis 72 h.
-- **Corren en paralelo, vale la que venza más tarde.** Un clic en el anuncio hace 60 h sigue cubriendo aunque las 24 h del último mensaje ya pasaran, y al revés. Por eso NO alcanza con mirar el último mensaje.
+- **24 h de servicio — SE REINICIA con cada mensaje.** Cada entrante del cliente abre/renueva 24 h de texto libre gratis contadas desde ese mensaje. Vencidas, solo se puede escribir con plantilla aprobada — y eso se factura.
+- **72 h de free entry point — NO se reinicia.** Corren desde el clic en el anuncio Click-to-WhatsApp y punto: que el cliente siga escribiendo no las estira. Dentro de esas 72 h **todo es gratis, incluidas las plantillas**. Solo un clic NUEVO en un anuncio abre otras 72 h — por eso se toma `MAX(created_at)` de los entrantes con referral, no el primero.
+- **Corren en paralelo, vale la que venza más tarde.** El caso que hay que tener claro: el cliente toca el anuncio y escribe recién en la **hora 71**; al vencer las 72 h la conversación NO se corta, quedan las 24 h estándar desde su último mensaje — o sea hasta la **hora 95**. Por eso no alcanza con mirar el último mensaje, ni con mirar solo el anuncio: se toma el máximo de las dos.
+- Los cuatro casos límite están fijados en `ServiceWindowTest`: la hora 71, que las 72 h no se reinician al escribir, que un clic nuevo sí abre otras 72 h, y el cruce inverso (mensaje reciente que gana a un anuncio por vencer).
 
 Detalles de implementación:
 
