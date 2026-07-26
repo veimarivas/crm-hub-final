@@ -4,11 +4,21 @@ namespace App\Http\Controllers;
 
 use App\Models\Company;
 use App\Models\Contact;
+use App\Models\CustomField;
+use App\Models\Lead;
+use App\Models\LeadEvent;
+use App\Models\Note;
+use App\Models\Tag;
+use App\Models\Task;
+use App\Models\User;
+use App\Services\Wacrm\Client;
+use App\Services\WhatsApp\ServiceWindow;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ContactController extends Controller
 {
@@ -16,7 +26,7 @@ class ContactController extends Controller
     {
         $user = $request->user();
         $accountId = $user->account_id;
-        $isAdmin = $user->hasRoleAtLeast(\App\Models\User::ROLE_ADMIN);
+        $isAdmin = $user->hasRoleAtLeast(User::ROLE_ADMIN);
 
         return Inertia::render('Contacts/Index', [
             'contacts' => Contact::forAccount($accountId)
@@ -32,8 +42,8 @@ class ContactController extends Controller
                 ->paginate(25)
                 ->withQueryString(),
             'companies' => Company::forAccount($accountId)->orderBy('name')->get(['id', 'name']),
-            'allTags' => \App\Models\Tag::forAccount($accountId)->orderBy('name')->get(['id', 'name', 'color']),
-            'customFields' => \App\Models\CustomField::forAccount($accountId)
+            'allTags' => Tag::forAccount($accountId)->orderBy('name')->get(['id', 'name', 'color']),
+            'customFields' => CustomField::forAccount($accountId)
                 ->where('entity', 'contact')->orderBy('position')->get(),
             'filters' => $request->only(['q']),
         ]);
@@ -54,31 +64,40 @@ class ContactController extends Controller
             ->get();
 
         // Todos los eventos de todos los leads del contacto
-        $events = \App\Models\LeadEvent::whereIn('lead_id', $leads->pluck('id'))
+        $events = LeadEvent::whereIn('lead_id', $leads->pluck('id'))
             ->with(['actor:id,name', 'lead:id,title'])
             ->orderByDesc('created_at')
             ->limit(200)
             ->get();
 
         // Todas las tareas (pendientes + completadas) de los leads
-        $tasks = \App\Models\Task::whereIn('lead_id', $leads->pluck('id'))
+        $tasks = Task::whereIn('lead_id', $leads->pluck('id'))
             ->with(['assignee:id,name', 'lead:id,title'])
             ->orderByDesc('due_at')
             ->limit(50)
             ->get();
 
         // Todas las notas del contacto o de sus leads
-        $notes = \App\Models\Note::where(fn ($q) => $q
-            ->where(fn ($x) => $x->where('notable_type', \App\Models\Contact::class)->where('notable_id', $contact->id))
-            ->orWhere(fn ($x) => $x->where('notable_type', \App\Models\Lead::class)->whereIn('notable_id', $leads->pluck('id')))
+        $notes = Note::where(fn ($q) => $q
+            ->where(fn ($x) => $x->where('notable_type', Contact::class)->where('notable_id', $contact->id))
+            ->orWhere(fn ($x) => $x->where('notable_type', Lead::class)->whereIn('notable_id', $leads->pluck('id')))
         )
             ->with('author:id,name')
             ->orderByDesc('created_at')
             ->limit(50)
             ->get();
 
+        // Ventana de servicio: se calcula sobre el lead con actividad más
+        // reciente — es la conversación viva del contacto en WhatsApp.
+        $windows = app(ServiceWindow::class)->forLeads($leads);
+        $serviceWindow = collect($windows)
+            ->filter(fn ($w) => $w['last_inbound_at'] !== null)
+            ->sortByDesc('last_inbound_at')
+            ->first();
+
         return Inertia::render('Contacts/Timeline', [
             'contact' => $contact->load(['company:id,name', 'tags:id,name,color']),
+            'serviceWindow' => $serviceWindow,
             'leads' => $leads,
             'events' => $events,
             'tasks' => $tasks,
@@ -113,7 +132,7 @@ class ContactController extends Controller
     private function syncExtras(Contact $contact, array $validated): void
     {
         if ($validated['tag_ids'] !== null) {
-            $valid = \App\Models\Tag::forAccount($contact->account_id)
+            $valid = Tag::forAccount($contact->account_id)
                 ->whereIn('id', $validated['tag_ids'])
                 ->pluck('id');
             $contact->tags()->sync($valid);
@@ -133,7 +152,7 @@ class ContactController extends Controller
     }
 
     /** Export CSV de todos los contactos de la cuenta (respetando busqueda opcional). */
-    public function export(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
+    public function export(Request $request): StreamedResponse
     {
         $accountId = $request->user()->account_id;
         $q = trim((string) $request->query('q', ''));
@@ -181,7 +200,7 @@ class ContactController extends Controller
             return back()->withErrors(['import' => 'Activa la integración con el CRM de WhatsApp primero.']);
         }
 
-        $client = \App\Services\Wacrm\Client::for($integration);
+        $client = Client::for($integration);
         $accountId = $request->user()->account_id;
 
         $imported = $skipped = 0;

@@ -1,4 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import ServiceWindowBadge from '@/Components/ServiceWindowBadge';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 
@@ -195,6 +196,7 @@ export default function InboxIndex({ items, counts, filter, q, isAdmin, slaMinut
                                                 </div>
                                             </div>
                                             <div className="flex flex-col items-end gap-1.5 shrink-0">
+                                                <ServiceWindowBadge window={item.service_window} />
                                                 {item.waiting_sla && (
                                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 border border-red-200">
                                                         <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />

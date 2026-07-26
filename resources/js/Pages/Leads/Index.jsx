@@ -1,4 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import ServiceWindowBadge from '@/Components/ServiceWindowBadge';
 import Modal from '@/Components/Modal';
 import { showUndo } from '@/Components/UndoToast';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
@@ -91,6 +92,7 @@ function LeadCard({ lead, currency, slaMinutes, selected, onToggleSelect, anySel
                 {/* Footer: SLA + tareas + responsable */}
                 <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50 gap-2">
                     <div className="flex items-center gap-1.5 min-w-0">
+                        <ServiceWindowBadge window={lead.service_window} />
                         {isUrgent ? (
                             <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-red-100 text-red-700 border border-red-200 tabular-nums">
                                 <span className="w-1 h-1 rounded-full bg-red-500 animate-pulse" />

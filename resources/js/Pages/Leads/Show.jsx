@@ -1,5 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { completeTask } from '@/Components/CompleteTaskModal';
+import { ServiceWindowCard } from '@/Components/ServiceWindowBadge';
 import Modal from '@/Components/Modal';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -349,7 +350,7 @@ function TimelineEvent({ event }) {
     );
 }
 
-export default function Show({ lead, stages, events, tasks, notes, members, contacts, companies, allTags, customFields, customValues, whatsappEnabled }) {
+export default function Show({ lead, stages, events, tasks, notes, members, contacts, companies, allTags, customFields, customValues, whatsappEnabled, serviceWindow }) {
     const { flash, auth } = usePage().props;
     const isAdmin = auth?.user?.account_role === 'owner' || auth?.user?.account_role === 'admin';
     const [tab, setTab] = useState('chat');
@@ -688,6 +689,11 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                                 </div>
                             );
                         })()}
+
+                        {/* Cuánto queda para escribirle sin que Meta cobre. Va
+                            arriba del todo: condiciona si conviene responder
+                            ahora o esperar. */}
+                        <ServiceWindowCard window={serviceWindow} />
 
                         <OriginCard lead={lead} />
 

@@ -1,4 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { ServiceWindowCard } from '@/Components/ServiceWindowBadge';
 import { Head, Link } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
 
@@ -48,7 +49,7 @@ function groupKindFor(item) {
     return EVENT_META[t]?.group ?? 'lead';
 }
 
-export default function Timeline({ contact, leads, events, tasks, notes }) {
+export default function Timeline({ contact, leads, events, tasks, notes, serviceWindow }) {
     const [filter, setFilter] = useState('all');
 
     const unified = useMemo(() => {
@@ -127,6 +128,12 @@ export default function Timeline({ contact, leads, events, tasks, notes }) {
                             </div>
                         </div>
                     </div>
+                </div>
+
+                {/* Ventana de servicio: de dónde vino y cuánto queda para
+                    escribirle sin que Meta cobre. */}
+                <div className="max-w-md">
+                    <ServiceWindowCard window={serviceWindow} />
                 </div>
 
                 {/* Cards de leads del contacto */}

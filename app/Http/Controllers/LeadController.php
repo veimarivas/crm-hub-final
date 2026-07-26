@@ -16,6 +16,7 @@ use App\Models\SavedSegment;
 use App\Models\Tag;
 use App\Models\User;
 use App\Services\Wacrm\Client;
+use App\Services\WhatsApp\ServiceWindow;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -280,7 +281,12 @@ class LeadController extends Controller
 
         $now = now();
 
-        return $leads->map(function ($lead) use ($lastMessages, $now) {
+        // Ventana de servicio de WhatsApp (24 h / 72 h si vino de un anuncio):
+        // el listado necesita ver de un vistazo a quién todavía se le puede
+        // escribir gratis.
+        $windows = app(ServiceWindow::class)->forLeads($leads);
+
+        return $leads->map(function ($lead) use ($lastMessages, $now, $windows) {
             $last = $lastMessages->get($lead->id);
             $waiting = 0;
             if ($last && $last->event_type === 'message_in') {
@@ -289,6 +295,7 @@ class LeadController extends Controller
             $lead->setAttribute('last_message_at', $last?->created_at);
             $lead->setAttribute('last_message_direction', $last ? ($last->event_type === 'message_in' ? 'in' : 'out') : null);
             $lead->setAttribute('waiting_minutes', $waiting);
+            $lead->setAttribute('service_window', $windows[$lead->id] ?? null);
 
             return $lead;
         });
@@ -370,6 +377,7 @@ class LeadController extends Controller
                 ->where('entity', 'lead')->orderBy('position')->get(),
             'customValues' => $lead->customFieldValues(),
             'whatsappEnabled' => (bool) ($integration?->is_active && $lead->contact?->phone),
+            'serviceWindow' => app(ServiceWindow::class)->forLead($lead),
         ]);
     }
 

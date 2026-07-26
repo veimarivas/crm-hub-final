@@ -255,6 +255,11 @@ class EventProcessor
             'type' => $data['message']['type'] ?? 'text',
             'wamid' => $data['message']['wamid'] ?? null,
             'media_id' => $data['message']['media_id'] ?? null,
+            // Marca del anuncio Click-to-WhatsApp: este entrante abre una
+            // ventana gratuita de 72 h en vez de las 24 h normales. Se guarda
+            // por mensaje (y no solo en el lead) porque el cliente puede tocar
+            // el anuncio otra vez y renovarla.
+            'ad_referral' => $referral !== null,
         ]);
 
         $this->maybeSendOutOfHoursReply($integration, $lead, $contact);

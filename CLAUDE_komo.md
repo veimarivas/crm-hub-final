@@ -237,6 +237,23 @@ Todo sale de `lead_events` (`message_in`/`message_out`) — no consulta al wacrm
   - Lo alimenta `GET /api/v1/ai/status` en el wacrm (scope `conversations:read`), que **comprueba de verdad que Ollama responda** (`/api/tags`, cacheado 60s allá). "Disponible" no es solo que el toggle esté encendido: con Ollama caído la IA está configurada pero no contesta.
 - **Ojo con el tope por conversación**: `InboundProcessor` resetea `ai_reply_count` a 0 en **cada mensaje entrante del cliente**, así que el "Máximo N respuestas por conversación" de Ajustes en la práctica solo limita ráfagas seguidas del bot, no la conversación entera. El aviso `limit_reached` existe y funciona, pero casi nunca se dispara con ese reset puesto. Decidir si el tope debe ser por conversación de verdad (quitar el reset) o si la UI debería decir otra cosa.
 
+## Ventana de servicio de WhatsApp (2026-07-26) — control de gasto
+
+`Services\WhatsApp\ServiceWindow` calcula cuánto queda para escribirle a un contacto **sin que Meta cobre**. Existe el gemelo `Services\WhatsApp\ServiceWindow` en el wacrm con el mismo cálculo — **si cambia una regla hay que tocar los dos** (y sus dos `ServiceWindowTest`).
+
+Las reglas de Meta que implementa:
+
+- **24 h de servicio**: cada mensaje entrante del cliente abre/renueva 24 h de texto libre gratis. Vencidas, solo se puede escribir con plantilla aprobada — y eso se factura.
+- **72 h de free entry point**: si el cliente llegó tocando un anuncio Click-to-WhatsApp, la conversación sale gratis 72 h.
+- **Corren en paralelo, vale la que venza más tarde.** Un clic en el anuncio hace 60 h sigue cubriendo aunque las 24 h del último mensaje ya pasaran, y al revés. Por eso NO alcanza con mirar el último mensaje.
+
+Detalles de implementación:
+
+- Komo calcula desde `lead_events` (no consulta al wacrm ni a Meta), así que sirve en listados sin costo de red. `forLeads()` hace 2 queries para todos los leads en vez de 2 por lead.
+- El entrante guarda `payload.ad_referral` (bool) desde `EventProcessor`. Para leads anteriores a ese cambio hay **fallback**: si el lead tiene `source_ref` se usa su `created_at` como momento del clic.
+- Se muestra en `/inbox` y `/leads` (badge compacto) y en la ficha del lead y del contacto (`ServiceWindowCard` con origen, cuenta regresiva, barra y fechas). En el wacrm, en el header del chat y en la lista de conversaciones.
+- Verde / ámbar (< 4 h) / rojo (cerrada). El rojo es el que importa: ahí escribir cuesta plata.
+
 ## Pendiente (futuro, no bloquea)
 
 Email SMTP/IMAP (módulo grande; requiere credenciales reales), calendario visual de tareas, tiempo real con Reverb (hoy sin polling — Inertia recarga por navegación).

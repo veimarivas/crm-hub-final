@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Lead;
 use App\Models\LeadEvent;
 use App\Models\User;
+use App\Services\WhatsApp\ServiceWindow;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -79,7 +80,11 @@ class InboxController extends Controller
 
         $now = now();
 
-        $items = $leads->map(function (Lead $lead) use ($previewEvents, $lastEvents, $now) {
+        // Ventana de servicio de cada conversación (24 h, o 72 h si vino de
+        // un anuncio): en lote para no hacer dos queries por lead.
+        $windows = app(ServiceWindow::class)->forLeads($leads);
+
+        $items = $leads->map(function (Lead $lead) use ($previewEvents, $lastEvents, $now, $windows) {
             $last = $previewEvents->get($lead->id);
             $lastAt = $lastEvents->get($lead->id);
             $waiting = 0;
@@ -97,11 +102,11 @@ class InboxController extends Controller
                     'image' => '🖼️ Imagen',
                     'video' => '🎥 Video',
                     'document' => '📄 Documento',
-                    default => '[' . $payload['type'] . ']',
+                    default => '['.$payload['type'].']',
                 };
             }
             if (mb_strlen($preview) > 120) {
-                $preview = mb_substr($preview, 0, 120) . '…';
+                $preview = mb_substr($preview, 0, 120).'…';
             }
 
             return [
@@ -125,6 +130,7 @@ class InboxController extends Controller
                 ] : null,
                 'waiting_minutes' => $waiting,
                 'waiting_sla' => $waitingSla,
+                'service_window' => $windows[$lead->id] ?? null,
                 'last_activity_at' => $lastAt ?? $lead->created_at,
             ];
         })
