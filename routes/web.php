@@ -35,6 +35,7 @@ Route::middleware('auth')->group(function () {
 
     // Leads (Kanban + ficha)
     Route::get('/leads', [\App\Http\Controllers\LeadController::class, 'index'])->name('leads.index');
+    Route::get('/leads/export', [\App\Http\Controllers\LeadController::class, 'export'])->name('leads.export');
     Route::post('/leads', [\App\Http\Controllers\LeadController::class, 'store'])->name('leads.store');
     Route::post('/leads/bulk', [\App\Http\Controllers\LeadController::class, 'bulk'])->name('leads.bulk');
 
@@ -68,6 +69,7 @@ Route::middleware('auth')->group(function () {
 
     // Contactos y empresas
     Route::get('/contacts', [\App\Http\Controllers\ContactController::class, 'index'])->name('contacts.index');
+    Route::get('/contacts/export', [\App\Http\Controllers\ContactController::class, 'export'])->name('contacts.export');
     Route::get('/contacts/{contact}/timeline', [\App\Http\Controllers\ContactController::class, 'show'])->name('contacts.timeline');
     Route::post('/contacts', [\App\Http\Controllers\ContactController::class, 'store'])->name('contacts.store');
     Route::post('/contacts/import-wacrm', [\App\Http\Controllers\ContactController::class, 'importFromWacrm'])->name('contacts.import-wacrm');
@@ -89,6 +91,18 @@ Route::middleware('auth')->group(function () {
 
     // Reportes
     Route::get('/reports', [\App\Http\Controllers\ReportController::class, 'index'])->name('reports.index');
+
+    // Pipeline builder (admin-only)
+    Route::middleware('admin.only')->group(function () {
+        Route::get('/settings/pipelines', [\App\Http\Controllers\PipelineController::class, 'index'])->name('settings.pipelines');
+        Route::post('/settings/pipelines', [\App\Http\Controllers\PipelineController::class, 'store'])->name('pipelines.store');
+        Route::patch('/settings/pipelines/{pipeline}', [\App\Http\Controllers\PipelineController::class, 'update'])->name('pipelines.update');
+        Route::delete('/settings/pipelines/{pipeline}', [\App\Http\Controllers\PipelineController::class, 'destroy'])->name('pipelines.destroy');
+        Route::post('/settings/pipelines/{pipeline}/stages', [\App\Http\Controllers\PipelineController::class, 'storeStage'])->name('pipelines.stages.store');
+        Route::patch('/settings/pipelines/stages/{stage}', [\App\Http\Controllers\PipelineController::class, 'updateStage'])->name('pipelines.stages.update');
+        Route::delete('/settings/pipelines/stages/{stage}', [\App\Http\Controllers\PipelineController::class, 'destroyStage'])->name('pipelines.stages.destroy');
+        Route::post('/settings/pipelines/{pipeline}/stages/reorder', [\App\Http\Controllers\PipelineController::class, 'reorderStages'])->name('pipelines.stages.reorder');
+    });
 
     // Broadcasts (envio masivo por WhatsApp usando segments)
     Route::middleware('admin.only')->group(function () {

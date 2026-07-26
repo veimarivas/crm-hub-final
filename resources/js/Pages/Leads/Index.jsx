@@ -462,6 +462,14 @@ export default function Index({ pipelines, pipeline, leads, members, contacts, a
                                 {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                             </select>
                         )}
+                        <a
+                            href={route('leads.export', { pipeline: pipeline?.id, ...filters })}
+                            className="px-3 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 shadow-sm inline-flex items-center gap-1.5"
+                            title="Exportar leads del pipeline actual (respetando filtros) a CSV"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+                            <span className="hidden sm:inline">Exportar</span>
+                        </a>
                         {pipeline && (
                             <Link href={route('pipelines.automations', pipeline.id)} className="px-3 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 shadow-sm flex items-center gap-1.5" title="Digital Pipeline">
                                 ⚡ <span className="hidden sm:inline">Automatizar</span>

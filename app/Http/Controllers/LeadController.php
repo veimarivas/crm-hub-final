@@ -167,6 +167,88 @@ class LeadController extends Controller
         return back()->with('success', "{$count} leads afectados.");
     }
 
+    /**
+     * Streamea CSV de leads respetando los mismos filtros que index().
+     * No pagina — streamea todo (memoria acotada por chunks).
+     */
+    public function export(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
+    {
+        $accountId = $request->user()->account_id;
+        $user = $request->user();
+        $isAdmin = $user->hasRoleAtLeast(User::ROLE_ADMIN);
+
+        $pipelines = Pipeline::forAccount($accountId)->get();
+        $selected = $pipelines->firstWhere('id', $request->query('pipeline'))
+            ?? $pipelines->firstWhere('is_default', true)
+            ?? $pipelines->first();
+
+        $filters = [
+            'responsible' => $request->query('responsible'),
+            'tag' => $request->query('tag'),
+            'source' => $request->query('source'),
+            'no_task' => (bool) $request->query('no_task'),
+            'q' => trim((string) $request->query('q', '')),
+        ];
+
+        $filename = 'leads_'.now()->format('Ymd_His').'.csv';
+
+        return response()->streamDownload(function () use ($accountId, $selected, $isAdmin, $user, $filters) {
+            $out = fopen('php://output', 'w');
+            // BOM UTF-8 para que Excel abra bien acentos y emojis
+            fwrite($out, "\xEF\xBB\xBF");
+            fputcsv($out, [
+                'ID', 'Titulo', 'Contacto', 'Telefono', 'Email',
+                'Empresa', 'Etapa', 'Estado', 'Valor', 'Moneda',
+                'Fuente', 'UTM Source', 'UTM Campaign',
+                'Responsable', 'Etiquetas',
+                'Creado', 'Cerrado',
+            ]);
+
+            $selected?->leads()
+                ->with(['contact:id,name,phone,email', 'company:id,name', 'stage:id,name,stage_type', 'responsible:id,name', 'tags:id,name'])
+                ->when(! $isAdmin, fn ($q) => $q->where('responsible_user_id', $user->id))
+                ->when($filters['responsible'], fn ($q, $v) => $v === 'none' ? $q->whereNull('responsible_user_id') : $q->where('responsible_user_id', $v))
+                ->when($filters['source'], fn ($q, $v) => $q->where('source', $v))
+                ->when($filters['no_task'], fn ($q) => $q->whereDoesntHave('tasks', fn ($t) => $t->whereNull('completed_at')))
+                ->when($filters['tag'], fn ($q, $tagId) => $q->whereHas('tags', fn ($tq) => $tq->where('tags.id', $tagId)))
+                ->when($filters['q'] !== '', function ($q) use ($filters) {
+                    $t = $filters['q'];
+                    $q->where(function ($qq) use ($t) {
+                        $qq->where('title', 'like', "%{$t}%")
+                            ->orWhereHas('contact', fn ($cq) => $cq->where('name', 'like', "%{$t}%")->orWhere('phone', 'like', "%{$t}%"));
+                    });
+                })
+                ->orderByDesc('created_at')
+                ->chunk(500, function ($chunk) use ($out) {
+                    foreach ($chunk as $lead) {
+                        fputcsv($out, [
+                            $lead->id,
+                            $lead->title,
+                            $lead->contact?->name ?? '',
+                            $lead->contact?->phone ?? '',
+                            $lead->contact?->email ?? '',
+                            $lead->company?->name ?? '',
+                            $lead->stage?->name ?? '',
+                            $lead->status,
+                            $lead->value,
+                            $lead->currency,
+                            $lead->source,
+                            $lead->utm_source ?? '',
+                            $lead->utm_campaign ?? '',
+                            $lead->responsible?->name ?? '',
+                            $lead->tags->pluck('name')->join(', '),
+                            $lead->created_at?->toDateTimeString(),
+                            $lead->closed_at?->toDateTimeString() ?? '',
+                        ]);
+                    }
+                });
+
+            fclose($out);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
     private function enrichLeadsWithSla($leads)
     {
         $ids = $leads->pluck('id')->all();

@@ -132,6 +132,43 @@ class ContactController extends Controller
         return back()->with('success', 'Contacto eliminado.');
     }
 
+    /** Export CSV de todos los contactos de la cuenta (respetando busqueda opcional). */
+    public function export(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
+    {
+        $accountId = $request->user()->account_id;
+        $q = trim((string) $request->query('q', ''));
+        $filename = 'contactos_'.now()->format('Ymd_His').'.csv';
+
+        return response()->streamDownload(function () use ($accountId, $q) {
+            $out = fopen('php://output', 'w');
+            fwrite($out, "\xEF\xBB\xBF");
+            fputcsv($out, ['ID', 'Nombre', 'Telefono', 'Telefono normalizado', 'Email', 'Empresa', 'Etiquetas', 'Leads (count)', 'Creado']);
+
+            Contact::forAccount($accountId)
+                ->with(['company:id,name', 'tags:id,name'])
+                ->withCount('leads')
+                ->when($q !== '', fn ($qq) => $qq->where(fn ($sub) => $sub->where('name', 'like', "%{$q}%")->orWhere('phone', 'like', "%{$q}%")->orWhere('email', 'like', "%{$q}%")))
+                ->orderBy('name')
+                ->chunk(500, function ($chunk) use ($out) {
+                    foreach ($chunk as $c) {
+                        fputcsv($out, [
+                            $c->id,
+                            $c->name,
+                            $c->phone,
+                            $c->phone_normalized,
+                            $c->email ?? '',
+                            $c->company?->name ?? '',
+                            $c->tags->pluck('name')->join(', '),
+                            $c->leads_count,
+                            $c->created_at?->toDateTimeString(),
+                        ]);
+                    }
+                });
+
+            fclose($out);
+        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
     /**
      * Importación masiva desde el wacrm: pagina su API de contactos y
      * trae los que no existan aquí (dedup por teléfono normalizado).

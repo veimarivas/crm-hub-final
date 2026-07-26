@@ -128,6 +128,14 @@ export default function Index({ contacts, companies, allTags, customFields, filt
                         <p className="text-sm text-gray-400 mt-1">{contacts.total} en total — los de WhatsApp se sincronizan solos</p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
+                        <a
+                            href={route('contacts.export', { q: filters?.q || search || undefined })}
+                            className="px-3.5 py-2.5 text-sm font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 shadow-sm inline-flex items-center gap-1.5"
+                            title="Exportar contactos a CSV (respetando la búsqueda)"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+                            Exportar
+                        </a>
                         <button
                             onClick={() => {
                                 if (confirm('¿Importar los contactos del CRM de WhatsApp? Los duplicados se omiten.')) {
