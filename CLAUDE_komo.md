@@ -75,6 +75,52 @@ Activa la integración con **meta_ads** (`C:\xampp_82_12\htdocs\laravel_meta_ads
 
 Cableado con meta_ads: crear aquí una API key con ambos scopes y pegarla en meta_ads → Ajustes → Integraciones (tarjeta Komo).
 
+## Fase 17 (2026-07-24/25) — Feedback "IA pensando" en el chat del lead
+
+- **Migración `2026_07_25_000001`**: `leads.ai_pending` (bool, default false, después de `ai_enabled`). Flag efímero: TRUE mientras la IA del wacrm está generando respuesta para este lead.
+- **`Lead` model**: `ai_pending` en `#[Fillable]` + cast a boolean.
+- **`EventProcessor@handleAiPending`** (nuevo handler para el evento `ai.pending_changed` del wacrm — Ronda 16 del wacrm): recibe `{conversation_id, pending: bool}` y actualiza `Lead::where('wacrm_conversation_id', ...)` con el nuevo estado. Silencioso si no hay lead matching.
+- **UI `Show.jsx` — burbuja de IA pensando**: cuando `lead.ai_pending=true`, después del último `chatItems` del hilo aparece la misma burbuja violeta gradiente con 3 dots animados y texto "Pensando respuesta…" que el Inbox del wacrm. El polling de 2s del chat la pinta/despinta según el estado real del lead. Latencia percibida: 2-4s de retraso vs wacrm por el polling.
+- **Trampa operativa**: hay que activar el evento `ai.pending_changed` en el webhook saliente del wacrm (Ajustes → Equipo → Webhooks → editar el que apunta a `komo.posgradosinnovaciencia.com` → marcar el chip nuevo). Sin ese paso, Komo nunca recibe la notificación.
+
+## Fase 16 (2026-07-24) — Recordatorios, reportes, timeline unificado y perfil de usuario
+
+- **Recordatorios diarios de tareas** (`komo:remind-daily-tasks`, `RemindDailyTasks`): comando artisan que para cada user con `phone` cargado + tareas pendientes hoy/vencidas, envía un WhatsApp con el resumen (usa `Wacrm/Client::sendMessage`). **DESACTIVADO en Schedule** — Meta cobra por conversaciones iniciadas fuera de la ventana de 24h y además necesita template aprobado; el comando queda dormido en el código y se reactiva si algún día se aprueba un template. Por defecto usamos solo notificaciones in-app (campana + AppNotification tipo `task_overdue` cada 10 min ya existente). Migración `2026_07_24_000001` agrega `users.phone` (opcional, se carga en Perfil).
+- **Campo `phone` en Perfil** (`ProfileUpdateRequest` + `UpdateProfileInformationForm.jsx`): input tel opcional con placeholder `591xxxxxxxx`. Si el user lo carga, queda listo para cuando se implemente el envío (template Meta / SMS / push).
+- **Reporte de conversión por fuente** (`ReportController@index` extendido, sección nueva en `Reports/Index.jsx`): agrupa leads por `source` (whatsapp/lead_ad/web_form/manual/api/other), muestra tabla con Total/Abiertos/Ganados/Perdidos/Ingresos/% Conversión. Ordenado por total desc. Iconos por fuente (💬📣📋✍️⚙️). Badge verde si conv ≥50%, ámbar 25-49%, rojo <25%. Ideal para decidir dónde invertir marketing. Respeta scope de rol (agent solo ve sus leads).
+- **Timeline unificado del contacto** (`ContactController@show`, ruta `/contacts/{contact}/timeline`, página `Contacts/Timeline.jsx`): vista 360° del contacto — header con avatar+tags+contacto, cards de TODOS sus leads (histórico), y lista unificada ordenada por fecha desc con eventos (message_in/out/stage_changed/won/lost/notas) + tareas + notas. Cada item enlaza al lead correspondiente. Útil para reunión con cliente o handoff entre agentes. Sin route link en la UI de Contacts/Index — se accede directo por URL o agregando el link.
+- **`users.phone` fillable**: agregado al `#[Fillable]` del User. Sin phone no se rompe nada (todos los flujos son tolerantes a null).
+- **Trampa Meta cobro**: el comando `komo:remind-daily-tasks` **NO** se agenda por default. Si se agrega `Schedule::command(...)->dailyAt('08:00')` en `console.php` y algún user tiene phone cargado, se dispararán mensajes por WhatsApp saliente vía wacrm→Meta, que fallarán (fuera de ventana 24h sin template) o cobrarán ~$0.01-0.03 USD por conversación si hay template aprobado. Decisión intencional: dejarlo dormido salvo aprobación explícita.
+
+## Fase 15 (2026-07-23/24) — Paridad total con el wacrm en el chat del lead
+
+Después de la Ronda 14 del wacrm (que agregó típing/fallback IA + plantillas + búsqueda + whisper + TTS + bulk + media/quick-replies API), Komo levantó todas esas features en su chat del lead. Ahora un agente puede trabajar 100% desde Komo sin volver al Inbox del wacrm salvo para triaging global.
+
+- **Reproducción real de media** en el chat del lead — nueva ruta proxy `GET /leads/media/{mediaId}` (`LeadController@media`): llama a la nueva API `GET /api/v1/media/{id}` del wacrm (scope `conversations:read`), descarga el binario y lo re-sirve desde el dominio del Komo (Cache-Control: private 1h). Evita CORS/cookies cross-domain. En `Show.jsx`, el `ChatBubble` renderiza según `payload.type`: `audio` → `<audio controls>`, `video` → `<video controls>`, `image` → thumbnail clickeable con lightbox nativo, `document` → link "📄 Descargar documento". Todo usa `route('leads.media', p.media_id)`.
+- **`media_id` guardado en el payload de eventos** — `EventProcessor@handleInboundMessage` y `handleOutboundMessage` guardan `media_id` (viene del webhook `message.received` del wacrm — reflejo del `Message.media_url` = Meta media_id). Sin esto, los eventos viejos no tienen media_id y no se pueden reproducir. Los eventos nuevos sí.
+- **Handler `message.transcribed`** (`EventProcessor@handleTranscribed`) — nuevo evento del wacrm que llega cuando Whisper termina. Busca eventos `message_in`/`message_out` del lead por `wamid` (via `whereJsonContains('payload->wamid', $wamid)`) y actualiza `payload.text` y `payload.transcript` con el texto transcrito. Así los audios pasan de mostrar "[sin texto]" a mostrar la transcripción real. El evento se activa en el webhook saliente del wacrm; hay que marcar el checkbox `message.transcribed` en Ajustes → Equipo → Webhooks del wacrm (o vía tinker que actualice el array `events` del `WebhookEndpoint`).
+- **TTS en el chat** — mismo patrón que wacrm: singleton `ttsState.current` + Web Speech API con `lang: 'es-BO'`. Botón 🔊 aparece al hover en cada burbuja con texto o transcript. Click alterna play/pause; segundo click al mismo lo detiene.
+- **Composer completo** en el chat del lead (paridad wacrm):
+  - **Adjuntar archivo** (📎): `<input type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt">`. Endpoint `POST /leads/{lead}/whatsapp-media` (`LeadController@sendMedia`): valida `file` max 16MB, encodea base64, llama a `Wacrm/Client::sendMedia($phone, $b64, $mime, $filename, $caption)` que a su vez hitea `POST /api/v1/messages/media` del wacrm.
+  - **Grabar voz** (🎤): componente `VoiceRecorder` con `opus-recorder` (nuevo devDependency de Komo, mismo setup que wacrm). Estados idle→recording→preview→sending. Al enviar hace `POST /leads/{lead}/whatsapp-media` con un `File` .ogg audio/ogg.
+  - **Plantillas rápidas** (📋): endpoint `GET /leads-quick-replies` (`LeadController@quickReplies`) hitea `GET /api/v1/quick-replies` del wacrm (scope `messages:write`) → lista las compartidas del equipo. Dropdown en el composer, click inserta con `renderTemplate()` que sustituye `{name}` `{phone}` `{email}` con datos del `lead.contact`.
+- **Botón 📞 "Llamar" en el header del chat** — abre `https://wa.me/{phone_normalized}` en nueva pestaña. En móvil abre la app de WhatsApp del agente y permite iniciar llamada de voz/video. **Aclaración**: WhatsApp Business Cloud API NO soporta llamadas programáticamente (la Calling API está en beta cerrada de Meta) — el botón es solo un puente al WhatsApp personal del agente.
+- **`opus-recorder` en `package.json`** — agregado con `npm install opus-recorder --legacy-peer-deps`. Import del worker con `import encoderPath from 'opus-recorder/dist/encoderWorker.min.js?url'` para que Vite lo empaquete y sirva. Config `encoderApplication: 2049 (VOIP), encoderSampleRate: 48000, numberOfChannels: 1, streamPages: false` → produce ogg/opus (único formato de audio que Meta acepta).
+- **`Wacrm/Client` extendido** con 3 métodos nuevos: `sendMedia($phone, $b64, $mime, $filename, $caption)`, `quickReplies()`, `downloadMedia($mediaId)` (retorna `[contentType, bytes]`).
+- **Fix duplicado de mensajes salientes** — `LeadController@sendWhatsapp` YA NO graba evento `message_out` local. Antes hacía doble: grababa local + wacrm disparaba `message.sent` webhook → aparecía duplicado. Ahora el webhook es la única fuente de verdad. Trade-off: el mensaje enviado desde Komo aparece con 1-3s de delay (lo que tarda DeliverWebhookJob + polling), pero sin duplicados.
+- **Trampa conocida — audios viejos sin `media_id`**: los eventos `message_in`/`message_out` creados ANTES de que el wacrm empezara a mandar `media_id` en el webhook (pre-Ronda 14) tienen `payload.media_id = null` → NO se reproducen (el ChatBubble no renderiza el `<audio>` sin `media_id`). Solo se puede reproducir lo que llegue de ahora en adelante. Si querés backfill, se puede escribir un artisan que recorra los eventos, tome el wamid, pregunte al wacrm el media_id correspondiente y actualice el payload — no implementado por ahora.
+
+## Fase 14 (2026-07-22/23) — UX, notificaciones y sincronización más ágil con wacrm
+
+- **Sidebar y login rediseñados al estilo wacrm** (`Layouts/AuthenticatedLayout.jsx` + `Layouts/GuestLayout.jsx` + `Pages/Auth/Login.jsx`): mismo fondo dark blue #042048, accent amarillo `#e6dd5e` en el item activo, logo ESAM chico (`public/esam_pequenio.png`, copiado del wacrm) + texto **"Komo"** al lado (oculto cuando `sidebarCollapsed`). Login: quitado el link "Regístrate", footer minimalista `© 2026 Derechos reservados`. La página `Invitations/Accept.jsx` ya estaba al día — no se tocó.
+- **Ficha del lead — toggle hamburguesa "Datos del lead"**: botón ☰ verde a la izquierda de "Volver a leads" oculta/muestra la columna izquierda. Cuando está oculta, el chat ocupa el 100% del ancho (`lg:grid-cols-3` → `lg:grid-cols-1`). Combinado con el sidebar colapsable, el chat queda casi a pantalla completa — ideal para leer conversaciones largas.
+- **Ficha del lead — altura fija con scroll interno**: contenedor del panel de chat cambió de `minHeight: 70vh` a `height: calc(100vh - 12rem); maxHeight: 900px`. El hilo scrollea internamente (`overflow-y-auto` ya estaba), el composer siempre visible, la página no crece infinita.
+- **Ficha del lead — polling 5s → 2s** (`Show.jsx`): `setInterval(tick, 2000)` con `router.reload({ only: ['events','tasks','notes','lead'] })`. Sensación casi en tiempo real; requests ligeros (solo esos 4 props, no la página completa). Sigue respetando `document.hidden` para no consumir con pestaña en segundo plano.
+- **Cola `--sleep=3` → `--sleep=1`** (systemd `crm-komo-queue.service`): mismo cambio que en wacrm. El worker de Komo también se activa 3× más rápido para procesar webhooks entrantes.
+- **Notificaciones — endpoint `notifications.go`** (`GET /notifications/{notification}/go`, `NotificationController@go`): marca la notificación como leída y redirige al lead asociado (o a `/notifications` si no hay `lead_id`). El link "Ver lead «...»" del listado ahora apunta a este endpoint en vez de directamente a `leads.show` — así con **un solo clic** el user va al lead Y la notificación se marca leída. El contador del header (shared prop `unreadNotifications`) se recalcula automáticamente en el próximo request Inertia.
+- **`sendWhatsapp` ya NO graba evento local `message_out`** (`LeadController@sendWhatsapp`): antes grababa el evento localmente Y el wacrm disparaba `message.sent` → aparecía duplicado en el timeline. Ahora el webhook es la ÚNICA fuente de verdad para mensajes salientes. El delay entre enviar y ver es de 1-3s (el que tarda el DeliverWebhookJob + polling), pero sin duplicados. Trampa: si en el futuro el wacrm falla en disparar `message.sent`, el mensaje enviado desde Komo no aparecerá en el timeline — worth monitorear.
+- **Trampa conocida**: los agentes recién invitados DEBEN aceptar la invitación (el link `/invite/{token}`) para existir como User real. Si el admin creó un `AccountInvitation` pero el agente no la aceptó, aparece en Ajustes → Equipo pero NO en el dropdown "Responsable" del lead (que consulta `users` table). Solución: reenviar el link (botón "🔄 Regenerar link") o crear el user directo por tinker.
+
 ## Fase 13 (2026-07-22) — Autor del mensaje visible en el chat del lead
 
 - **`EventProcessor@handleOutboundMessage`**: además de `sender` (agent|bot), guarda `sender_name` y `sender_role` en `payload` del evento `message_out`. Vienen del webhook `message.sent` del wacrm (Ronda 12 del wacrm — receptor compatible con eventos viejos que no los traen: se guardan como null).
@@ -95,7 +141,7 @@ Ronda de integración end-to-end en producción. Komo desplegado en `https://kom
   - `provisionUser(email, name, password, role)` — POST `/api/v1/team/provision`.
   - `assignConversation(conversationId, email)` — PATCH `/api/v1/conversations/{id}/assign`.
   - `setAiMode(conversationId, aiEnabled)` — PATCH `/api/v1/conversations/{id}/ai-mode`.
-- **Sync de responsable Komo → wacrm** (`LeadController@update` → `syncAssignmentToWacrm()`): cuando cambia `responsible_user_id` de un lead con `wacrm_conversation_id`, llama a `Client::assignConversation()` con el email del nuevo responsable. Falla silenciosa con Log::warning si la red o la API responden mal.
+- **Sync de responsable Komo → wacrm** (`Jobs\SyncLeadAssignmentToWacrmJob`, ver también la sección de asignación más abajo): cuando cambia `responsible_user_id` de un lead con `wacrm_conversation_id`, llama a `Client::assignConversation()` con el email del nuevo responsable. Falla silenciosa con Log::warning si la red o la API responden mal.
 - **Auto-provisión de user en wacrm al aceptar invitación** (`TeamController@redeem` → `provisionInWacrm()`): tras crear el user local, llama a `Client::provisionUser()` con **el mismo email y password**. Así el agente logueado en el Komo puede entrar al Inbox del wacrm con las mismas credenciales. Traducción de roles: admin→admin, agent/viewer→agent.
 - **Toggle IA/Humano por lead** (columna `leads.ai_enabled` boolean default true, migración `2026_07_22_000001`): botón violeta "✨ IA activa" / gris "👤 Humano" en el header del chat de la ficha. Endpoint `PATCH /leads/{lead}/ai-mode` (`leads.ai-mode`) llama a `LeadController@setAiMode` → actualiza el lead + espeja a wacrm via `Client::setAiMode()`. Permisos: si el lead **no tiene responsable**, solo admin/owner puede togglear; si tiene, solo el responsable o el admin. Otros agents ven el estado como badge readonly.
 - **Restricción por rol** (todas las secciones):
@@ -112,6 +158,17 @@ Ronda de integración end-to-end en producción. Komo desplegado en `https://kom
 - **Requisito operativo importante**: los agentes deben existir en AMBOS sistemas (Komo + wacrm) con **exactamente el mismo email** (la correlación es por email). La auto-provisión cubre esto automáticamente para agentes creados vía invitación; los agentes viejos (pre-Fase 12) hay que provisionarlos a mano (tinker: `\App\Models\User::create(...)` en ambas apps).
 - **Trampa conocida**: si el `wacrm_conversation_id` de un lead apunta a una conversación que fue borrada/reseteada en el wacrm, el sync devuelve 404 "No query results for model [App\Models\Conversation]". Fix rápido: buscar la conversación actual por `phone_normalized` en el wacrm y actualizar el `wacrm_conversation_id` del lead.
 
+## Fase 12 (2026-07-22) — Integración con Komo Invoice — suite 63/63 (284 aserciones)
+
+Cierre del ciclo comercial: el lead ganado se conecta con Komo Invoice (5ª app del ecosistema, puerto 8004) para cotizar y cobrar. Cambios:
+- Migración `2026_07_22_000001_add_invoice_fields_to_leads`: `leads.invoiced_cents` + `collected_cents` (revenue REAL cobrado, alimentado por Invoice via API).
+- Migración `2026_07_22_000002_add_invoice_integration`: `integrations.invoice_url` + `invoice_api_key` (cifrada). El hub la cablea en la Fase 4 F4-Invoice.
+- **`PATCH /api/v1/leads/{id}/revenue`** (scope `leads:write`) — Invoice lo llama al emitir factura y registrar pagos. Actualiza absolutos (no delta) para tolerar reenvíos. Cuando `collected_cents >= invoiced_cents > 0` notifica al owner (`lead_fully_paid`).
+- **`Services\Invoice\Client`** (patrón wacrm) — usa `invoice_url`/`invoice_api_key` de `Integration`.
+- **Botón "Cotizar"** en `Leads/Show` (`LeadController@createQuote`) → POST a Invoice `/api/v1/quotes` con contacto+lead pre-llenados → redirige al `edit_url` de la cotización en Invoice para terminarla.
+- `ProvisionController` acepta bloque `invoice_integration` en el /provision — el hub lo cablea en su 3ª llamada al komo.
+- Cotización creada registra evento `quote_created` en el timeline del lead.
+
 ## Fase 11 (2026-07-19) — Equipo centralizado — suite 63/63 (284 aserciones)
 
 Fase 7 del Komo Hub: `ProvisionController` acepta `account_id` (uuid existente) + `account_role`. Si llegan, el user se une a la cuenta remota con ese rol sin sembrar pipeline extra; sin ellos, mantiene el comportamiento original (owner + pipeline por defecto via AccountProvisioner). Test `ProvisionMemberTest`.
@@ -127,6 +184,19 @@ Fase 3 del Komo Hub: **`POST /api/v1/provision`** (`Api\ProvisionController`, si
 ## Fase 8 (2026-07-16) — SSO del ecosistema — suite 58/58 (252 aserciones)
 
 Fase 2 del **Komo Hub** (`C:\xampp_82_12\htdocs\laravel_nuevo_proyecto`, 4º proyecto): `SsoController@consume` (ruta pública `GET /sso/consume`, `APP_ID='komo'`) acepta tokens de un solo uso del hub — firma HMAC con `HUB_SSO_SECRET` (`.env` + `services.hub.sso_secret`, mismo valor en las 4 apps), expiración 60s, nonce anti-replay en cache, login por email. `SESSION_COOKIE=komo_session` en `.env`. Tests en `SsoConsumeTest`.
+
+## Asignación de leads (2026-07-26) — round-robin sin admin + espejo en wacrm
+
+Dos bugs de producción corregidos juntos porque son el mismo flujo (suite 77/77):
+
+- **El round-robin ya no reparte al owner/admin.** `RoundRobin::ASSIGNABLE_ROLES` es ahora `[ROLE_AGENT]` (antes incluía owner y admin, por eso los leads entrantes caían en el Administrador). Viewer sigue fuera. **Si la cuenta no tiene ningún agente, el lead queda SIN responsable a propósito** — aparece como "sin asignar" para que un admin lo derive a mano; preferimos eso antes que volver a cargárselo al Administrador.
+- **Toda asignación se espeja en la conversación del wacrm.** Antes el sync vivía en un método privado `LeadController@syncAssignmentToWacrm()` que **solo** corría en el cambio manual de la ficha: los leads auto-asignados por round-robin quedaban "Sin asignar" en el Inbox del wacrm. Ahora hay un único `Jobs\SyncLeadAssignmentToWacrmJob` (en cola, `tries=1`, falla silenciosa con Log::warning) invocado desde los **tres** caminos que cambian el responsable:
+  - `Lead::booted()` created → tras el round-robin automático.
+  - `LeadController@update` → cambio manual en la ficha.
+  - `LeadController@bulk` acción `assign` → reasignación masiva (también le faltaba).
+- **Requisito operativo que sigue vigente**: la correlación es **por email**; el agente debe existir en el wacrm con el mismo email o el endpoint responde 422 `user_not_found` (queda en el log, no rompe el flujo). La auto-provisión al aceptar la invitación lo cubre; los agentes viejos hay que provisionarlos a mano.
+- **Red de seguridad**: `php artisan komo:sync-assignments` reenvía todas las asignaciones existentes al wacrm (útil para reparar los leads que quedaron desincronizados antes de este fix).
+- Tests en `LeadAssignmentTest` (7): no asigna a owner/admin, sin agentes queda null, elige al agente con menos leads abiertos, los leads manuales no se reasignan, el espejo se dispara en automático y en manual, y no llama al wacrm si el lead no tiene conversación.
 
 ## Pendiente (futuro, no bloquea)
 
