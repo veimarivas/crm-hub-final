@@ -23,17 +23,24 @@ class InboxController extends Controller
         $filter = $request->query('filter', 'mine');
         $q = trim((string) $request->query('q', ''));
 
+        // Las bandejas ajenas no existen para un agente: si llega un ?filter
+        // de admin (link compartido, URL a mano) cae a la suya en vez de
+        // mostrar un vacio que se lee como "no hay nada".
+        if (! $isAdmin && ! in_array($filter, ['mine', 'unresponded'], true)) {
+            $filter = 'mine';
+        }
+
         // Base: leads abiertos con conversacion de WhatsApp
         $base = Lead::forAccount($accountId)
             ->where('status', 'open')
             ->whereNotNull('wacrm_conversation_id');
 
-        // Scope por rol: agent solo ve los suyos + sin asignar
+        // Scope por rol: el agente ve EXCLUSIVAMENTE lo que se le asigno. Ni
+        // los leads sin responsable ni los de sus companeros — con el
+        // round-robin repartiendo automaticamente, un lead sin asignar es
+        // trabajo que el admin todavia no distribuyo, no una bandeja comun.
         if (! $isAdmin) {
-            $base->where(function ($q2) use ($user) {
-                $q2->where('responsible_user_id', $user->id)
-                    ->orWhereNull('responsible_user_id');
-            });
+            $base->where('responsible_user_id', $user->id);
         }
 
         // Ultimo evento por lead (mensaje entrante o saliente)

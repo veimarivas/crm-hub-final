@@ -68,9 +68,11 @@ export default function InboxIndex({ items, counts, filter, q, isAdmin, slaMinut
         return () => clearInterval(id);
     }, []);
 
+    // El agente solo tiene sus propias conversaciones: las pestañas de leads
+    // sin asignar y de todo el equipo son del admin, que es quien reparte.
     const filters = [
         { key: 'mine', label: 'Mías', icon: '👤', tone: 'emerald' },
-        { key: 'unassigned', label: 'Sin asignar', icon: '🆕', tone: 'sky' },
+        ...(isAdmin ? [{ key: 'unassigned', label: 'Sin asignar', icon: '🆕', tone: 'sky' }] : []),
         { key: 'unresponded', label: `Sin responder ${slaMinutes}m+`, icon: '🚨', tone: 'red' },
         ...(isAdmin ? [{ key: 'all', label: 'Todo el equipo', icon: '🌐', tone: 'slate' }] : []),
     ];
