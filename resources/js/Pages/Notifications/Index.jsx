@@ -2,17 +2,27 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ServiceWindowBadge from '@/Components/ServiceWindowBadge';
 import { Head, Link, router } from '@inertiajs/react';
 
+/**
+ * Cada tipo de aviso con su color propio: `gradient` para el icono y `badge`
+ * para la etiqueta. Antes todas las etiquetas eran del mismo gris, así que
+ * había que leerlas una por una para distinguir un lead nuevo de una tarea
+ * vencida. El color agrupa por urgencia:
+ *   rojo = algo se rompió o venció · ámbar = ojo con esto
+ *   verde = entró trabajo nuevo    · azul/violeta = informativo
+ */
 const TYPE_META = {
-    lead_assigned: { icon: '👤', gradient: 'from-[#045474] to-[#1c486c]', label: 'Lead asignado' },
-    lead_created_whatsapp: { icon: '💬', gradient: 'from-emerald-500 to-teal-600', label: 'Lead de WhatsApp' },
-    lead_created_web_form: { icon: '📋', gradient: 'from-purple-500 to-violet-600', label: 'Lead de formulario' },
-    task_overdue: { icon: '⏰', gradient: 'from-red-500 to-rose-600', label: 'Tarea vencida' },
-    team_note: { icon: '📝', gradient: 'from-sky-500 to-indigo-600', label: 'Nota del admin' },
-    team_reminder: { icon: '🔔', gradient: 'from-amber-500 to-orange-600', label: 'Recordatorio' },
-    lead_fully_paid: { icon: '💰', gradient: 'from-emerald-500 to-green-600', label: 'Lead pagado' },
-    ai_unavailable: { icon: '⚠️', gradient: 'from-red-500 to-rose-600', label: 'La IA no respondió' },
-    ai_limit_reached: { icon: '🤖', gradient: 'from-amber-500 to-orange-600', label: 'Tope de la IA' },
+    lead_assigned: { icon: '👤', gradient: 'from-[#045474] to-[#1c486c]', label: 'Lead asignado', badge: 'bg-[#045474]/10 text-[#045474] ring-[#045474]/20' },
+    lead_created_whatsapp: { icon: '💬', gradient: 'from-emerald-500 to-teal-600', label: 'Lead de WhatsApp', badge: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
+    lead_created_web_form: { icon: '📋', gradient: 'from-purple-500 to-violet-600', label: 'Lead de formulario', badge: 'bg-purple-50 text-purple-700 ring-purple-200' },
+    task_overdue: { icon: '⏰', gradient: 'from-red-500 to-rose-600', label: 'Tarea vencida', badge: 'bg-red-50 text-red-700 ring-red-200' },
+    team_note: { icon: '📝', gradient: 'from-sky-500 to-indigo-600', label: 'Nota del admin', badge: 'bg-sky-50 text-sky-700 ring-sky-200' },
+    team_reminder: { icon: '🔔', gradient: 'from-amber-500 to-orange-600', label: 'Recordatorio', badge: 'bg-amber-50 text-amber-700 ring-amber-200' },
+    lead_fully_paid: { icon: '💰', gradient: 'from-emerald-500 to-green-600', label: 'Lead pagado', badge: 'bg-green-50 text-green-700 ring-green-200' },
+    ai_unavailable: { icon: '⚠️', gradient: 'from-red-500 to-rose-600', label: 'La IA no respondió', badge: 'bg-red-50 text-red-700 ring-red-200' },
+    ai_limit_reached: { icon: '🤖', gradient: 'from-amber-500 to-orange-600', label: 'Tope de la IA', badge: 'bg-amber-50 text-amber-700 ring-amber-200' },
 };
+
+const FALLBACK_TYPE = { icon: '🔔', gradient: 'from-slate-500 to-slate-700', label: 'Aviso', badge: 'bg-gray-100 text-gray-500 ring-gray-200' };
 
 /** Estado del lead al que apunta el aviso: se lee antes que el texto. */
 const LEAD_STATUS = {
@@ -112,7 +122,7 @@ function navigate(params) {
 }
 
 function NotificationRow({ n }) {
-    const meta = TYPE_META[n.type] ?? { icon: '🔔', gradient: 'from-slate-500 to-slate-700', label: 'Aviso' };
+    const meta = TYPE_META[n.type] ?? FALLBACK_TYPE;
     const category = CATEGORY_META[n.category];
     const unread = !n.read_at;
 
@@ -138,8 +148,8 @@ function NotificationRow({ n }) {
                                 {category.icon} {category.label}
                             </span>
                         ) : (
-                            <span className="inline-flex px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-gray-100 text-gray-500 ring-1 ring-gray-200">
-                                {meta.label}
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold ring-1 ${meta.badge}`}>
+                                {meta.icon} {meta.label}
                             </span>
                         )}
                         {n.sender && <span className="text-[11px] text-gray-400">de {n.sender.name}</span>}
