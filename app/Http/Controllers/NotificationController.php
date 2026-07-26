@@ -30,7 +30,14 @@ class NotificationController extends Controller
         $notifications = $mine()
             ->tap(fn (Builder $q) => $this->applyTab($q, $tab))
             ->when($category, fn (Builder $q, string $c) => $q->where('category', $c))
-            ->with(['lead:id,title,contact_id,source_ref,created_at', 'sender:id,name'])
+            // `status` y el contacto viajan para poder pintar el estado del
+            // lead y a quién pertenece sin abrir el aviso.
+            ->with([
+                'lead:id,title,status,contact_id,stage_id,source_ref,created_at',
+                'lead.contact:id,name,phone',
+                'lead.stage:id,name,color',
+                'sender:id,name',
+            ])
             ->orderByDesc('created_at')
             ->paginate(25)
             ->withQueryString();

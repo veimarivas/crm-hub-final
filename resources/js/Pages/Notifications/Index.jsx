@@ -14,6 +14,41 @@ const TYPE_META = {
     ai_limit_reached: { icon: '🤖', gradient: 'from-amber-500 to-orange-600', label: 'Tope de la IA' },
 };
 
+/** Estado del lead al que apunta el aviso: se lee antes que el texto. */
+const LEAD_STATUS = {
+    open: { label: 'Abierto', icon: '⏳', className: 'bg-sky-50 text-sky-700 ring-sky-200' },
+    won: { label: 'Ganado', icon: '🏆', className: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
+    lost: { label: 'Perdido', icon: '✕', className: 'bg-red-50 text-red-700 ring-red-200' },
+};
+
+/**
+ * Avatar del contacto con color derivado del nombre. El mismo contacto
+ * siempre sale del mismo color, así se lo reconoce recorriendo la lista sin
+ * tener que leer.
+ */
+const AVATAR_COLORS = [
+    'from-emerald-500 to-teal-600',
+    'from-blue-500 to-indigo-600',
+    'from-purple-500 to-pink-600',
+    'from-amber-500 to-orange-600',
+    'from-rose-500 to-red-600',
+    'from-cyan-500 to-sky-600',
+];
+
+function ContactAvatar({ name }) {
+    const label = (name || '?').trim();
+    const initials = label.split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
+    let hash = 0;
+    for (let i = 0; i < label.length; i++) hash = (hash * 31 + label.charCodeAt(i)) | 0;
+    const gradient = AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+
+    return (
+        <span className={`w-8 h-8 shrink-0 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-[11px] font-bold shadow-sm`}>
+            {initials}
+        </span>
+    );
+}
+
 /** Apartado del aviso. Solo lo llevan los que manda el admin a mano. */
 const CATEGORY_META = {
     seguimiento: { label: 'Seguimiento', icon: '🎯', className: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
@@ -81,61 +116,89 @@ function NotificationRow({ n }) {
     const category = CATEGORY_META[n.category];
     const unread = !n.read_at;
 
+    const status = n.lead ? LEAD_STATUS[n.lead.status] : null;
+
     return (
-        <li className={`relative flex items-start gap-4 px-5 py-4 transition-colors hover:bg-gray-50/80 ${unread ? 'bg-emerald-50/30' : ''}`}>
+        <li className={`group relative grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_18rem_9rem] gap-x-6 gap-y-3 px-5 py-4 transition-colors hover:bg-gray-50/80 ${unread ? 'bg-emerald-50/30' : ''}`}>
             {/* Barra de acento: identifica lo no leído sin teñir toda la fila. */}
             {unread && <span className="absolute left-0 inset-y-0 w-1 bg-emerald-500" />}
 
-            <div className={`w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br ${meta.gradient} flex items-center justify-center text-white text-lg shadow-sm`}>
-                {meta.icon}
-            </div>
-
-            <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-3">
-                    <p className={`text-sm min-w-0 ${unread ? 'font-bold text-gray-900' : 'font-semibold text-gray-600'}`}>
+            {/* Columna 1: qué pasó */}
+            <div className="flex items-start gap-4 min-w-0">
+                <div className={`w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br ${meta.gradient} flex items-center justify-center text-white text-lg shadow-sm`}>
+                    {meta.icon}
+                </div>
+                <div className="min-w-0">
+                    <p className={`text-sm ${unread ? 'font-bold text-gray-900' : 'font-semibold text-gray-600'}`}>
                         {n.title}
                     </p>
-                    <span className="text-xs text-gray-400 tabular-nums whitespace-nowrap shrink-0" title={exactTime(n.created_at)}>
-                        {timeAgo(n.created_at)}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                        {category ? (
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold ring-1 ${category.className}`}>
+                                {category.icon} {category.label}
+                            </span>
+                        ) : (
+                            <span className="inline-flex px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-gray-100 text-gray-500 ring-1 ring-gray-200">
+                                {meta.label}
+                            </span>
+                        )}
+                        {n.sender && <span className="text-[11px] text-gray-400">de {n.sender.name}</span>}
+                    </div>
+                    {n.body && <p className="mt-2 text-sm text-gray-600 leading-relaxed whitespace-pre-line">{n.body}</p>}
                 </div>
+            </div>
 
-                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                    {category ? (
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold ring-1 ${category.className}`}>
-                            {category.icon} {category.label}
-                        </span>
-                    ) : (
-                        <span className="inline-flex px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-gray-100 text-gray-500 ring-1 ring-gray-200">
-                            {meta.label}
-                        </span>
-                    )}
-                    {n.sender && <span className="text-[11px] text-gray-400">de {n.sender.name}</span>}
-                    {/* Cuánto queda para contestarle gratis: decide si esto se
-                        atiende ahora o puede esperar. */}
-                    <ServiceWindowBadge window={n.service_window} showOrigin />
-                </div>
+            {/* Columna 2: de quién es. El avatar toma su color del nombre, así
+                el mismo contacto se reconoce de un vistazo en toda la lista. */}
+            <div className="min-w-0 lg:pl-0 pl-14">
+                {n.lead ? (
+                    <Link href={route('notifications.go', n.id)} className="flex items-start gap-2.5 group/lead">
+                        <ContactAvatar name={n.lead.contact?.name || n.lead.title} />
+                        <div className="min-w-0">
+                            <p className="text-sm font-semibold text-gray-900 truncate group-hover/lead:text-emerald-700 transition-colors">
+                                {n.lead.contact?.name || n.lead.title}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                {status && (
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold ring-1 ${status.className}`}>
+                                        {status.icon} {status.label}
+                                    </span>
+                                )}
+                                {n.lead.stage && (
+                                    <span
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold"
+                                        style={{ backgroundColor: `${n.lead.stage.color ?? '#94a3b8'}1a`, color: n.lead.stage.color ?? '#64748b' }}
+                                    >
+                                        {n.lead.stage.name}
+                                    </span>
+                                )}
+                            </div>
+                            {n.service_window && (
+                                <div className="mt-1">
+                                    <ServiceWindowBadge window={n.service_window} showOrigin />
+                                </div>
+                            )}
+                        </div>
+                    </Link>
+                ) : (
+                    <span className="text-xs text-gray-300 italic">Sin lead asociado</span>
+                )}
+            </div>
 
-                {n.body && <p className="mt-2 text-sm text-gray-600 leading-relaxed whitespace-pre-line">{n.body}</p>}
-
-                <div className="flex items-center gap-3 mt-2.5">
-                    {n.lead && (
-                        <Link
-                            href={route('notifications.go', n.id)}
-                            className="inline-flex items-center gap-1 text-xs font-semibold text-[#045474] hover:text-emerald-700 transition-colors"
-                        >
-                            Ver lead «{n.lead.title}»
-                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
-                        </Link>
-                    )}
-                    <button
-                        type="button"
-                        onClick={() => router.post(route('notifications.read', n.id), {}, { preserveScroll: true })}
-                        className="text-xs font-semibold text-gray-400 hover:text-emerald-700 transition-colors"
-                    >
-                        {unread ? 'Marcar como leída' : 'Marcar como nueva'}
-                    </button>
-                </div>
+            {/* Columna 3: cuándo y qué hacer */}
+            <div className="flex lg:flex-col lg:items-end items-center gap-2 lg:pl-0 pl-14">
+                <span className="text-xs text-gray-400 tabular-nums whitespace-nowrap" title={exactTime(n.created_at)}>
+                    {timeAgo(n.created_at)}
+                </span>
+                <button
+                    type="button"
+                    onClick={() => router.post(route('notifications.read', n.id), {}, { preserveScroll: true })}
+                    className={`text-xs font-semibold transition-colors whitespace-nowrap ${
+                        unread ? 'text-emerald-600 hover:text-emerald-800' : 'text-gray-300 hover:text-gray-500'
+                    }`}
+                >
+                    {unread ? '✓ Marcar leída' : 'Marcar nueva'}
+                </button>
             </div>
         </li>
     );
@@ -156,7 +219,10 @@ export default function Index({ notifications, tab, category, counts, categoryCo
         <AuthenticatedLayout>
             <Head title="Notificaciones" />
 
-            <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-5">
+            {/* Ancho completo: cada fila reparte el espacio en columnas
+                (qué pasó / de quién es / cuándo), así que aprovecha el ancho
+                en vez de estirar una sola línea de texto. */}
+            <div className="w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#045474] to-[#1c486c] flex items-center justify-center text-white shadow-lg shadow-[#045474]/20 shrink-0">
