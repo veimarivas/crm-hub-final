@@ -16,13 +16,25 @@ class RoundRobin
     public const AUTO_SOURCES = ['whatsapp', 'web_form', 'lead_ad', 'api'];
 
     /**
-     * Elige el agente con menos leads abiertos en la cuenta. Ignora viewer.
+     * Roles que pueden recibir leads por round-robin. SOLO agentes: los
+     * owner/admin administran y no deben entrar en la rueda de reparto
+     * (si no, el Administrador acapara leads que nadie trabaja). Viewer
+     * queda fuera por definicion (es de solo lectura).
+     *
+     * Si la cuenta no tiene ningun agente, el lead queda SIN responsable
+     * a proposito — aparece como "sin asignar" para que un admin lo derive
+     * a mano. Preferimos eso antes que volver a cargarselo al Administrador.
+     */
+    public const ASSIGNABLE_ROLES = [User::ROLE_AGENT];
+
+    /**
+     * Elige el agente con menos leads abiertos en la cuenta.
      * En caso de empate, el que tenga la asignacion mas antigua (least recently used).
      */
     public function pickAssignee(string $accountId): ?User
     {
         $eligible = User::where('account_id', $accountId)
-            ->whereIn('account_role', [User::ROLE_OWNER, User::ROLE_ADMIN, User::ROLE_AGENT])
+            ->whereIn('account_role', self::ASSIGNABLE_ROLES)
             ->get(['id']);
 
         if ($eligible->isEmpty()) {

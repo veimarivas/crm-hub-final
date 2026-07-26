@@ -2,10 +2,9 @@
 
 namespace App\Console\Commands;
 
+use App\Jobs\SyncLeadAssignmentToWacrmJob;
 use App\Models\Integration;
 use App\Models\Lead;
-use App\Models\User;
-use App\Services\Wacrm\Client;
 use Illuminate\Console\Command;
 
 /**
@@ -43,8 +42,6 @@ class SyncAssignmentsToWacrm extends Command
         foreach ($integrations as $integration) {
             $this->info("Cuenta {$integration->account_id}");
 
-            $client = Client::for($integration);
-
             $leads = Lead::forAccount($integration->account_id)
                 ->whereNotNull('wacrm_conversation_id')
                 ->whereNotNull('responsible_user_id')
@@ -55,15 +52,12 @@ class SyncAssignmentsToWacrm extends Command
 
             foreach ($leads as $lead) {
                 $total++;
-                $email = User::whereKey($lead->responsible_user_id)->value('email');
 
-                if (! $email) {
-                    $bar->advance();
-                    continue;
-                }
-
+                // Mismo camino que el sync en vivo (incluye el auto-provisionado
+                // del agente en el wacrm si aún no existe allá): una sola
+                // implementación, sin riesgo de que las dos se desalineen.
                 try {
-                    $client->assignConversation($lead->wacrm_conversation_id, $email);
+                    (new SyncLeadAssignmentToWacrmJob($lead->id))->sync();
                     $ok++;
                 } catch (\Throwable $e) {
                     $fail++;

@@ -106,6 +106,11 @@ class Lead extends Model
                     null,
                     $lead->id,
                 );
+
+                // Espeja la asignacion en el wacrm: sin esto la conversacion
+                // se queda "Sin asignar" en el Inbox aunque el lead ya tenga
+                // responsable aqui.
+                \App\Jobs\SyncLeadAssignmentToWacrmJob::dispatch($lead->id);
             }
 
             \App\Jobs\RunStageAutomationsJob::dispatch($lead->id, $lead->stage_id);
