@@ -188,6 +188,43 @@ const navigation = [
     },
 ];
 
+/**
+ * Estado de la IA del wacrm en el header.
+ *
+ * "Disponible" no es solo que el toggle esté encendido: si Ollama está caído
+ * la IA está configurada pero no contesta, y eso es justo lo que hay que ver
+ * antes de confiar en que el bot está atendiendo. Cada motivo tiene su propio
+ * texto porque la acción a tomar es distinta en cada caso.
+ */
+const AI_STATUS_META = {
+    ok: { dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50 ring-emerald-200', label: 'IA activa', title: 'La IA está respondiendo automáticamente.' },
+    inactive: { dot: 'bg-gray-400', text: 'text-gray-600', bg: 'bg-gray-50 ring-gray-200', label: 'IA apagada', title: 'El asistente está desactivado en el CRM de WhatsApp.' },
+    auto_reply_off: { dot: 'bg-gray-400', text: 'text-gray-600', bg: 'bg-gray-50 ring-gray-200', label: 'IA manual', title: 'La IA está activa pero no responde sola: solo genera borradores.' },
+    provider_down: { dot: 'bg-red-500', text: 'text-red-700', bg: 'bg-red-50 ring-red-200', label: 'IA caída', title: 'El modelo no responde. Las conversaciones quedan para un humano.' },
+    after_hours: { dot: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50 ring-amber-200', label: 'Fuera de horario', title: 'Estamos fuera del horario de atención configurado.' },
+    unreachable: { dot: 'bg-red-500', text: 'text-red-700', bg: 'bg-red-50 ring-red-200', label: 'Sin conexión', title: 'No se pudo consultar el CRM de WhatsApp.' },
+    not_configured: { dot: 'bg-gray-300', text: 'text-gray-500', bg: 'bg-gray-50 ring-gray-200', label: 'IA sin configurar', title: 'No hay un asistente configurado en esta cuenta.' },
+};
+
+function AiStatusBadge({ status }) {
+    if (!status) return null;
+
+    const meta = AI_STATUS_META[status.available ? 'ok' : (status.reason ?? 'unreachable')] ?? AI_STATUS_META.unreachable;
+
+    return (
+        <span
+            title={meta.title}
+            className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold ring-1 ${meta.bg} ${meta.text}`}
+        >
+            <span className={`relative flex h-2 w-2`}>
+                {status.available && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />}
+                <span className={`relative inline-flex h-2 w-2 rounded-full ${meta.dot}`} />
+            </span>
+            {meta.label}
+        </span>
+    );
+}
+
 export default function AuthenticatedLayout({ header, children }) {
     const { url, props } = usePage();
     const user = props.auth.user;
@@ -354,6 +391,7 @@ export default function AuthenticatedLayout({ header, children }) {
                             </div>
 
                             <div className="flex items-center gap-2">
+                                <AiStatusBadge status={props.aiStatus} />
                                 <Link
                                     href={route('notifications')}
                                     className="relative p-2 text-gray-400 hover:text-[#045474] hover:bg-gray-100 rounded-lg transition-colors"

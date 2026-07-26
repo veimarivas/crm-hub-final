@@ -33,6 +33,7 @@ class EventProcessor
             'message.sent' => $this->handleOutboundMessage($integration, $data),
             'message.transcribed' => $this->handleTranscribed($integration, $data),
             'ai.pending_changed' => $this->handleAiPending($integration, $data),
+            'ai.unavailable' => $this->handleAiUnavailable($integration, $data),
             default => null, // eventos que no nos interesan se ignoran
         };
     }
@@ -53,6 +54,41 @@ class EventProcessor
         Lead::forAccount($integration->account_id)
             ->where('wacrm_conversation_id', $convId)
             ->update(['ai_pending' => $pending]);
+    }
+
+    /**
+     * La IA no va a contestar en esta conversación — falló, o agotó su tope.
+     *
+     * Al cliente NO se le manda nada (el wacrm dejó de hacerlo a propósito:
+     * un "un asesor te atenderá" delata que hay un bot). Así que el único
+     * aviso es este: le llega al responsable del lead, que es quien tiene que
+     * entrar a contestar. Sin responsable asignado, al owner de la cuenta.
+     */
+    private function handleAiUnavailable(Integration $integration, array $data): void
+    {
+        $convId = $data['conversation_id'] ?? null;
+
+        if (! $convId) {
+            return;
+        }
+
+        $lead = Lead::forAccount($integration->account_id)
+            ->where('wacrm_conversation_id', $convId)
+            ->latest()
+            ->first();
+
+        if (! $lead) {
+            return;
+        }
+
+        AppNotification::notify(
+            $integration->account_id,
+            $lead->responsible_user_id ?? $integration->account->owner_user_id,
+            ($data['reason'] ?? null) === 'limit_reached' ? 'ai_limit_reached' : 'ai_unavailable',
+            $data['title'] ?? 'La IA no respondió',
+            $data['body'] ?? null,
+            $lead->id,
+        );
     }
 
     /**

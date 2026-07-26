@@ -14,9 +14,7 @@ use RuntimeException;
  */
 class Client
 {
-    public function __construct(private readonly Integration $integration)
-    {
-    }
+    public function __construct(private readonly Integration $integration) {}
 
     public static function for(Integration $integration): self
     {
@@ -90,6 +88,7 @@ class Client
         if ($response->failed()) {
             throw new RuntimeException("wacrm media: HTTP {$response->status()}");
         }
+
         return [$response->header('Content-Type') ?: 'application/octet-stream', $response->body()];
     }
 
@@ -117,6 +116,16 @@ class Client
         return $this->unwrap($this->request()->patch("/conversations/{$conversationId}/assign", [
             'email' => $email,
         ]));
+    }
+
+    /**
+     * Estado de la IA en el wacrm: si está activa, si el proveedor responde
+     * y si estamos dentro del horario. Timeout corto porque se consulta desde
+     * el render de una página (cacheado del lado de Komo).
+     */
+    public function aiStatus(): array
+    {
+        return $this->unwrap($this->request()->timeout(5)->get('/ai/status'));
     }
 
     /** Modo IA/Humano de la conversación en el wacrm (true = IA activa). */

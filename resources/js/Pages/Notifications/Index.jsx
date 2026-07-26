@@ -9,6 +9,8 @@ const TYPE_META = {
     team_note: { icon: '📝', gradient: 'from-sky-500 to-indigo-600', label: 'Nota del admin' },
     team_reminder: { icon: '🔔', gradient: 'from-amber-500 to-orange-600', label: 'Recordatorio' },
     lead_fully_paid: { icon: '💰', gradient: 'from-emerald-500 to-green-600', label: 'Lead pagado' },
+    ai_unavailable: { icon: '⚠️', gradient: 'from-red-500 to-rose-600', label: 'La IA no respondió' },
+    ai_limit_reached: { icon: '🤖', gradient: 'from-amber-500 to-orange-600', label: 'Tope de la IA' },
 };
 
 /** Apartado del aviso. Solo lo llevan los que manda el admin a mano. */
