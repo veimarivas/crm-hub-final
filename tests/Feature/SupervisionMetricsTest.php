@@ -199,6 +199,51 @@ class SupervisionMetricsTest extends TestCase
         $this->assertCount(1, $this->build(90)['leads']);
     }
 
+    public function test_la_serie_diaria_rellena_los_dias_sin_actividad(): void
+    {
+        $lead = $this->makeLead($this->agent);
+        $this->msg($lead, 'message_in', now()->subDays(2)->setTime(9, 0)->toDateTimeString());
+        $this->msg($lead, 'message_out', now()->subDays(2)->setTime(9, 10)->toDateTimeString(), $this->agent);
+        $this->msg($lead, 'message_out', now()->subDays(2)->setTime(9, 12)->toDateTimeString(), bot: true);
+
+        $daily = collect($this->build(7)['daily']);
+
+        // 7 dias atras + hoy = 8 puntos, sin huecos: un hueco en el eje se
+        // leeria como continuidad y mentiria.
+        $this->assertCount(8, $daily);
+
+        $conActividad = $daily->firstWhere('date', now()->subDays(2)->format('Y-m-d'));
+        $this->assertSame(1, $conActividad['inbound']);
+        $this->assertSame(1, $conActividad['human_replies']);
+        $this->assertSame(1, $conActividad['bot_replies']);
+        $this->assertSame(600, $conActividad['avg_response_seconds']);
+
+        $vacio = $daily->firstWhere('date', now()->subDay()->format('Y-m-d'));
+        $this->assertSame(0, $vacio['inbound']);
+        $this->assertNull($vacio['avg_response_seconds'], 'Un dia sin respuestas no promedia cero.');
+    }
+
+    public function test_agrupa_las_conversaciones_por_etapa(): void
+    {
+        $otra = PipelineStage::create(['pipeline_id' => $this->pipeline->id, 'name' => 'Negociacion', 'stage_type' => 'open', 'position' => 1]);
+
+        $a = $this->makeLead($this->agent, 'Ana');
+        $this->msg($a, 'message_in', now()->subHours(3)->toDateTimeString());
+        $this->msg($a, 'message_out', now()->subHours(3)->addMinutes(2)->toDateTimeString(), $this->agent);
+
+        $b = $this->makeLead($this->agent, 'Beto');
+        $b->update(['stage_id' => $otra->id]);
+        $this->msg($b, 'message_in', now()->subHours(3)->toDateTimeString());
+
+        $stages = collect($this->build()['stages']);
+
+        $this->assertSame(1, $stages->firstWhere('name', 'Nuevo')['count']);
+
+        $negociacion = $stages->firstWhere('name', 'Negociacion');
+        $this->assertSame(1, $negociacion['count']);
+        $this->assertSame(1, $negociacion['waiting'], 'Beto sigue esperando respuesta.');
+    }
+
     public function test_solo_el_admin_entra_al_panel(): void
     {
         $this->actingAs($this->agent)->get(route('supervision.index'))->assertForbidden();

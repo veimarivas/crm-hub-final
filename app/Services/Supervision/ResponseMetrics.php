@@ -41,8 +41,11 @@ class ResponseMetrics
         private readonly CarbonInterface $since,
     ) {}
 
+    /** Acumuladores por día (Y-m-d), llenados durante el recorrido de mensajes. */
+    private array $daily = [];
+
     /**
-     * @return array{agents: array<int, array<string, mixed>>, leads: array<int, array<string, mixed>>, totals: array<string, mixed>}
+     * @return array{agents: array<int, mixed>, leads: array<int, mixed>, totals: array<string, mixed>, daily: array<int, mixed>, stages: array<int, mixed>}
      */
     public function build(): array
     {
@@ -63,7 +66,66 @@ class ResponseMetrics
             'agents' => $this->aggregateByAgent($rows, $leads),
             'leads' => $rows->all(),
             'totals' => $this->totals($rows),
+            'daily' => $this->dailySeries(),
+            'stages' => $this->stageDistribution($rows),
         ];
+    }
+
+    /**
+     * Serie por día para las gráficas. Rellena los días sin actividad con
+     * ceros — si no, el eje miente: un hueco se leería como continuidad.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function dailySeries(): array
+    {
+        $out = [];
+        $cursor = $this->since->copy()->startOfDay();
+        $end = now()->startOfDay();
+
+        while ($cursor <= $end) {
+            $key = $cursor->format('Y-m-d');
+            $bucket = $this->daily[$key] ?? [];
+            $responses = $bucket['responses'] ?? [];
+
+            $out[] = [
+                'date' => $key,
+                'label' => $cursor->translatedFormat('d M'),
+                'inbound' => $bucket['inbound'] ?? 0,
+                'human_replies' => $bucket['human'] ?? 0,
+                'bot_replies' => $bucket['bot'] ?? 0,
+                'avg_response_seconds' => $responses
+                    ? (int) round(array_sum($responses) / count($responses))
+                    : null,
+            ];
+
+            $cursor = $cursor->addDay();
+        }
+
+        return $out;
+    }
+
+    /**
+     * Reparto de las conversaciones del periodo por etapa. Contesta «en qué
+     * proceso está cada contacto» sin tener que abrir responsable por
+     * responsable.
+     *
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @return array<int, array<string, mixed>>
+     */
+    private function stageDistribution(Collection $rows): array
+    {
+        return $rows
+            ->groupBy(fn ($r) => $r['stage']['name'] ?? 'Sin etapa')
+            ->map(fn (Collection $group, string $name) => [
+                'name' => $name,
+                'color' => $group->first()['stage']['color'] ?? null,
+                'count' => $group->count(),
+                'waiting' => $group->filter(fn ($r) => $r['awaiting_minutes'] !== null)->count(),
+            ])
+            ->sortByDesc('count')
+            ->values()
+            ->all();
     }
 
     /**
@@ -96,9 +158,11 @@ class ResponseMetrics
 
             foreach ($timeline as $event) {
                 $lastAt = $event->created_at;
+                $day = $event->created_at->format('Y-m-d');
 
                 if ($event->event_type === 'message_in') {
                     $inbound++;
+                    $this->daily[$day]['inbound'] = ($this->daily[$day]['inbound'] ?? 0) + 1;
                     // Solo el primer mensaje de la ráfaga arranca el reloj: si el
                     // contacto manda cinco seguidos, esperó desde el primero.
                     $awaitingHumanSince ??= $event->created_at;
@@ -110,12 +174,14 @@ class ResponseMetrics
 
                 if ($isBot) {
                     $botReplies++;
+                    $this->daily[$day]['bot'] = ($this->daily[$day]['bot'] ?? 0) + 1;
                     $firstResponder ??= 'ia';
 
                     continue;
                 }
 
                 $humanReplies++;
+                $this->daily[$day]['human'] = ($this->daily[$day]['human'] ?? 0) + 1;
                 $firstResponder ??= $event->user_id ?? 'desconocido';
 
                 // Un saliente humano sin espera abierta es un seguimiento
@@ -124,6 +190,10 @@ class ResponseMetrics
                     $seconds = (int) $awaitingHumanSince->diffInSeconds($event->created_at, true);
                     $responseSeconds[] = $seconds;
                     $firstResponseSeconds ??= $seconds;
+                    // La respuesta se imputa al día en que se dio, no al día en
+                    // que entró el mensaje: así la gráfica muestra el desempeño
+                    // del turno que efectivamente atendió.
+                    $this->daily[$day]['responses'][] = $seconds;
                     $awaitingHumanSince = null;
                 }
             }
@@ -240,6 +310,9 @@ class ResponseMetrics
                     'ia_first' => $mine->filter(fn ($r) => $r['first_responder'] === 'ia')->count(),
                     'responsible_first' => $mine->filter(fn ($r) => $r['first_responder'] === 'responsable')->count(),
                     'other_agent_first' => $mine->filter(fn ($r) => $r['first_responder'] === 'otro_agente')->count(),
+                    // Salientes previos a que el wacrm mandara sender_email: se
+                    // sabe que contestó un humano, pero no cuál.
+                    'unknown_first' => $mine->filter(fn ($r) => $r['first_responder'] === 'sin_identificar')->count(),
                     'messages_sent' => $mine->sum('human_replies'),
                     'messages_received' => $mine->sum('inbound'),
                     'last_activity_at' => $mine->pluck('last_activity_at')->filter()->max(),

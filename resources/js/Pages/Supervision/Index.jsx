@@ -1,6 +1,15 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, router } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
+import {
+    ChartCard,
+    DailyVolumeChart,
+    FirstResponderDonut,
+    ResponseByAgentChart,
+    ResponseTimeChart,
+    StageChart,
+    TONE,
+} from './Charts';
 
 /** Segundos → "45s" / "12m" / "3h 20m" / "2d 4h". Null se muestra como guion. */
 function duration(seconds) {
@@ -59,20 +68,26 @@ function KpiCard({ label, value, sub, gradient, iconPath, tone }) {
 }
 
 /** Barra apilada: quién dio la primera respuesta en los leads de este responsable. */
-function FirstResponderBar({ ia, responsable, otro }) {
-    const total = ia + responsable + otro;
+function FirstResponderBar({ ia, responsable, otro, desconocido }) {
+    const total = ia + responsable + otro + desconocido;
     if (!total) return <span className="text-xs text-gray-400">—</span>;
-    const pct = (n) => `${(n / total) * 100}%`;
+
+    const segments = [
+        { n: responsable, color: TONE.responsable, label: 'Responsable' },
+        { n: otro, color: TONE.otro, label: 'Otro agente' },
+        { n: desconocido, color: TONE.desconocido, label: 'Humano sin identificar' },
+        { n: ia, color: TONE.ia, label: 'IA' },
+    ].filter((s) => s.n > 0);
 
     return (
-        <div className="min-w-[120px]">
+        <div className="min-w-[130px]">
             <div className="flex h-2 rounded-full overflow-hidden bg-gray-100">
-                {responsable > 0 && <div className="bg-emerald-500" style={{ width: pct(responsable) }} title={`Responsable: ${responsable}`} />}
-                {otro > 0 && <div className="bg-sky-500" style={{ width: pct(otro) }} title={`Otro agente: ${otro}`} />}
-                {ia > 0 && <div className="bg-violet-500" style={{ width: pct(ia) }} title={`IA: ${ia}`} />}
+                {segments.map((s) => (
+                    <div key={s.label} style={{ width: `${(s.n / total) * 100}%`, background: s.color }} title={`${s.label}: ${s.n}`} />
+                ))}
             </div>
             <p className="text-[11px] text-gray-500 mt-1 tabular-nums">
-                {responsable} resp · {otro} otro · {ia} IA
+                {segments.map((s) => `${s.n} ${s.label.split(' ')[0].toLowerCase()}`).join(' · ')}
             </p>
         </div>
     );
@@ -109,7 +124,7 @@ function AgentRow({ agent, slaMinutes, expanded, onToggle }) {
                 <td className={`px-5 py-3 text-right tabular-nums font-bold ${responseTone(agent.avg_first_response_seconds, slaMinutes)}`}>{duration(agent.avg_first_response_seconds)}</td>
                 <td className={`px-5 py-3 text-right tabular-nums ${responseTone(agent.avg_response_seconds, slaMinutes)}`}>{duration(agent.avg_response_seconds)}</td>
                 <td className="px-5 py-3 text-right tabular-nums text-gray-500">{duration(agent.slowest_response_seconds)}</td>
-                <td className="px-5 py-3"><FirstResponderBar ia={agent.ia_first} responsable={agent.responsible_first} otro={agent.other_agent_first} /></td>
+                <td className="px-5 py-3"><FirstResponderBar ia={agent.ia_first} responsable={agent.responsible_first} otro={agent.other_agent_first} desconocido={agent.unknown_first} /></td>
                 <td className="px-5 py-3 text-right text-xs text-gray-500 whitespace-nowrap">{timeAgo(agent.last_activity_at)}</td>
             </tr>
             {expanded && (
@@ -150,7 +165,7 @@ function AgentRow({ agent, slaMinutes, expanded, onToggle }) {
     );
 }
 
-export default function SupervisionIndex({ agents, leads, totals, days, ranges, members }) {
+export default function SupervisionIndex({ agents, leads, totals, daily, stages, days, ranges, members }) {
     const [responsible, setResponsible] = useState('all');
     const [onlyWaiting, setOnlyWaiting] = useState(false);
     const [expanded, setExpanded] = useState(null);
@@ -164,19 +179,27 @@ export default function SupervisionIndex({ agents, leads, totals, days, ranges, 
 
     const iaFirstPct = totals.leads > 0 ? Math.round((totals.ia_first / totals.leads) * 100) : 0;
 
+    const responderSlices = useMemo(() => [
+        { key: 'responsable', label: 'El responsable', value: agents.reduce((a, x) => a + x.responsible_first, 0), color: TONE.responsable },
+        { key: 'otro', label: 'Otro agente', value: agents.reduce((a, x) => a + x.other_agent_first, 0), color: TONE.otro },
+        { key: 'desconocido', label: 'Humano sin identificar', value: agents.reduce((a, x) => a + x.unknown_first, 0), color: TONE.desconocido },
+        { key: 'ia', label: 'La IA', value: totals.ia_first, color: TONE.ia },
+        { key: 'nadie', label: 'Nadie respondió', value: totals.never_answered, color: TONE.vencido },
+    ], [agents, totals]);
+
     return (
         <AuthenticatedLayout header={<h2 className="text-lg font-semibold text-gray-900">Seguimiento</h2>}>
             <Head title="Seguimiento" />
 
-            <div className="space-y-6">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                     <div>
-                        <h2 className="text-xl font-bold text-gray-900">Cómo está atendiendo el equipo</h2>
-                        <p className="text-sm text-gray-500 mt-0.5">
+                        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Cómo está atendiendo el equipo</h1>
+                        <p className="text-sm text-gray-500 mt-1">
                             Conversaciones con actividad en los últimos {days} días. El SLA de respuesta es de {totals.sla_minutes} minutos.
                         </p>
                     </div>
-                    <div className="flex gap-1 bg-white rounded-xl border border-gray-200 p-1">
+                    <div className="flex gap-1 bg-white rounded-xl border border-gray-200 p-1 shrink-0">
                         {ranges.map((r) => (
                             <button
                                 key={r}
@@ -189,7 +212,7 @@ export default function SupervisionIndex({ agents, leads, totals, days, ranges, 
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                     <KpiCard
                         label="Conversaciones"
                         value={totals.leads}
@@ -228,6 +251,40 @@ export default function SupervisionIndex({ agents, leads, totals, days, ranges, 
                         gradient="from-violet-500 to-purple-600"
                         iconPath="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"
                     />
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <ChartCard
+                        title="Volumen diario"
+                        subtitle="¿El equipo sigue el ritmo de lo que entra?"
+                        legend={[
+                            { label: 'Recibidos', color: TONE.entrante },
+                            { label: 'Respuestas', color: TONE.responsable },
+                            { label: 'IA', color: TONE.ia },
+                        ]}
+                    >
+                        <DailyVolumeChart daily={daily} />
+                    </ChartCard>
+
+                    <ChartCard
+                        title="Tiempo de respuesta por día"
+                        subtitle="Promedio del equipo contra el SLA"
+                    >
+                        <ResponseTimeChart daily={daily} slaMinutes={totals.sla_minutes} formatDuration={duration} />
+                    </ChartCard>
+
+                    <ChartCard title="Quién contestó primero" subtitle={`Sobre ${totals.leads} conversaciones del periodo`}>
+                        <FirstResponderDonut slices={responderSlices} total={totals.leads} />
+                    </ChartCard>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <ChartCard title="1ª respuesta por responsable" className="h-full">
+                            <ResponseByAgentChart agents={agents} slaMinutes={totals.sla_minutes} formatDuration={duration} />
+                        </ChartCard>
+                        <ChartCard title="En qué etapa están" subtitle="Contactos del periodo" className="h-full">
+                            <StageChart stages={stages} />
+                        </ChartCard>
+                    </div>
                 </div>
 
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
