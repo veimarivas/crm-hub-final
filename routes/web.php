@@ -6,6 +6,13 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => redirect()->route('login'));
 
+// Booking publico (sin auth) — pagina de reserva
+Route::get('/book/{slug}', [\App\Http\Controllers\BookingController::class, 'publicShow'])->name('book.show');
+Route::post('/book/{slug}', [\App\Http\Controllers\BookingController::class, 'publicStore'])
+    ->middleware('throttle:book')
+    ->name('book.store');
+Route::get('/book/{slug}/confirmed', [\App\Http\Controllers\BookingController::class, 'publicConfirmed'])->name('book.confirmed');
+
 // Receptor de eventos del wacrm — público, sin CSRF (excluido en
 // bootstrap/app.php), autenticado por firma HMAC.
 Route::post('/webhooks/wacrm/{accountId}', [WacrmWebhookController::class, 'receive'])
@@ -112,6 +119,10 @@ Route::middleware('auth')->group(function () {
         Route::post('/broadcasts', [\App\Http\Controllers\BroadcastController::class, 'store'])->name('broadcasts.store');
         Route::get('/broadcasts/{broadcast}', [\App\Http\Controllers\BroadcastController::class, 'show'])->name('broadcasts.show');
     });
+
+    // Bookings (admin del propio usuario)
+    Route::get('/bookings', [\App\Http\Controllers\BookingController::class, 'index'])->name('bookings.index');
+    Route::post('/bookings/{booking}/cancel', [\App\Http\Controllers\BookingController::class, 'cancel'])->name('bookings.cancel');
 
     // Notificaciones (accesible a todos los usuarios logueados)
     Route::get('/notifications', [\App\Http\Controllers\NotificationController::class, 'index'])->name('notifications');

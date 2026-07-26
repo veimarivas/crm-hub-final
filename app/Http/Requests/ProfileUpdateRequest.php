@@ -27,6 +27,12 @@ class ProfileUpdateRequest extends FormRequest
                 Rule::unique(User::class)->ignore($this->user()->id),
             ],
             'phone' => ['nullable', 'string', 'max:32'],
+            'booking_enabled' => ['sometimes', 'boolean'],
+            'booking_slug' => [
+                'nullable', 'string', 'max:60', 'regex:/^[a-z0-9-]+$/',
+                Rule::unique(User::class, 'booking_slug')->ignore($this->user()->id),
+            ],
+            'booking_duration_min' => ['sometimes', 'integer', 'in:15,30,45,60'],
         ];
     }
 }

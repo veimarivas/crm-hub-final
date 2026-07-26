@@ -27,6 +27,7 @@ class AppServiceProvider extends ServiceProvider
 
         // Formularios públicos: 10 envíos por minuto por IP.
         RateLimiter::for('web-form', fn (Request $request) => Limit::perMinute(10)->by($request->ip()));
+        RateLimiter::for('book', fn (Request $request) => Limit::perMinute(5)->by($request->ip()));
 
         // API pública: 120 req/min por API key (o IP si aún no autenticó).
         RateLimiter::for('public-api', fn (Request $request) => Limit::perMinute(120)
