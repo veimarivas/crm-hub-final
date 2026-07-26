@@ -214,6 +214,17 @@ Todo sale de `lead_events` (`message_in`/`message_out`) — no consulta al wacrm
 
 **Cambio en el wacrm que esto exigió**: `Messenger::dispatchOutbound()` ahora manda `sender_email` en el webhook `message.sent`. `EventProcessor::resolveSender()` lo resuelve a un `User` de la cuenta y lo guarda en `lead_events.user_id` (antes siempre null para salientes). Sin eso no se puede atribuir la respuesta a nadie. Para eventos viejos sin `sender_email` cae a coincidencia exacta de `sender_name` dentro de la cuenta — los que no matcheen quedan como `sin_identificar` (cuentan como respuesta humana para los tiempos, pero no se le adjudican a nadie).
 
+## Avisos al equipo + modal de resultado (2026-07-26)
+
+- **`prompt()` nativo eliminado al completar tareas.** Estaba en tres lugares (calendario y lista en `Tasks/Index.jsx`, ficha en `Leads/Show.jsx`) y se veía como un aviso del navegador. Ahora `Components/CompleteTaskModal.jsx`, montado **una sola vez en el layout** junto a `UndoToast` y disparado con `completeTask(task, { onCompleted })` — mismo patrón de API global (`let openFn`) que `showUndo`. Se hizo así porque los tres botones viven dentro de subcomponentes distintos y pasar el estado por props obligaba a encadenarlo tres niveles. Queda un `prompt()` en `Leads/Index.jsx` (nombre de lista guardada), fuera de este alcance.
+- **`/team-messages`** (admin-only, `TeamMessageController`): notas y recordatorios del admin a uno o varios responsables. Aterrizan en `app_notifications`, así que el destinatario los ve en la campana y en `/notifications` sin tocar nada de la lectura.
+  - **Apartados** (`AppNotification::CATEGORIES`): `seguimiento` | `personal` | `marketing`. Null en las notificaciones automáticas del sistema.
+  - **Los recordatorios NO usan cola ni cron.** La fila se crea al instante con `deliver_at` a futuro y queda oculta hasta ese momento. **Toda lectura de notificaciones DEBE pasar por el scope `AppNotification::delivered()`** — están cubiertos los tres caminos (contador de la campana en `HandleInertiaRequests`, listado en `NotificationController@index`, y acceso directo en `@go`, que devuelve 404 si aún no toca). `markAllRead` también lo filtra: marcar leído un recordatorio futuro lo dejaría invisible para siempre.
+  - **`batch_id`**: un envío masivo son N filas idénticas salvo el destinatario; el batch las reagrupa en el historial del admin ("1 aviso a 4 personas") sin adivinar por título + timestamp.
+  - Migración `2026_07_26_000007`: `category`, `deliver_at`, `sent_by_user_id`, `batch_id`, y `body` pasa de `varchar(255)` a `text` (corto para una nota redactada a mano).
+  - Atajos desde `/supervision`: botón "Enviar aviso" en el header y un ícono por fila que preselecciona a ese responsable (`?to=<userId>`).
+  - Tests en `TeamMessagesTest` (9), con un caso por cada camino de lectura del recordatorio pendiente.
+
 ## Pendiente (futuro, no bloquea)
 
 Email SMTP/IMAP (módulo grande; requiere credenciales reales), calendario visual de tareas, tiempo real con Reverb (hoy sin polling — Inertia recarga por navegación).

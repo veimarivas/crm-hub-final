@@ -6,6 +6,15 @@ const TYPE_META = {
     lead_created_whatsapp: { icon: '💬', gradient: 'from-emerald-500 to-teal-600' },
     lead_created_web_form: { icon: '📋', gradient: 'from-purple-500 to-violet-600' },
     task_overdue: { icon: '⏰', gradient: 'from-red-500 to-rose-600' },
+    team_note: { icon: '📝', gradient: 'from-sky-500 to-indigo-600' },
+    team_reminder: { icon: '🔔', gradient: 'from-amber-500 to-orange-600' },
+};
+
+/** Apartado del aviso. Solo lo llevan los que manda el admin a mano. */
+const CATEGORY_META = {
+    seguimiento: { label: 'Seguimiento', icon: '🎯', className: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
+    personal: { label: 'Personal', icon: '👤', className: 'bg-sky-50 text-sky-700 ring-sky-200' },
+    marketing: { label: 'Marketing', icon: '📣', className: 'bg-violet-50 text-violet-700 ring-violet-200' },
 };
 
 function timeAgo(iso) {
@@ -109,6 +118,12 @@ export default function Index({ notifications }) {
                                                                 <p className="font-semibold text-gray-900 text-sm">{n.title}</p>
                                                                 <span className="text-xs text-gray-400 tabular-nums whitespace-nowrap shrink-0">{timeAgo(n.created_at)}</span>
                                                             </div>
+                                                            {CATEGORY_META[n.category] && (
+                                                                <span className={`inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-lg text-[11px] font-bold ring-1 ${CATEGORY_META[n.category].className}`}>
+                                                                    {CATEGORY_META[n.category].icon} {CATEGORY_META[n.category].label}
+                                                                    {n.sender && <span className="font-normal opacity-70">· de {n.sender.name}</span>}
+                                                                </span>
+                                                            )}
                                                             {n.body && (
                                                                 <p className="mt-1 text-sm text-gray-600 leading-relaxed">{n.body}</p>
                                                             )}

@@ -1,4 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { completeTask } from '@/Components/CompleteTaskModal';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Recorder from 'opus-recorder';
@@ -1105,7 +1106,7 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                                             <li key={task.id} className={`flex items-center gap-3 rounded-xl border p-3.5 ${task.completed_at ? 'border-gray-100 bg-gray-50/50 opacity-60' : overdue ? 'border-red-200 bg-red-50/50' : 'border-gray-100 bg-white'}`}>
                                                 {!task.completed_at ? (
                                                     <button
-                                                        onClick={() => { const note = prompt('Resultado (opcional):'); if (note !== null) router.post(route('tasks.complete', task.id), { result_note: note || null }, { preserveScroll: true }); }}
+                                                        onClick={() => completeTask(task)}
                                                         className="w-5 h-5 shrink-0 rounded-full border-2 border-gray-300 hover:border-emerald-500 hover:bg-emerald-50 transition-all"
                                                         title="Completar"
                                                     />

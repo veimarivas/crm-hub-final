@@ -126,10 +126,21 @@ function AgentRow({ agent, slaMinutes, expanded, onToggle }) {
                 <td className="px-5 py-3 text-right tabular-nums text-gray-500">{duration(agent.slowest_response_seconds)}</td>
                 <td className="px-5 py-3"><FirstResponderBar ia={agent.ia_first} responsable={agent.responsible_first} otro={agent.other_agent_first} desconocido={agent.unknown_first} /></td>
                 <td className="px-5 py-3 text-right text-xs text-gray-500 whitespace-nowrap">{timeAgo(agent.last_activity_at)}</td>
+                <td className="px-5 py-3 text-right">
+                    {agent.id && (
+                        <Link
+                            href={route('team-messages.index', { to: agent.id })}
+                            title={`Enviar un aviso a ${agent.name}`}
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>
+                        </Link>
+                    )}
+                </td>
             </tr>
             {expanded && (
                 <tr className="bg-gray-50/60">
-                    <td colSpan={9} className="px-5 py-4">
+                    <td colSpan={10} className="px-5 py-4">
                         <div className="flex flex-wrap items-start gap-6">
                             <div>
                                 <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-2">Etapas de sus contactos abiertos</p>
@@ -199,16 +210,25 @@ export default function SupervisionIndex({ agents, leads, totals, daily, stages,
                             Conversaciones con actividad en los últimos {days} días. El SLA de respuesta es de {totals.sla_minutes} minutos.
                         </p>
                     </div>
-                    <div className="flex gap-1 bg-white rounded-xl border border-gray-200 p-1 shrink-0">
-                        {ranges.map((r) => (
-                            <button
-                                key={r}
-                                onClick={() => router.get(route('supervision.index'), { days: r }, { preserveScroll: true, preserveState: false })}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${r === days ? 'bg-emerald-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}`}
-                            >
-                                {r}d
-                            </button>
-                        ))}
+                    <div className="flex items-center gap-2 shrink-0">
+                        <Link
+                            href={route('team-messages.index')}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-colors"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>
+                            Enviar aviso
+                        </Link>
+                        <div className="flex gap-1 bg-white rounded-xl border border-gray-200 p-1">
+                            {ranges.map((r) => (
+                                <button
+                                    key={r}
+                                    onClick={() => router.get(route('supervision.index'), { days: r }, { preserveScroll: true, preserveState: false })}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${r === days ? 'bg-emerald-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}`}
+                                >
+                                    {r}d
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
 
@@ -305,11 +325,12 @@ export default function SupervisionIndex({ agents, leads, totals, daily, stages,
                                     <th className="text-right px-5 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Más lenta</th>
                                     <th className="text-left px-5 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Quién contestó 1º</th>
                                     <th className="text-right px-5 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Últ. actividad</th>
+                                    <th className="w-12"><span className="sr-only">Enviar aviso</span></th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
                                 {agents.length === 0 ? (
-                                    <tr><td colSpan={9} className="px-5 py-10 text-center text-sm text-gray-400">Sin conversaciones en este periodo.</td></tr>
+                                    <tr><td colSpan={10} className="px-5 py-10 text-center text-sm text-gray-400">Sin conversaciones en este periodo.</td></tr>
                                 ) : agents.map((a) => (
                                     <AgentRow
                                         key={a.id ?? 'none'}

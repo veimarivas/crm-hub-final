@@ -104,6 +104,12 @@ Route::middleware('auth')->group(function () {
         ->middleware('admin.only')
         ->name('supervision.index');
 
+    // Avisos del admin al equipo: notas y recordatorios (admin-only)
+    Route::middleware('admin.only')->group(function () {
+        Route::get('/team-messages', [\App\Http\Controllers\TeamMessageController::class, 'index'])->name('team-messages.index');
+        Route::post('/team-messages', [\App\Http\Controllers\TeamMessageController::class, 'store'])->name('team-messages.store');
+    });
+
     // Pipeline builder (admin-only)
     Route::middleware('admin.only')->group(function () {
         Route::get('/settings/pipelines', [\App\Http\Controllers\PipelineController::class, 'index'])->name('settings.pipelines');
