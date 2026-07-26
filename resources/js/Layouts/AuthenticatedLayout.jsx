@@ -206,7 +206,7 @@ export default function AuthenticatedLayout({ header, children }) {
                             </Link>
                         </div>
 
-                        <nav className="flex-1 px-3 py-4 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                        <nav className="flex-1 px-3 py-4 overflow-y-auto scrollbar-none">
                             <div className="space-y-1">
                                 {mainNav.map((item) => {
                                     const active = isActive(item.pattern);
