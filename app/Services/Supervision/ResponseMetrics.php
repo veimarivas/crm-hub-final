@@ -5,6 +5,7 @@ namespace App\Services\Supervision;
 use App\Models\Lead;
 use App\Models\LeadEvent;
 use App\Models\User;
+use App\Services\WhatsApp\ServiceWindow;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 
@@ -44,6 +45,9 @@ class ResponseMetrics
     /** Acumuladores por día (Y-m-d), llenados durante el recorrido de mensajes. */
     private array $daily = [];
 
+    /** Ventana de servicio de WhatsApp por lead, indexada por lead_id. */
+    private array $windows = [];
+
     /**
      * @return array{agents: array<int, mixed>, leads: array<int, mixed>, totals: array<string, mixed>, daily: array<int, mixed>, stages: array<int, mixed>}
      */
@@ -54,6 +58,12 @@ class ResponseMetrics
             ->get(['id', 'title', 'contact_id', 'responsible_user_id', 'stage_id', 'status', 'created_at']);
 
         $perLead = $this->measureConversations($leads->pluck('id'));
+
+        // Ventana de WhatsApp por lead: en la tabla contacto-por-contacto dice
+        // si todavía se le puede escribir sin costo, que es lo que decide si
+        // el admin reclama la respuesta ahora o ya da igual.
+        $windows = app(ServiceWindow::class)->forLeads($leads);
+        $this->windows = $windows;
 
         // Solo interesan los leads con conversación dentro del periodo.
         $rows = $leads
@@ -241,6 +251,7 @@ class ResponseMetrics
             'first_responder' => $this->classifyFirstResponder($lead, $m['first_responder']),
             'awaiting_minutes' => $awaitingMinutes,
             'breached_sla' => $awaitingMinutes !== null && $awaitingMinutes >= self::SLA_MINUTES,
+            'service_window' => $this->windows[$lead->id] ?? null,
             'last_activity_at' => $m['last_at'],
         ];
     }

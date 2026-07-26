@@ -1,4 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import ServiceWindowBadge from '@/Components/ServiceWindowBadge';
 import { Head, Link, router } from '@inertiajs/react';
 
 const TYPE_META = {
@@ -110,6 +111,9 @@ function NotificationRow({ n }) {
                         </span>
                     )}
                     {n.sender && <span className="text-[11px] text-gray-400">de {n.sender.name}</span>}
+                    {/* Cuánto queda para contestarle gratis: decide si esto se
+                        atiende ahora o puede esperar. */}
+                    <ServiceWindowBadge window={n.service_window} showOrigin />
                 </div>
 
                 {n.body && <p className="mt-2 text-sm text-gray-600 leading-relaxed whitespace-pre-line">{n.body}</p>}

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AppNotification;
 use App\Models\Contact;
 use App\Models\Lead;
 use App\Models\Pipeline;
@@ -138,7 +139,7 @@ class WebFormController extends Controller
                 'utm_campaign' => $lead->utm_campaign,
             ]));
 
-            \App\Models\AppNotification::notify(
+            AppNotification::notify(
                 $form->account_id,
                 $form->account->owner_user_id,
                 'lead_created_web_form',

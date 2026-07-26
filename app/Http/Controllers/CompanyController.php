@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Company;
+use App\Models\CustomField;
+use App\Models\Tag;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -14,7 +17,7 @@ class CompanyController extends Controller
     {
         $user = $request->user();
         $accountId = $user->account_id;
-        $isAdmin = $user->hasRoleAtLeast(\App\Models\User::ROLE_ADMIN);
+        $isAdmin = $user->hasRoleAtLeast(User::ROLE_ADMIN);
 
         return Inertia::render('Companies/Index', [
             'companies' => Company::forAccount($accountId)
@@ -26,8 +29,8 @@ class CompanyController extends Controller
                 ->orderBy('name')
                 ->paginate(25)
                 ->withQueryString(),
-            'allTags' => \App\Models\Tag::forAccount($accountId)->orderBy('name')->get(['id', 'name', 'color']),
-            'customFields' => \App\Models\CustomField::forAccount($accountId)
+            'allTags' => Tag::forAccount($accountId)->orderBy('name')->get(['id', 'name', 'color']),
+            'customFields' => CustomField::forAccount($accountId)
                 ->where('entity', 'company')->orderBy('position')->get(),
             'filters' => $request->only(['q']),
         ]);
@@ -60,7 +63,7 @@ class CompanyController extends Controller
         ]);
 
         if (($extras['tag_ids'] ?? null) !== null) {
-            $valid = \App\Models\Tag::forAccount($company->account_id)
+            $valid = Tag::forAccount($company->account_id)
                 ->whereIn('id', $extras['tag_ids'])
                 ->pluck('id');
             $company->tags()->sync($valid);

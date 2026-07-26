@@ -1,4 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import ServiceWindowBadge from '@/Components/ServiceWindowBadge';
 import { Head, Link, router } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
 import {
@@ -389,7 +390,10 @@ export default function SupervisionIndex({ agents, leads, totals, daily, stages,
                                     return (
                                         <tr key={l.id} className="hover:bg-gray-50 transition-colors">
                                             <td className="px-5 py-3">
-                                                <Link href={route('leads.show', l.id)} className="font-semibold text-gray-900 hover:text-emerald-700">{l.contact}</Link>
+                                                <div className="flex items-center gap-1.5">
+                                                    <Link href={route('leads.show', l.id)} className="font-semibold text-gray-900 hover:text-emerald-700">{l.contact}</Link>
+                                                    <ServiceWindowBadge window={l.service_window} />
+                                                </div>
                                                 {l.phone && <span className="block text-[11px] text-gray-400 tabular-nums">{l.phone}</span>}
                                             </td>
                                             <td className="px-5 py-3">

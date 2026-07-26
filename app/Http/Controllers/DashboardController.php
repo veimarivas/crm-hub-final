@@ -6,8 +6,9 @@ use App\Models\Lead;
 use App\Models\LeadEvent;
 use App\Models\Task;
 use App\Models\User;
+use App\Services\WhatsApp\ServiceWindow;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -47,11 +48,15 @@ class DashboardController extends Controller
             ],
             'urgentLeads' => $urgent['items'],
             'slaMinutes' => self::SLA_MINUTES,
-            'recentLeads' => $leadScope(Lead::forAccount($accountId)
-                ->with(['contact:id,name,phone', 'stage:id,name,color'])
-                ->latest())
-                ->limit(6)
-                ->get(['id', 'title', 'value', 'currency', 'status', 'contact_id', 'stage_id', 'responsible_user_id', 'created_at']),
+            // `source_ref` viaja porque la ventana de servicio lo usa como
+            // fallback para los leads que vinieron de un anuncio.
+            'recentLeads' => $this->withServiceWindow(
+                $leadScope(Lead::forAccount($accountId)
+                    ->with(['contact:id,name,phone', 'stage:id,name,color'])
+                    ->latest())
+                    ->limit(6)
+                    ->get(['id', 'title', 'value', 'currency', 'status', 'contact_id', 'stage_id', 'responsible_user_id', 'source_ref', 'created_at'])
+            ),
             'myTasks' => Task::forAccount($accountId)
                 ->pending()
                 ->where('assigned_to', $user->id)
@@ -121,5 +126,22 @@ class DashboardController extends Controller
             ->take(5); // top 5 mas urgentes en el widget
 
         return ['count' => $urgentIds->count(), 'items' => $items->all()];
+    }
+
+    /**
+     * Adjunta la ventana de servicio de WhatsApp a cada lead del listado:
+     * en el dashboard es lo que dice a quién todavía se le puede escribir
+     * sin costo.
+     *
+     * @param  Collection<int, Lead>  $leads
+     * @return Collection<int, Lead>
+     */
+    private function withServiceWindow($leads)
+    {
+        $windows = app(ServiceWindow::class)->forLeads($leads);
+
+        return $leads->each(
+            fn (Lead $lead) => $lead->setAttribute('service_window', $windows[$lead->id] ?? null)
+        );
     }
 }

@@ -28,19 +28,26 @@ class ContactController extends Controller
         $accountId = $user->account_id;
         $isAdmin = $user->hasRoleAtLeast(User::ROLE_ADMIN);
 
+        $contacts = Contact::forAccount($accountId)
+            ->with(['company:id,name', 'tags:id,name,color'])
+            ->withCount(['leads as open_leads_count' => fn ($q) => $q->where('status', 'open')])
+            // Agent solo ve contactos con al menos un lead asignado a él.
+            ->when(! $isAdmin, fn ($query) => $query->whereHas('leads', fn ($q) => $q->where('responsible_user_id', $user->id)))
+            ->when($request->query('q'), fn ($query, $q) => $query->where(fn ($w) => $w
+                ->where('name', 'like', "%{$q}%")
+                ->orWhere('phone', 'like', "%{$q}%")
+                ->orWhere('email', 'like', "%{$q}%")))
+            ->orderByDesc('created_at')
+            ->paginate(25)
+            ->withQueryString();
+
+        // Ventana de servicio de cada contacto (la de su conversación viva):
+        // en lote sobre la página actual, no una query por fila.
+        $windows = app(ServiceWindow::class)->forContacts($contacts->getCollection());
+        $contacts->each(fn (Contact $c) => $c->setAttribute('service_window', $windows[$c->id] ?? null));
+
         return Inertia::render('Contacts/Index', [
-            'contacts' => Contact::forAccount($accountId)
-                ->with(['company:id,name', 'tags:id,name,color'])
-                ->withCount(['leads as open_leads_count' => fn ($q) => $q->where('status', 'open')])
-                // Agent solo ve contactos con al menos un lead asignado a él.
-                ->when(! $isAdmin, fn ($query) => $query->whereHas('leads', fn ($q) => $q->where('responsible_user_id', $user->id)))
-                ->when($request->query('q'), fn ($query, $q) => $query->where(fn ($w) => $w
-                    ->where('name', 'like', "%{$q}%")
-                    ->orWhere('phone', 'like', "%{$q}%")
-                    ->orWhere('email', 'like', "%{$q}%")))
-                ->orderByDesc('created_at')
-                ->paginate(25)
-                ->withQueryString(),
+            'contacts' => $contacts,
             'companies' => Company::forAccount($accountId)->orderBy('name')->get(['id', 'name']),
             'allTags' => Tag::forAccount($accountId)->orderBy('name')->get(['id', 'name', 'color']),
             'customFields' => CustomField::forAccount($accountId)

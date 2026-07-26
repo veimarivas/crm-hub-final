@@ -1,4 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import ServiceWindowBadge from '@/Components/ServiceWindowBadge';
 import { Head, Link } from '@inertiajs/react';
 
 function money(value, currency) {
@@ -226,6 +227,7 @@ export default function Dashboard({ stats, recentLeads, myTasks, currency, urgen
                                                     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{ backgroundColor: `${lead.stage?.color ?? '#94a3b8'}20`, color: lead.stage?.color ?? '#94a3b8' }}>
                                                         {lead.stage?.name}
                                                     </span>
+                                                    <ServiceWindowBadge window={lead.service_window} />
                                                 </p>
                                             </div>
                                             <div className="text-right shrink-0 ml-3">

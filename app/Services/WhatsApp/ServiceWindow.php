@@ -2,6 +2,7 @@
 
 namespace App\Services\WhatsApp;
 
+use App\Models\Contact;
 use App\Models\Lead;
 use App\Models\LeadEvent;
 use Carbon\CarbonInterface;
@@ -94,6 +95,37 @@ class ServiceWindow
                 isset($lastInbound[$lead->id]) ? Carbon::parse($lastInbound[$lead->id]) : null,
                 $adAt,
             );
+        }
+
+        return $out;
+    }
+
+    /**
+     * Ventana por CONTACTO: la de su lead con actividad más reciente. La usan
+     * los listados de contactos, donde no hay un lead a mano.
+     *
+     * @param  Collection<int, Contact>  $contacts
+     * @return array<string, array<string, mixed>>
+     */
+    public function forContacts(Collection $contacts): array
+    {
+        $leads = Lead::whereIn('contact_id', $contacts->pluck('id'))
+            ->get(['id', 'contact_id', 'source_ref', 'created_at']);
+
+        $windows = $this->forLeads($leads);
+
+        $out = [];
+
+        foreach ($contacts as $contact) {
+            // El lead con el entrante más reciente es la conversación viva.
+            $best = $leads
+                ->where('contact_id', $contact->id)
+                ->map(fn (Lead $l) => $windows[$l->id])
+                ->filter(fn ($w) => $w['last_inbound_at'] !== null)
+                ->sortByDesc('last_inbound_at')
+                ->first();
+
+            $out[$contact->id] = $best ?? $this->build(null, null);
         }
 
         return $out;

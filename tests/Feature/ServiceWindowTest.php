@@ -179,6 +179,46 @@ class ServiceWindowTest extends TestCase
         $this->assertTrue($this->window($lead)['is_expiring']);
     }
 
+    public function test_la_ventana_de_un_contacto_es_la_de_su_conversacion_viva(): void
+    {
+        $owner = User::where('account_id', $this->account->id)->first();
+
+        $viejo = $this->makeLead();
+        $this->inbound($viejo, now()->subDays(3)->toDateTimeString());
+
+        // Segundo lead del MISMO contacto, con actividad reciente.
+        $reciente = Lead::create([
+            'account_id' => $this->account->id,
+            'pipeline_id' => $this->pipeline->id,
+            'stage_id' => $this->stage->id,
+            'contact_id' => $viejo->contact_id,
+            'title' => 'Segundo lead',
+            'source' => 'whatsapp',
+        ]);
+        $this->inbound($reciente, now()->subHour()->toDateTimeString());
+
+        $contacts = $this->actingAs($owner)->get(route('contacts.index'))
+            ->viewData('page')['props']['contacts']['data'];
+
+        $window = collect($contacts)->firstWhere('id', $viejo->contact_id)['service_window'];
+
+        $this->assertTrue($window['is_open'], 'Manda la conversación con el entrante más reciente.');
+        $this->assertEqualsWithDelta(23 * 3600, $window['remaining_seconds'], 120);
+    }
+
+    public function test_el_seguimiento_expone_la_ventana_por_contacto(): void
+    {
+        $owner = User::where('account_id', $this->account->id)->first();
+        $lead = $this->makeLead();
+        $lead->update(['responsible_user_id' => $owner->id]);
+        $this->inbound($lead, now()->subHours(2)->toDateTimeString(), fromAd: true);
+
+        $leads = $this->actingAs($owner)->get(route('supervision.index'))
+            ->viewData('page')['props']['leads'];
+
+        $this->assertSame('meta_ad', $leads[0]['service_window']['source']);
+    }
+
     public function test_el_inbox_expone_la_ventana_de_cada_conversacion(): void
     {
         $owner = User::where('account_id', $this->account->id)->first();

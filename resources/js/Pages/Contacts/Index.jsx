@@ -1,4 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import ServiceWindowBadge from '@/Components/ServiceWindowBadge';
 import Modal from '@/Components/Modal';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useState } from 'react';
@@ -192,6 +193,7 @@ export default function Index({ contacts, companies, allTags, customFields, filt
                                                     {contact.position && <p className="text-xs text-gray-400">{contact.position}</p>}
                                                 </div>
                                                 {contact.wacrm_contact_id && <span title="Sincronizado con WhatsApp" className="text-emerald-500 text-xs">💬</span>}
+                                                <ServiceWindowBadge window={contact.service_window} />
                                             </div>
                                         </td>
                                         <td className="px-5 py-4 text-gray-600 font-medium tabular-nums">{contact.phone || <span className="italic text-gray-300">—</span>}</td>

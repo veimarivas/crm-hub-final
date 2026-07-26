@@ -61,6 +61,7 @@ class SlotCalculator
                 // Descartamos slots que ya pasaron hoy
                 if ($cursor->lte(Carbon::now($tz))) {
                     $cursor->addMinutes($duration);
+
                     continue;
                 }
 

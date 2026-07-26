@@ -4,13 +4,18 @@ namespace App\Http\Controllers;
 
 use App\Models\AccountInvitation;
 use App\Models\ApiKey;
+use App\Models\Integration;
 use App\Models\User;
 use App\Services\AccountProvisioner;
+use App\Services\Wacrm\Client;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -184,7 +189,7 @@ class TeamController extends Controller
             return back()->withErrors(['member' => 'Ya eres el owner.']);
         }
 
-        \Illuminate\Support\Facades\DB::transaction(function () use ($owner, $member) {
+        DB::transaction(function () use ($owner, $member) {
             $owner->account->update(['owner_user_id' => $member->id]);
             $member->update(['account_role' => User::ROLE_OWNER]);
             $owner->update(['account_role' => User::ROLE_ADMIN]);
@@ -221,7 +226,7 @@ class TeamController extends Controller
             $validated = $request->validate([
                 'name' => 'required|string|max:255',
                 'email' => 'required|string|lowercase|email|max:255|unique:users,email',
-                'password' => ['required', 'confirmed', \Illuminate\Validation\Rules\Password::defaults()],
+                'password' => ['required', 'confirmed', Password::defaults()],
             ]);
 
             $user = User::create([
@@ -262,7 +267,7 @@ class TeamController extends Controller
      */
     private function provisionInWacrm(User $user, string $accountId, string $role, ?string $plaintextPassword): void
     {
-        $integration = \App\Models\Integration::forAccount($accountId)->first();
+        $integration = Integration::forAccount($accountId)->first();
         if (! $integration || ! $integration->wacrm_url || ! $integration->wacrm_api_key) {
             return;
         }
@@ -270,14 +275,14 @@ class TeamController extends Controller
         $wacrmRole = $role === 'admin' ? 'admin' : 'agent';
 
         try {
-            \App\Services\Wacrm\Client::for($integration)->provisionUser(
+            Client::for($integration)->provisionUser(
                 email: $user->email,
                 name: $user->name,
                 password: $plaintextPassword, // null si ya existía el user en Komo
                 role: $wacrmRole,
             );
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('Auto-provisión en wacrm falló', [
+            Log::warning('Auto-provisión en wacrm falló', [
                 'user_email' => $user->email,
                 'error' => $e->getMessage(),
             ]);

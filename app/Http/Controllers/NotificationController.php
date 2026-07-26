@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AppNotification;
+use App\Services\WhatsApp\ServiceWindow;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -29,10 +30,19 @@ class NotificationController extends Controller
         $notifications = $mine()
             ->tap(fn (Builder $q) => $this->applyTab($q, $tab))
             ->when($category, fn (Builder $q, string $c) => $q->where('category', $c))
-            ->with(['lead:id,title', 'sender:id,name'])
+            ->with(['lead:id,title,contact_id,source_ref,created_at', 'sender:id,name'])
             ->orderByDesc('created_at')
             ->paginate(25)
             ->withQueryString();
+
+        // Ventana del lead al que apunta el aviso: si alguien espera respuesta,
+        // saber cuánto queda para contestar gratis decide si se atiende ahora.
+        $windows = app(ServiceWindow::class)
+            ->forLeads($notifications->pluck('lead')->filter()->unique('id')->values());
+
+        $notifications->each(
+            fn (AppNotification $n) => $n->setAttribute('service_window', $windows[$n->lead_id] ?? null)
+        );
 
         return Inertia::render('Notifications/Index', [
             'notifications' => $notifications,
