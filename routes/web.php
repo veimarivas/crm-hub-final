@@ -138,6 +138,7 @@ Route::middleware('auth')->group(function () {
     // Notificaciones (accesible a todos los usuarios logueados)
     Route::get('/notifications', [\App\Http\Controllers\NotificationController::class, 'index'])->name('notifications');
     Route::post('/notifications/read-all', [\App\Http\Controllers\NotificationController::class, 'markAllRead'])->name('notifications.read-all');
+    Route::post('/notifications/{notification}/read', [\App\Http\Controllers\NotificationController::class, 'markRead'])->name('notifications.read');
     Route::get('/notifications/{notification}/go', [\App\Http\Controllers\NotificationController::class, 'go'])->name('notifications.go');
 
     // ---- SECCIONES ADMIN-ONLY (bloqueadas para agent/viewer) ----

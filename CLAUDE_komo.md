@@ -224,6 +224,7 @@ Todo sale de `lead_events` (`message_in`/`message_out`) — no consulta al wacrm
   - Migración `2026_07_26_000007`: `category`, `deliver_at`, `sent_by_user_id`, `batch_id`, y `body` pasa de `varchar(255)` a `text` (corto para una nota redactada a mano).
   - Atajos desde `/supervision`: botón "Enviar aviso" en el header y un ícono por fila que preselecciona a ese responsable (`?to=<userId>`).
   - Tests en `TeamMessagesTest` (9), con un caso por cada camino de lectura del recordatorio pendiente.
+- **`/notifications` con pestañas** (`Todas` / `Nuevas` / `Leídas`) + filtro por apartado. **El filtrado va en el servidor**, no en el cliente: con paginación, filtrar la página ya traída deja pestañas vacías aunque haya resultados en la siguiente. Los contadores por apartado se calculan **dentro de la pestaña activa** para que los números cuadren con lo que se ve. Nueva ruta `POST /notifications/{notification}/read` (`notifications.read`) que alterna leída/nueva de a una — antes un aviso sin lead asociado solo se podía marcar con "marcar todas". Layout de una sola columna agrupado por Hoy / Ayer / Esta semana / Anteriores (el grid de 2-3 columnas anterior obligaba a leer en zigzag). Tests en `NotificationTabsTest` (7).
 
 ## Pendiente (futuro, no bloquea)
 

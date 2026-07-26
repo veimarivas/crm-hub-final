@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AppNotification;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -10,16 +11,55 @@ use Inertia\Response;
 
 class NotificationController extends Controller
 {
+    private const TABS = ['all', 'unread', 'read'];
+
     public function index(Request $request): Response
     {
+        $user = $request->user();
+
+        $tab = in_array($request->query('tab'), self::TABS, true) ? $request->query('tab') : 'all';
+        $category = in_array($request->query('category'), AppNotification::CATEGORIES, true)
+            ? $request->query('category')
+            : null;
+
+        // `delivered()` siempre: un recordatorio programado no existe para su
+        // destinatario hasta que llega su momento.
+        $mine = fn () => AppNotification::where('user_id', $user->id)->delivered();
+
+        $notifications = $mine()
+            ->tap(fn (Builder $q) => $this->applyTab($q, $tab))
+            ->when($category, fn (Builder $q, string $c) => $q->where('category', $c))
+            ->with(['lead:id,title', 'sender:id,name'])
+            ->orderByDesc('created_at')
+            ->paginate(25)
+            ->withQueryString();
+
         return Inertia::render('Notifications/Index', [
-            'notifications' => AppNotification::where('user_id', $request->user()->id)
-                ->delivered()
-                ->with(['lead:id,title', 'sender:id,name'])
-                ->orderByDesc('created_at')
-                ->paginate(30),
-            'categories' => AppNotification::CATEGORIES,
+            'notifications' => $notifications,
+            'tab' => $tab,
+            'category' => $category,
+            'counts' => [
+                'all' => $mine()->count(),
+                'unread' => $mine()->whereNull('read_at')->count(),
+                'read' => $mine()->whereNotNull('read_at')->count(),
+            ],
+            // Los contadores por apartado se calculan DENTRO de la pestaña
+            // activa: si no, los números no cuadran con lo que se ve.
+            'categoryCounts' => collect(AppNotification::CATEGORIES)
+                ->mapWithKeys(fn (string $c) => [
+                    $c => $mine()->tap(fn (Builder $q) => $this->applyTab($q, $tab))->where('category', $c)->count(),
+                ])
+                ->all(),
         ]);
+    }
+
+    private function applyTab(Builder $query, string $tab): void
+    {
+        match ($tab) {
+            'unread' => $query->whereNull('read_at'),
+            'read' => $query->whereNotNull('read_at'),
+            default => null,
+        };
     }
 
     public function markAllRead(Request $request): RedirectResponse
@@ -30,6 +70,21 @@ class NotificationController extends Controller
             ->delivered()
             ->whereNull('read_at')
             ->update(['read_at' => now()]);
+
+        return back();
+    }
+
+    /**
+     * Marca una sola como leída sin salir de la pantalla. Sin esto, un aviso
+     * del admin sin lead asociado no se podía marcar de a uno: el único
+     * camino era "marcar todas".
+     */
+    public function markRead(Request $request, AppNotification $notification): RedirectResponse
+    {
+        abort_if($notification->user_id !== $request->user()->id, 403);
+        abort_if($notification->deliver_at && $notification->deliver_at->isFuture(), 404);
+
+        $notification->update(['read_at' => $notification->read_at ? null : now()]);
 
         return back();
     }
