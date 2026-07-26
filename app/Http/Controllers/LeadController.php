@@ -2,17 +2,28 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\SyncLeadAssignmentToWacrmJob;
+use App\Models\AppNotification;
 use App\Models\Company;
 use App\Models\Contact;
+use App\Models\CustomField;
+use App\Models\Integration;
 use App\Models\Lead;
+use App\Models\LeadEvent;
 use App\Models\Pipeline;
 use App\Models\PipelineStage;
+use App\Models\SavedSegment;
+use App\Models\Tag;
 use App\Models\User;
+use App\Services\Wacrm\Client;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class LeadController extends Controller
 {
@@ -60,10 +71,10 @@ class LeadController extends Controller
         $enrichedLeads = $this->enrichLeadsWithSla($leads);
 
         // Tags disponibles del pipeline para el filtro
-        $tags = \App\Models\Tag::forAccount($accountId)->orderBy('name')->get(['id', 'name', 'color']);
+        $tags = Tag::forAccount($accountId)->orderBy('name')->get(['id', 'name', 'color']);
 
         // Segments accesibles: propios o compartidos del equipo
-        $segments = \App\Models\SavedSegment::forAccount($accountId)
+        $segments = SavedSegment::forAccount($accountId)
             ->where(fn ($q) => $q->where('user_id', $user->id)->orWhere('is_shared', true))
             ->orderBy('name')
             ->get(['id', 'name', 'filters', 'user_id', 'is_shared']);
@@ -118,7 +129,7 @@ class LeadController extends Controller
         $count = 0;
         switch ($validated['action']) {
             case 'move':
-                $stage = \App\Models\PipelineStage::whereHas('pipeline', fn ($q) => $q->where('account_id', $accountId))
+                $stage = PipelineStage::whereHas('pipeline', fn ($q) => $q->where('account_id', $accountId))
                     ->findOrFail($validated['stage_id']);
                 foreach ($leads as $lead) {
                     if ($lead->pipeline_id === $stage->pipeline_id && $lead->stage_id !== $stage->id) {
@@ -135,19 +146,19 @@ class LeadController extends Controller
                 foreach ($leads as $lead) {
                     if ($lead->responsible_user_id !== $newResp) {
                         $lead->update(['responsible_user_id' => $newResp]);
-                        \App\Models\AppNotification::notify(
+                        AppNotification::notify(
                             $accountId, $newResp, 'lead_assigned',
                             "Lead reasignado: {$lead->title}", null, $lead->id, $user->id,
                         );
                         // Mismo espejo que en el update individual: la
                         // conversacion del wacrm sigue al nuevo responsable.
-                        \App\Jobs\SyncLeadAssignmentToWacrmJob::dispatch($lead->id);
+                        SyncLeadAssignmentToWacrmJob::dispatch($lead->id);
                         $count++;
                     }
                 }
                 break;
             case 'tag':
-                $tag = \App\Models\Tag::forAccount($accountId)->findOrFail($validated['tag_id']);
+                $tag = Tag::forAccount($accountId)->findOrFail($validated['tag_id']);
                 $mode = $validated['tag_mode'] ?? 'add';
                 foreach ($leads as $lead) {
                     if ($mode === 'add') {
@@ -174,7 +185,7 @@ class LeadController extends Controller
      * Streamea CSV de leads respetando los mismos filtros que index().
      * No pagina — streamea todo (memoria acotada por chunks).
      */
-    public function export(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
+    public function export(Request $request): StreamedResponse
     {
         $accountId = $request->user()->account_id;
         $user = $request->user();
@@ -195,7 +206,7 @@ class LeadController extends Controller
 
         $filename = 'leads_'.now()->format('Ymd_His').'.csv';
 
-        return response()->streamDownload(function () use ($accountId, $selected, $isAdmin, $user, $filters) {
+        return response()->streamDownload(function () use ($selected, $isAdmin, $user, $filters) {
             $out = fopen('php://output', 'w');
             // BOM UTF-8 para que Excel abra bien acentos y emojis
             fwrite($out, "\xEF\xBB\xBF");
@@ -259,7 +270,7 @@ class LeadController extends Controller
             return $leads;
         }
 
-        $lastMessages = \App\Models\LeadEvent::whereIn('lead_id', $ids)
+        $lastMessages = LeadEvent::whereIn('lead_id', $ids)
             ->whereIn('event_type', ['message_in', 'message_out'])
             ->select('lead_id', 'event_type', 'created_at')
             ->orderByDesc('created_at')
@@ -319,7 +330,7 @@ class LeadController extends Controller
 
         $lead->recordEvent('created', $request->user(), ['source' => 'manual']);
 
-        \App\Models\AppNotification::notify(
+        AppNotification::notify(
             $accountId,
             $lead->responsible_user_id,
             'lead_assigned',
@@ -354,8 +365,8 @@ class LeadController extends Controller
             'members' => User::where('account_id', $lead->account_id)->get(['id', 'name']),
             'contacts' => Contact::forAccount($lead->account_id)->orderBy('name')->limit(500)->get(['id', 'name', 'phone']),
             'companies' => Company::forAccount($lead->account_id)->orderBy('name')->limit(500)->get(['id', 'name']),
-            'allTags' => \App\Models\Tag::forAccount($lead->account_id)->orderBy('name')->get(['id', 'name', 'color']),
-            'customFields' => \App\Models\CustomField::forAccount($lead->account_id)
+            'allTags' => Tag::forAccount($lead->account_id)->orderBy('name')->get(['id', 'name', 'color']),
+            'customFields' => CustomField::forAccount($lead->account_id)
                 ->where('entity', 'lead')->orderBy('position')->get(),
             'customValues' => $lead->customFieldValues(),
             'whatsappEnabled' => (bool) ($integration?->is_active && $lead->contact?->phone),
@@ -401,7 +412,7 @@ class LeadController extends Controller
 
         if ($lead->responsible_user_id !== $oldResponsible) {
             if ($lead->responsible_user_id) {
-                \App\Models\AppNotification::notify(
+                AppNotification::notify(
                     $lead->account_id,
                     $lead->responsible_user_id,
                     'lead_assigned',
@@ -415,7 +426,7 @@ class LeadController extends Controller
             // Espeja la asignación en el wacrm: la conversación pasa al
             // Inbox del agente responsable. En cola — el guardado de la
             // ficha no espera al HTTP.
-            \App\Jobs\SyncLeadAssignmentToWacrmJob::dispatch($lead->id);
+            SyncLeadAssignmentToWacrmJob::dispatch($lead->id);
         }
 
         if ($oldValue !== (string) $lead->value) {
@@ -426,7 +437,7 @@ class LeadController extends Controller
     }
 
     /** Envía un archivo por WhatsApp desde el chat del lead (a través del wacrm). */
-    public function sendMedia(Request $request, Lead $lead): \Illuminate\Http\JsonResponse
+    public function sendMedia(Request $request, Lead $lead): JsonResponse
     {
         $this->authorizeLead($request, $lead);
 
@@ -446,7 +457,7 @@ class LeadController extends Controller
         $file = $request->file('file');
 
         try {
-            \App\Services\Wacrm\Client::for($integration)->sendMedia(
+            Client::for($integration)->sendMedia(
                 phone: $lead->contact->phone_normalized ?? $lead->contact->phone,
                 fileBase64: base64_encode($file->get()),
                 mimeType: $file->getMimeType() ?? 'application/octet-stream',
@@ -472,7 +483,7 @@ class LeadController extends Controller
         abort_unless($integration?->is_active, 422);
 
         try {
-            [$contentType, $bytes] = \App\Services\Wacrm\Client::for($integration)->downloadMedia($mediaId);
+            [$contentType, $bytes] = Client::for($integration)->downloadMedia($mediaId);
         } catch (\Throwable $e) {
             abort(502, $e->getMessage());
         }
@@ -484,13 +495,15 @@ class LeadController extends Controller
     }
 
     /** Devuelve las plantillas rápidas del equipo (delegadas al wacrm). */
-    public function quickReplies(Request $request): \Illuminate\Http\JsonResponse
+    public function quickReplies(Request $request): JsonResponse
     {
         $integration = $request->user()->account->integration;
-        if (! $integration?->is_active) return response()->json([]);
+        if (! $integration?->is_active) {
+            return response()->json([]);
+        }
 
         try {
-            return response()->json(\App\Services\Wacrm\Client::for($integration)->quickReplies());
+            return response()->json(Client::for($integration)->quickReplies());
         } catch (\Throwable $e) {
             return response()->json([]);
         }
@@ -516,12 +529,12 @@ class LeadController extends Controller
 
         // Espeja al wacrm.
         if ($lead->wacrm_conversation_id) {
-            $integration = \App\Models\Integration::forAccount($lead->account_id)->first();
+            $integration = Integration::forAccount($lead->account_id)->first();
             if ($integration && $integration->wacrm_url && $integration->wacrm_api_key) {
                 try {
-                    \App\Services\Wacrm\Client::for($integration)->setAiMode($lead->wacrm_conversation_id, $validated['ai_enabled']);
+                    Client::for($integration)->setAiMode($lead->wacrm_conversation_id, $validated['ai_enabled']);
                 } catch (\Throwable $e) {
-                    \Illuminate\Support\Facades\Log::warning('Sync ai-mode → wacrm falló', [
+                    Log::warning('Sync ai-mode → wacrm falló', [
                         'lead_id' => $lead->id, 'error' => $e->getMessage(),
                     ]);
                 }
@@ -548,9 +561,18 @@ class LeadController extends Controller
         return back();
     }
 
+    /**
+     * Borrar un lead se lleva su historial de conversación por delante y no
+     * hay vuelta atrás, así que queda reservado a admin/owner. Un responsable
+     * no puede hacer desaparecer el registro de lo que habló con el contacto.
+     */
     public function destroy(Request $request, Lead $lead): RedirectResponse
     {
         $this->authorizeLead($request, $lead);
+
+        abort_unless($request->user()->hasRoleAtLeast(User::ROLE_ADMIN), 403,
+            'Solo un administrador puede eliminar un lead y su historial.');
+
         $lead->delete();
 
         return redirect()->route('leads.index')->with('success', 'Lead eliminado.');
@@ -562,7 +584,7 @@ class LeadController extends Controller
 
         $validated = $request->validate(['tag_ids' => 'nullable|array', 'tag_ids.*' => 'uuid']);
 
-        $valid = \App\Models\Tag::forAccount($lead->account_id)
+        $valid = Tag::forAccount($lead->account_id)
             ->whereIn('id', $validated['tag_ids'] ?? [])
             ->pluck('id');
 
@@ -606,7 +628,7 @@ class LeadController extends Controller
         }
 
         try {
-            \App\Services\Wacrm\Client::for($integration)->sendMessage(
+            Client::for($integration)->sendMessage(
                 $lead->contact->phone_normalized ?? $lead->contact->phone,
                 $validated['text'],
             );

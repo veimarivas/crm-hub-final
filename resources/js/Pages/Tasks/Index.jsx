@@ -321,7 +321,7 @@ function ListView({ tasks }) {
     );
 }
 
-export default function Index({ view = 'calendar', calendar, tasks, filters, counts, members = [] }) {
+export default function Index({ view = 'calendar', calendar, tasks, filters, counts, members = [], isAdmin = false }) {
     const { flash } = usePage().props;
     const [activeDay, setActiveDay] = useState(view === 'calendar' ? new Date() : null);
     const [showNew, setShowNew] = useState(false);
@@ -360,15 +360,19 @@ export default function Index({ view = 'calendar', calendar, tasks, filters, cou
                         </p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
-                        <label className="flex items-center gap-2 text-sm text-gray-600">
-                            <input
-                                type="checkbox"
-                                checked={filters.mine}
-                                onChange={(e) => apply({ mine: e.target.checked ? 1 : 0 })}
-                                className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-                            />
-                            Solo mías
-                        </label>
+                        {/* Ver la agenda del equipo es cosa del admin: el agente
+                            solo tiene las suyas, el toggle no aplicaría. */}
+                        {isAdmin && (
+                            <label className="flex items-center gap-2 text-sm text-gray-600">
+                                <input
+                                    type="checkbox"
+                                    checked={filters.mine}
+                                    onChange={(e) => apply({ mine: e.target.checked ? 1 : 0 })}
+                                    className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                />
+                                Solo mías
+                            </label>
+                        )}
                         {/* Toggle vista */}
                         <div className="inline-flex bg-white border border-gray-200 rounded-xl shadow-sm p-0.5">
                             <button onClick={() => apply({ view: 'calendar' })} className={`px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1 ${view === 'calendar' ? 'bg-gradient-to-r from-[#045474] to-[#1c486c] text-white shadow' : 'text-gray-600'}`}>

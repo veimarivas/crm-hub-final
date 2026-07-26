@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Lead;
 use App\Models\Task;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -18,16 +19,21 @@ class TaskController extends Controller
         $userId = $request->user()->id;
         $view = $request->query('view', 'calendar'); // calendar | list
         $filter = $request->query('filter', 'pending');
-        $mine = $request->boolean('mine', true);
+        $isAdmin = $request->user()->hasRoleAtLeast(User::ROLE_ADMIN);
+
+        // El agente ve EXCLUSIVAMENTE sus tareas: el toggle "solo las mías" es
+        // del admin, que necesita la vista del equipo para hacer seguimiento.
+        // Sin esto un ?mine=0 a mano abría la agenda de todo el equipo.
+        $mine = $isAdmin ? $request->boolean('mine', true) : true;
 
         $baseScope = fn ($q) => $mine ? $q->where('assigned_to', $userId) : $q;
 
         if ($view === 'calendar') {
             // Rango del mes visible (incluye dias de semanas parciales anteriores/posteriores)
             $month = $request->query('month'); // YYYY-MM
-            $anchor = $month ? \Carbon\Carbon::createFromFormat('Y-m', $month)->startOfMonth() : now()->startOfMonth();
-            $from = $anchor->copy()->startOfMonth()->startOfWeek(\Carbon\Carbon::MONDAY);
-            $to = $anchor->copy()->endOfMonth()->endOfWeek(\Carbon\Carbon::SUNDAY);
+            $anchor = $month ? Carbon::createFromFormat('Y-m', $month)->startOfMonth() : now()->startOfMonth();
+            $from = $anchor->copy()->startOfMonth()->startOfWeek(Carbon::MONDAY);
+            $to = $anchor->copy()->endOfMonth()->endOfWeek(Carbon::SUNDAY);
 
             $rangeTasks = Task::forAccount($accountId)
                 ->with(['lead:id,title', 'contact:id,name', 'assignee:id,name'])
@@ -46,6 +52,7 @@ class TaskController extends Controller
                 ],
                 'filters' => ['filter' => $filter, 'mine' => $mine, 'view' => 'calendar'],
                 'members' => User::where('account_id', $accountId)->get(['id', 'name']),
+                'isAdmin' => $isAdmin,
                 'counts' => [
                     'overdue' => Task::forAccount($accountId)->overdue()->when($mine, $baseScope)->count(),
                     'today' => Task::forAccount($accountId)->pending()
@@ -72,6 +79,7 @@ class TaskController extends Controller
             'tasks' => $tasks,
             'filters' => ['filter' => $filter, 'mine' => $mine, 'view' => 'list'],
             'members' => User::where('account_id', $accountId)->get(['id', 'name']),
+            'isAdmin' => $isAdmin,
             'counts' => [
                 'overdue' => Task::forAccount($accountId)->overdue()->when($mine, $baseScope)->count(),
                 'today' => Task::forAccount($accountId)->pending()
@@ -120,7 +128,7 @@ class TaskController extends Controller
 
     public function complete(Request $request, Task $task): RedirectResponse
     {
-        abort_if($task->account_id !== $request->user()->account_id, 403);
+        $this->authorizeTask($request, $task);
 
         $validated = $request->validate(['result_note' => 'nullable|string|max:2000']);
 
@@ -132,7 +140,7 @@ class TaskController extends Controller
     /** Reabrir tarea (undo del complete). */
     public function uncomplete(Request $request, Task $task): RedirectResponse
     {
-        abort_if($task->account_id !== $request->user()->account_id, 403);
+        $this->authorizeTask($request, $task);
 
         $task->update(['completed_at' => null, 'result_note' => null]);
 
@@ -142,7 +150,7 @@ class TaskController extends Controller
     /** Posponer una tarea N minutos hacia adelante desde su due_at actual. */
     public function snooze(Request $request, Task $task): RedirectResponse
     {
-        abort_if($task->account_id !== $request->user()->account_id, 403);
+        $this->authorizeTask($request, $task);
         abort_if($task->completed_at !== null, 422, 'Tarea ya completada.');
 
         $validated = $request->validate([
@@ -152,7 +160,7 @@ class TaskController extends Controller
 
         $newDue = null;
         if (! empty($validated['until'])) {
-            $newDue = \Carbon\Carbon::parse($validated['until']);
+            $newDue = Carbon::parse($validated['until']);
         } elseif (! empty($validated['minutes'])) {
             // Suma desde el maximo entre due_at actual y ahora (evita snoozes que quedan en el pasado)
             $base = max($task->due_at, now());
@@ -168,9 +176,26 @@ class TaskController extends Controller
 
     public function destroy(Request $request, Task $task): RedirectResponse
     {
-        abort_if($task->account_id !== $request->user()->account_id, 403);
+        $this->authorizeTask($request, $task);
         $task->delete();
 
         return back()->with('success', 'Tarea eliminada.');
+    }
+
+    /**
+     * El agente solo toca sus propias tareas. Antes estos endpoints
+     * verificaban únicamente la cuenta: con el ID de una tarea ajena se podía
+     * completar, posponer o borrar la agenda de un compañero.
+     * El admin puede operar sobre cualquiera (hace seguimiento del equipo).
+     */
+    private function authorizeTask(Request $request, Task $task): void
+    {
+        $user = $request->user();
+
+        abort_if($task->account_id !== $user->account_id, 403);
+
+        if (! $user->hasRoleAtLeast(User::ROLE_ADMIN)) {
+            abort_if($task->assigned_to !== $user->id, 403, 'Esta tarea no es tuya.');
+        }
     }
 }

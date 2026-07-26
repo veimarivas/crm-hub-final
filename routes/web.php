@@ -82,10 +82,15 @@ Route::middleware('auth')->group(function () {
     Route::post('/contacts/import-wacrm', [\App\Http\Controllers\ContactController::class, 'importFromWacrm'])->name('contacts.import-wacrm');
     Route::patch('/contacts/{contact}', [\App\Http\Controllers\ContactController::class, 'update'])->name('contacts.update');
     Route::delete('/contacts/{contact}', [\App\Http\Controllers\ContactController::class, 'destroy'])->name('contacts.destroy');
-    Route::get('/companies', [\App\Http\Controllers\CompanyController::class, 'index'])->name('companies.index');
-    Route::post('/companies', [\App\Http\Controllers\CompanyController::class, 'store'])->name('companies.store');
-    Route::patch('/companies/{company}', [\App\Http\Controllers\CompanyController::class, 'update'])->name('companies.update');
-    Route::delete('/companies/{company}', [\App\Http\Controllers\CompanyController::class, 'destroy'])->name('companies.destroy');
+    // Empresas: catalogo de configuracion, no pantalla de trabajo diario.
+    // El agente sigue asociando empresas desde la ficha del lead — ese
+    // desplegable se alimenta del LeadController, no de estas rutas.
+    Route::middleware('admin.only')->group(function () {
+        Route::get('/companies', [\App\Http\Controllers\CompanyController::class, 'index'])->name('companies.index');
+        Route::post('/companies', [\App\Http\Controllers\CompanyController::class, 'store'])->name('companies.store');
+        Route::patch('/companies/{company}', [\App\Http\Controllers\CompanyController::class, 'update'])->name('companies.update');
+        Route::delete('/companies/{company}', [\App\Http\Controllers\CompanyController::class, 'destroy'])->name('companies.destroy');
+    });
 
     // Digital Pipeline (automatizaciones por etapa)
     Route::get('/pipelines/{pipeline}/automations', [\App\Http\Controllers\StageAutomationController::class, 'index'])->name('pipelines.automations');
