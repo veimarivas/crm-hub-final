@@ -28,7 +28,9 @@ const navigation = [
     },
     {
         name: 'Leads',
-        pattern: 'leads.*',
+        // El mismo tablero responde en /leads y en /pipelines (alias para
+        // navegar igual que el wacrm): el item se marca activo en las dos.
+        pattern: ['leads.*', 'pipelines.index'],
         routeName: 'leads.index',
         icon: (
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -242,6 +244,10 @@ export default function AuthenticatedLayout({ header, children }) {
 
     const isActive = (pattern) => {
         if (pattern === 'dashboard') return url === '/dashboard';
+        // Un item puede responder a varias rutas (p. ej. el tablero, que vive
+        // en /leads y en /pipelines).
+        if (Array.isArray(pattern)) return pattern.some((p) => route().current(p));
+
         return route().current(pattern);
     };
 

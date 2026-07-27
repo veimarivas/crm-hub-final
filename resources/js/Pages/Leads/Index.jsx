@@ -352,9 +352,10 @@ function NewLeadModal({ open, onClose, pipeline, contacts, members }) {
     );
 }
 
-export default function Index({ pipelines, pipeline, leads, members, contacts, allTags = [], filters, segments = [], currency, slaMinutes = 30 }) {
+export default function Index({ pipelines, pipeline, leads, members, contacts, allTags = [], filters, segments = [], currency, slaMinutes = 30, isAdmin = false }) {
     const { flash, auth } = usePage().props;
-    const isAdmin = auth?.user?.account_role === 'owner' || auth?.user?.account_role === 'admin';
+    // `isAdmin` llega como prop del controlador: la fuente de verdad del rol
+    // es el servidor, que es el mismo que decide qué leads devuelve.
     const [showNew, setShowNew] = useState(false);
     const [dragOver, setDragOver] = useState(null);
     const [view, setView] = useState(() => localStorage.getItem('leads.view') || 'kanban');
@@ -525,11 +526,20 @@ export default function Index({ pipelines, pipeline, leads, members, contacts, a
                             className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:bg-white"
                         />
                     </div>
-                    <select value={filters?.responsible || ''} onChange={(e) => applyFilter({ responsible: e.target.value || null })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-emerald-500/30">
-                        <option value="">Todos los responsables</option>
-                        <option value="none">Sin asignar</option>
-                        {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                    </select>
+                    {/* Elegir asesor es del admin: el agente solo ve los suyos,
+                        asi que el desplegable no tendria nada que filtrar. */}
+                    {isAdmin ? (
+                        <select value={filters?.responsible || ''} onChange={(e) => applyFilter({ responsible: e.target.value || null })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-emerald-500/30">
+                            <option value="">Todos los responsables</option>
+                            <option value="none">Sin asignar</option>
+                            {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                    ) : (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                            Tus leads
+                        </span>
+                    )}
                     <select value={filters?.source || ''} onChange={(e) => applyFilter({ source: e.target.value || null })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-emerald-500/30">
                         <option value="">Todas las fuentes</option>
                         {Object.entries(SOURCE_META).map(([k, v]) => <option key={k} value={k}>{v.icon} {v.label}</option>)}

@@ -72,7 +72,13 @@ class RoleScopeTest extends TestCase
 
     private function makeLead(?User $responsible): Lead
     {
-        $contact = Contact::create(['account_id' => $this->account->id, 'name' => 'Ana', 'phone' => '59170000000']);
+        // Teléfono único: la cuenta tiene un índice por phone_normalized, así
+        // que dos leads en el mismo test chocarían.
+        $contact = Contact::create([
+            'account_id' => $this->account->id,
+            'name' => 'Ana',
+            'phone' => '5917'.random_int(1000000, 9999999),
+        ]);
 
         return Lead::create([
             'account_id' => $this->account->id,
@@ -133,6 +139,45 @@ class RoleScopeTest extends TestCase
         $this->actingAs($this->agente)->post(route('tasks.complete', $mia))->assertRedirect();
 
         $this->assertNotNull($mia->fresh()->completed_at);
+    }
+
+    // ---- Tablero de leads / pipelines ----
+
+    public function test_el_tablero_responde_en_leads_y_en_pipelines(): void
+    {
+        // El wacrm lo tiene en /pipelines; el alias deja navegar igual.
+        $this->actingAs($this->owner)->get(route('leads.index'))->assertOk();
+        $this->actingAs($this->owner)->get(route('pipelines.index'))->assertOk();
+    }
+
+    public function test_el_admin_puede_filtrar_el_tablero_por_asesor(): void
+    {
+        $mio = $this->makeLead($this->agente);
+        $this->makeLead($this->otro);
+
+        $props = $this->actingAs($this->owner)
+            ->get(route('pipelines.index', ['responsible' => $this->agente->id]))
+            ->viewData('page')['props'];
+
+        $this->assertTrue($props['isAdmin']);
+        $this->assertSame([$mio->id], collect($props['leads'])->pluck('id')->all());
+    }
+
+    public function test_el_agente_ve_solo_los_suyos_y_no_puede_espiar_con_el_filtro(): void
+    {
+        $mio = $this->makeLead($this->agente);
+        $this->makeLead($this->otro);
+
+        // ?responsible=<otro> es el filtro del admin. Para el agente se
+        // ignora: si se aplicara devolveria vacio, que se lee como "no hay
+        // leads" en vez de "eso no es tuyo".
+        $props = $this->actingAs($this->agente)
+            ->get(route('pipelines.index', ['responsible' => $this->otro->id]))
+            ->viewData('page')['props'];
+
+        $this->assertFalse($props['isAdmin']);
+        $this->assertNull($props['filters']['responsible']);
+        $this->assertSame([$mio->id], collect($props['leads'])->pluck('id')->all());
     }
 
     // ---- Empresas ----

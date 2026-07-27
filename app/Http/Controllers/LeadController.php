@@ -40,9 +40,15 @@ class LeadController extends Controller
         $user = $request->user();
         $isAdmin = $user->hasRoleAtLeast(User::ROLE_ADMIN);
 
-        // Filtros (persisten via query string)
+        // Filtros (persisten via query string).
+        //
+        // El filtro por responsable es del admin: elige a cualquier asesor o
+        // los ve a todos juntos. Para un agente no aplica —ya solo ve los
+        // suyos— y dejarlo pasar significaba que un ?responsible=<otro> le
+        // devolviera una lista vacia, que se lee como "no hay leads" y no
+        // como "eso no es tuyo".
         $filters = [
-            'responsible' => $request->query('responsible'),
+            'responsible' => $isAdmin ? $request->query('responsible') : null,
             'tag' => $request->query('tag'),
             'source' => $request->query('source'),
             'no_task' => (bool) $request->query('no_task'),
@@ -91,6 +97,7 @@ class LeadController extends Controller
             'segments' => $segments,
             'currency' => $request->user()->account->default_currency,
             'slaMinutes' => 30,
+            'isAdmin' => $isAdmin,
         ]);
     }
 

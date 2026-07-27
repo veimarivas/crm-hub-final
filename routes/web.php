@@ -42,6 +42,11 @@ Route::middleware('auth')->group(function () {
 
     // Leads (Kanban + ficha)
     Route::get('/leads', [\App\Http\Controllers\LeadController::class, 'index'])->name('leads.index');
+
+    // Alias: en el wacrm este mismo tablero vive en /pipelines. Se expone con
+    // la misma URL para que las dos apps se naveguen igual; /leads sigue
+    // funcionando para los links viejos.
+    Route::get('/pipelines', [\App\Http\Controllers\LeadController::class, 'index'])->name('pipelines.index');
     Route::get('/leads/export', [\App\Http\Controllers\LeadController::class, 'export'])->name('leads.export');
     Route::post('/leads', [\App\Http\Controllers\LeadController::class, 'store'])->name('leads.store');
     Route::post('/leads/bulk', [\App\Http\Controllers\LeadController::class, 'bulk'])->name('leads.bulk');
