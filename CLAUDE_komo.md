@@ -257,6 +257,16 @@ Detalles de implementación:
 - Se muestra en `/inbox` y `/leads` (badge compacto) y en la ficha del lead y del contacto (`ServiceWindowCard` con origen, cuenta regresiva, barra y fechas). En el wacrm, en el header del chat y en la lista de conversaciones.
 - Verde / ámbar (< 4 h) / rojo (cerrada). El rojo es el que importa: ahí escribir cuesta plata.
 
+## Provisión de miembros desde el wacrm (2026-07-27)
+
+`POST /api/v1/team/provision` (scope **`team:write`**, nuevo en `ApiKey::SCOPES`). Cierra el puente de usuarios, que era de ida solamente: Komo creaba el user en el wacrm al aceptar una invitación, pero un miembro dado de alta **allá** no existía acá — y acá es donde se asignan los contactos.
+
+Idempotente por email. **No pisa el password** si el usuario ya existe: si el miembro entró y lo cambió, una re-provisión no debe revertirlo. 409 si el email pertenece a otra cuenta.
+
+**Trampa operativa — las contraseñas no viajan hacia atrás.** Los miembros que llegan por `wacrm:sync-team-to-komo` (el backfill de los que ya existían) se crean con clave **aleatoria**: las del wacrm están hasheadas y no se pueden reenviar. Y el correo de producción sigue en driver `log`, así que el "olvidé mi contraseña" no llega. Para eso está `php artisan komo:set-password EMAIL [--password=]` — sin argumentos lista los miembros. **Los creados desde el modal "Crear miembro sin link" del wacrm sí comparten contraseña**, porque ahí se manda en claro en el momento del alta.
+
+Utilidades: `php artisan komo:api-key --list` (cuentas con su UUID) y `komo:api-key "wacrm" --account=UUID --scopes=team:write` para generar la key sin pasar por la UI — la clave en claro se muestra una sola vez.
+
 ## Pendiente (futuro, no bloquea)
 
 Email SMTP/IMAP (módulo grande; requiere credenciales reales), calendario visual de tareas, tiempo real con Reverb (hoy sin polling — Inertia recarga por navegación).
