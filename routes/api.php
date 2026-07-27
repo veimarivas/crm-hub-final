@@ -37,4 +37,10 @@ Route::prefix('v1')->middleware('throttle:public-api')->group(function () {
     // Notificaciones consolidadas del Komo Hub (Fase 5).
     Route::get('/notifications', [\App\Http\Controllers\Api\NotificationApiController::class, 'index'])
         ->middleware('api.key:notifications:read');
+
+    // Provisión de miembros desde el wacrm. Cierra el puente: antes la
+    // sincronización de usuarios era de ida solamente, así que un miembro
+    // creado allá no existía acá — y acá es donde se asignan los contactos.
+    Route::post('/team/provision', [\App\Http\Controllers\Api\TeamApiController::class, 'provision'])
+        ->middleware('api.key:team:write');
 });

@@ -20,7 +20,7 @@ class ApiKey extends Model
     public const UPDATED_AT = null;
 
     /** Scopes disponibles en la API pública del komo. */
-    public const SCOPES = ['leads:read', 'leads:write', 'contacts:read', 'notifications:read'];
+    public const SCOPES = ['leads:read', 'leads:write', 'contacts:read', 'notifications:read', 'team:write'];
 
     protected function casts(): array
     {
