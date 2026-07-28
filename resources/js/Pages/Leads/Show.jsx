@@ -1,6 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { completeTask } from '@/Components/CompleteTaskModal';
-import { ServiceWindowCard } from '@/Components/ServiceWindowBadge';
+import ServiceWindowBadge, { ServiceWindowCard } from '@/Components/ServiceWindowBadge';
 import Modal from '@/Components/Modal';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -386,7 +386,6 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
     const isAdmin = auth?.user?.account_role === 'owner' || auth?.user?.account_role === 'admin';
     const [tab, setTab] = useState('chat');
     const [newTag, setNewTag] = useState(null);
-    const [showLeadPanel, setShowLeadPanel] = useState(true);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const bottomRef = useRef(null);
 
@@ -507,17 +506,10 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" /></svg>
                         Volver a leads
                     </Link>
-                    <button
-                        type="button"
-                        onClick={() => setShowLeadPanel(!showLeadPanel)}
-                        title={showLeadPanel ? 'Ocultar panel' : 'Mostrar panel'}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${showLeadPanel ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-                    >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-                        </svg>
-                        {showLeadPanel ? 'Ocultar panel' : 'Mostrar panel'}
-                    </button>
+                    {/* La ventana de servicio queda siempre a la vista: decide
+                        si escribir ahora sale gratis, y eso no debería exigir
+                        cambiar de pestaña. */}
+                    <ServiceWindowBadge window={serviceWindow} showOrigin />
                 </div>
 
                 {/* Header pro: contacto + título + acciones destacadas */}
@@ -614,16 +606,13 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
 
                 {flash?.success && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700 shadow-sm">{flash.success}</div>}
 
-                {/* En pantallas anchas el panel se lleva una parte fija y el
-                    chat el resto: con `lg:grid-cols-3` el panel crecía tanto
-                    que las fichas quedaban con muchísimo aire desaprovechado. */}
-                <div className={`grid gap-5 lg:flex-1 lg:min-h-0 ${showLeadPanel ? 'lg:grid-cols-[22rem_minmax(0,1fr)] xl:grid-cols-[24rem_minmax(0,1fr)]' : 'lg:grid-cols-1'}`}>
-                    {/* Columna izquierda: datos del lead (colapsable).
-                        Scrollea por dentro, a la misma altura que el chat: si
-                        no, la página entera crece y hay que bajar hasta el
-                        final para llegar a las secciones de abajo. */}
-                    {showLeadPanel && (
-                    <div className="space-y-4 lg:overflow-y-auto lg:pr-1 lg:-mr-1 lg:min-h-0">
+                <div className="grid gap-5 lg:flex-1 lg:min-h-0 lg:grid-cols-1">
+                    {/* El contenido del panel vive ahora en la pestaña «Datos
+                        del lead»: se arma acá y se inyecta abajo, para que el
+                        chat se quede con todo el ancho y todo el alto. */}
+                    {(() => {
+                    const panelDatos = (
+                    <div className="space-y-4">
                         {/* Hero card del lead */}
                         {(() => {
                             const daysOpen = Math.max(0, Math.floor((new Date() - new Date(lead.created_at)) / 86400000));
@@ -926,26 +915,46 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                             )}
                         </form>
                     </div>
-                    )}
+                    );
 
-                    {/* Columna central+derecha: tabs (chat/tareas/notas/timeline) */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col lg:min-h-0 h-[70vh] lg:h-auto">
-                        <div className="flex border-b border-gray-100 bg-white">
+                    return (
+                    /* Panel único a pantalla completa. El chat manda —es donde
+                       se trabaja— y todo lo demás vive en pestañas, como en
+                       cualquier CRM de WhatsApp: nada de una columna lateral
+                       que le robe ancho al hilo. */
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col lg:min-h-0 h-[calc(100vh-11rem)] lg:h-auto">
+                        <div className="flex border-b border-gray-100 bg-white overflow-x-auto">
                             {[
                                 ['chat', '💬 Chat'],
-                                ['tasks', `Tareas (${pendingTasks.length})`],
-                                ['notes', `Notas (${notes.length})`],
-                                ['timeline', `Timeline (${events.length})`],
+                                ['datos', '📋 Datos del lead'],
+                                ['tasks', `✅ Tareas (${pendingTasks.length})`],
+                                ['notes', `📝 Notas (${notes.length})`],
+                                ['timeline', `🕑 Timeline (${events.length})`],
                             ].map(([key, label]) => (
                                 <button
                                     key={key}
                                     onClick={() => setTab(key)}
-                                    className={`px-5 py-3.5 text-sm font-semibold transition-all border-b-2 ${tab === key ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                                    className={`px-4 sm:px-5 py-3.5 text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
+                                        tab === key
+                                            ? 'border-emerald-500 text-emerald-700'
+                                            : 'border-transparent text-gray-400 hover:text-gray-600'
+                                    }`}
                                 >
                                     {label}
                                 </button>
                             ))}
                         </div>
+
+                        {tab === 'datos' && (
+                            <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5">
+                                {/* Dos columnas en pantallas anchas: el
+                                    contenido son fichas cortas y en una sola
+                                    columna obligaba a scrollear de más. */}
+                                <div className="mx-auto max-w-5xl xl:max-w-6xl [column-gap:1.25rem] xl:columns-2 [&>*]:break-inside-avoid">
+                                    {panelDatos}
+                                </div>
+                            </div>
+                        )}
 
                         {tab === 'chat' && (
                             <>
@@ -1213,6 +1222,8 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                             </div>
                         )}
                     </div>
+                    );
+                    })()}
                 </div>
             </div>
 
