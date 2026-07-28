@@ -2,6 +2,7 @@
 
 namespace App\Services\Wacrm;
 
+use App\Jobs\NotifyInboundOnTelegramJob;
 use App\Models\AppNotification;
 use App\Models\Contact;
 use App\Models\Integration;
@@ -287,7 +288,33 @@ class EventProcessor
             'ad_referral' => $referral !== null,
         ]);
 
+        // Aviso al teléfono del responsable: el equipo no vive con el CRM
+        // abierto, y este es el momento en que hay que entrar a seguirlo.
+        NotifyInboundOnTelegramJob::dispatch(
+            $lead->id,
+            $this->preview($data['message'] ?? []),
+        );
+
         $this->maybeSendOutOfHoursReply($integration, $lead, $contact);
+    }
+
+    /** Texto corto del entrante; los adjuntos se describen por su tipo. */
+    private function preview(array $message): string
+    {
+        $text = trim((string) ($message['text'] ?? ''));
+
+        if ($text === '') {
+            return match ($message['type'] ?? null) {
+                'audio' => '🎙 Te envió un audio',
+                'image' => '🖼️ Te envió una imagen',
+                'video' => '🎥 Te envió un video',
+                'document' => '📄 Te envió un documento',
+                'location' => '📍 Te envió una ubicación',
+                default => 'Te envió un mensaje',
+            };
+        }
+
+        return mb_strlen($text) > 300 ? mb_substr($text, 0, 300).'…' : $text;
     }
 
     /**

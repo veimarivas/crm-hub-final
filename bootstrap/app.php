@@ -27,6 +27,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // El webhook del wacrm se autentica por firma HMAC, no por sesión.
         $middleware->validateCsrfTokens(except: [
             'webhooks/wacrm/*',
+            // Telegram no maneja tokens CSRF; el secreto de la URL es lo que
+            // autentica la llamada.
+            'webhooks/telegram/*',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

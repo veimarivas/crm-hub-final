@@ -267,6 +267,31 @@ Idempotente por email. **No pisa el password** si el usuario ya existe: si el mi
 
 Utilidades: `php artisan komo:api-key --list` (cuentas con su UUID) y `komo:api-key "wacrm" --account=UUID --scopes=team:write` para generar la key sin pasar por la UI — la clave en claro se muestra una sola vez.
 
+## Avisos por Telegram (2026-07-27)
+
+Cuando entra un mensaje de WhatsApp, `EventProcessor@handleInboundMessage` despacha `NotifyInboundOnTelegramJob`, que le escribe al **responsable del lead** (owner si no tiene) a su Telegram. Existe porque el equipo no vive con el CRM abierto: el toast en pantalla solo sirve si estás adentro.
+
+Configuración en `.env` (sin `TELEGRAM_BOT_TOKEN` todo el módulo se abstiene en silencio):
+
+```
+TELEGRAM_BOT_TOKEN=123456:ABC...      # de @BotFather
+TELEGRAM_BOT_USERNAME=mi_crm_bot      # sin la @
+TELEGRAM_WEBHOOK_SECRET=algo-largo    # va en la URL del webhook
+```
+
+Después hay que registrar el webhook una vez:
+`https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://komo.tudominio.com/webhooks/telegram/<SECRET>`
+
+**Vinculación sin pedirle a nadie su "chat id"**: el usuario toca «Conectar Telegram» en su perfil → se genera un `telegram_link_token` de un solo uso → se abre `t.me/<bot>?start=<token>` → Telegram manda `/start <token>` al webhook → se canjea por el `chat_id` y el token se borra. **El token es lo que impide que alguien que conozca el bot se ate a la cuenta de otro**; sin él el webhook no vincula nada. La URL del webhook lleva el secreto porque Telegram no manda cabeceras propias.
+
+Detalles que importan:
+
+- **Throttle de 5 min por lead y destinatario.** Un contacto manda varios mensajes seguidos; sin freno serían tres notificaciones en el teléfono y el bot terminaría silenciado, que es peor que no tenerlo.
+- **Si Telegram rechaza el envío se desvincula al usuario** (`telegram_chat_id = null`). El caso típico es que bloqueó el bot: sin esto se reintentaría en cada mensaje para siempre.
+- `parse_mode` es HTML y no Markdown: los nombres de contacto traen guiones bajos y asteriscos que rompen el parseo de Markdown. El texto del contacto se escapa con `Client::escape()`.
+- El mensaje trae un botón inline directo a la ficha del lead.
+- Tests en `TelegramNotifyTest` (10).
+
 ## Pendiente (futuro, no bloquea)
 
 Email SMTP/IMAP (módulo grande; requiere credenciales reales), calendario visual de tareas, tiempo real con Reverb (hoy sin polling — Inertia recarga por navegación).

@@ -43,4 +43,21 @@ return [
         'provision_secret' => env('HUB_PROVISION_SECRET'),
     ],
 
+    /*
+     * Bot de Telegram para avisarle al responsable que le escribió un
+     * contacto, aunque no tenga el CRM abierto.
+     *
+     *   TELEGRAM_BOT_TOKEN=123456:ABC...      (de @BotFather)
+     *   TELEGRAM_BOT_USERNAME=mi_crm_bot      (sin la @)
+     *   TELEGRAM_WEBHOOK_SECRET=algo-largo    (va en la URL del webhook)
+     *
+     * Sin token el módulo se abstiene en silencio: no manda avisos y no
+     * rompe nada.
+     */
+    'telegram' => [
+        'bot_token' => env('TELEGRAM_BOT_TOKEN'),
+        'bot_username' => env('TELEGRAM_BOT_USERNAME'),
+        'webhook_secret' => env('TELEGRAM_WEBHOOK_SECRET'),
+    ],
+
 ];

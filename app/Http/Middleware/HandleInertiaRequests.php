@@ -40,6 +40,8 @@ class HandleInertiaRequests extends Middleware
             ],
             'flash' => [
                 'success' => $request->session()->get('success'),
+                // Enlace de un solo uso al bot de Telegram (ver TelegramController).
+                'telegram_link' => $request->session()->get('telegram_link'),
             ],
             'unreadNotifications' => $request->user()
                 ? AppNotification::where('user_id', $request->user()->id)->delivered()->whereNull('read_at')->count()
