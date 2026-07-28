@@ -300,7 +300,40 @@ Detalles que importan:
 
 **Komo no rastrea presencia** (eso existe solo en el wacrm, `MemberPresence`), así que los avisos no se condicionan a «si el usuario no está conectado». Es a propósito: tener la pestaña abierta no significa estar mirando, y el throttle ya evita el spam.
 
+**Los avisos NO se pueden mandar a un número de teléfono.** Es una restricción de Telegram, no una decisión de diseño: un bot solo puede escribirle a quien lo inició primero. Por eso la vinculación desde el perfil es obligatoria para cada persona, y `Settings/Team` muestra un badge «Telegram conectado / Sin Telegram` por miembro, para que el admin sepa a quién reclamarle.
+
 - Tests en `TelegramNotifyTest` (13).
+
+## Despliegue en producción
+
+**Los dos proyectos viven juntos en el mismo VPS Ubuntu y casi siempre se despliegan de a pares** — comparten integración por API y webhooks, así que un cambio en uno suele necesitar el otro.
+
+| Proyecto | Ruta en el servidor | Dominio |
+|---|---|---|
+| Komo (este) | `/var/www/crm-komo` | `komo.posgradosinnovaciencia.com` |
+| wacrm | `/var/www/crm-whatsapp` | `crm-whatsapp.posgradosinnovaciencia.com` |
+
+Secuencia completa (omitir `migrate` si el cambio no trae migración, y `npm ci && npm run build` si no tocó `resources/js`):
+
+```bash
+cd /var/www/crm-komo && git pull origin main && npm ci && npm run build && php artisan migrate --force && php artisan optimize:clear
+cd /var/www/crm-whatsapp && git pull origin main && npm ci && npm run build && php artisan migrate --force && php artisan optimize:clear
+```
+
+Y reiniciar los workers si el cambio toca jobs (Telegram, espejo de asignaciones, IA, broadcasts):
+
+```bash
+sudo systemctl restart crm-whatsapp-queue.service
+sudo systemctl restart crm-komo-queue.service
+```
+
+**Trampas conocidas al desplegar:**
+
+- **`npm run build` no es opcional** cuando cambió el front: `git pull` trae el fuente, pero el bundle se genera en el build. Sin él el navegador sigue sirviendo el JS viejo y "no pasó nada".
+- **`/public/build` está en `.gitignore`** en los dos proyectos — por eso el build va en el servidor.
+- **Los jobs en cola no salen sin worker.** Si un aviso no llega, lo primero es `systemctl status` del worker de esa app, no revisar el código.
+- **`php artisan config:clear`** después de tocar el `.env`: la config cacheada no se entera sola.
+- Al pasar comandos con credenciales, **no dejar marcadores tipo `PEGA_AQUI`** en una línea ejecutable: ya pasó que se copiaron literales al `.env` y la integración fallaba con "Invalid API key".
 
 ## Pendiente (futuro, no bloquea)
 

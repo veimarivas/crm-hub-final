@@ -15,7 +15,7 @@ const SCOPE_LABELS = {
     'contacts:read': 'Leer contactos',
 };
 
-export default function Team({ members, invitations, apiKeys = [], apiScopes = [], isAdmin, isOwner, newInviteUrl, newApiKey, autoAssignLeads = false }) {
+export default function Team({ members, invitations, apiKeys = [], apiScopes = [], isAdmin, isOwner, newInviteUrl, newApiKey, autoAssignLeads = false, telegramBotConfigured = false }) {
     const { flash, errors, auth } = usePage().props;
     const [copied, setCopied] = useState(false);
     const [copiedKey, setCopiedKey] = useState(false);
@@ -129,6 +129,18 @@ export default function Team({ members, invitations, apiKeys = [], apiScopes = [
                                                 {member.id === auth.user.id && <span className="ml-2 text-xs text-gray-400 font-normal">(tú)</span>}
                                             </p>
                                             <p className="text-xs text-gray-500">{member.email}</p>
+                                            {/* El bot no puede escribirle a quien no lo inició:
+                                                el admin necesita ver a quién reclamarle que se
+                                                vincule, o los avisos no le llegan nunca. */}
+                                            {telegramBotConfigured && (
+                                                <span className={`inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold ring-1 ${
+                                                    member.telegram_chat_id
+                                                        ? 'bg-sky-50 text-sky-700 ring-sky-200'
+                                                        : 'bg-gray-100 text-gray-500 ring-gray-200'
+                                                }`}>
+                                                    {member.telegram_chat_id ? '✈️ Telegram conectado' : '✈️ Sin Telegram'}
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-3">
