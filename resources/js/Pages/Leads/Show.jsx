@@ -499,7 +499,9 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                 arriba, columnas que scrollean por dentro. Con alturas en rem
                 calculadas a ojo el encabezado siempre terminaba desbordando y
                 la página entera se volvía scrolleable. */}
-            <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex flex-col gap-4 lg:h-full lg:min-h-0">
+            {/* Padding y separaciones al mínimo: cada rem que se lleva el
+                encabezado se lo saca al chat, que es donde se trabaja. */}
+            <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8 py-3 flex flex-col gap-3 lg:h-full lg:min-h-0">
                 {/* Barra superior: back + toggle panel */}
                 <div className="flex items-center justify-between gap-3 shrink-0">
                     <Link href={route('leads.index')} className="text-sm text-emerald-600 hover:text-emerald-700 font-medium inline-flex items-center gap-1">
@@ -515,8 +517,8 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                 {/* Header pro: contacto + título + acciones destacadas */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden shrink-0">
                     <div className={`h-1.5 ${lead.status === 'won' ? 'bg-gradient-to-r from-emerald-500 to-teal-600' : lead.status === 'lost' ? 'bg-gradient-to-r from-red-400 to-rose-500' : 'bg-gradient-to-r from-sky-500 to-blue-600'}`} />
-                    <div className="p-5 sm:p-6">
-                        <div className="flex flex-col lg:flex-row lg:items-start gap-5">
+                    <div className="p-4 sm:p-5">
+                        <div className="flex flex-col lg:flex-row lg:items-center gap-4">
                             {/* Avatar + info del contacto */}
                             <div className="flex items-center gap-4 min-w-0 flex-1">
                                 <Avatar name={contactName} size="lg" />
@@ -566,7 +568,7 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                         </div>
 
                         {/* Stage stepper visual — reemplaza el dropdown por breadcrumb clickeable */}
-                        <div className="mt-5 pt-5 border-t border-gray-100">
+                        <div className="mt-3 pt-3 border-t border-gray-100">
                             <div className="flex items-center gap-1 overflow-x-auto pb-1">
                                 {stages.filter((s) => s.stage_type === 'open').map((s, idx, arr) => {
                                     const isCurrent = s.id === lead.stage_id;
@@ -606,11 +608,11 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
 
                 {flash?.success && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700 shadow-sm">{flash.success}</div>}
 
-                <div className="grid gap-5 lg:flex-1 lg:min-h-0 lg:grid-cols-1">
-                    {/* El contenido del panel vive ahora en la pestaña «Datos
-                        del lead»: se arma acá y se inyecta abajo, para que el
-                        chat se quede con todo el ancho y todo el alto. */}
-                    {(() => {
+                {/* Sin grilla: con una sola tarjeta, la fila del grid se
+                    dimensionaba por su contenido y la tarjeta desbordaba —
+                    por eso al abrir Timeline la barra de pestañas se iba de
+                    pantalla. Como hijo flex directo sí toma el alto restante. */}
+                {(() => {
                     const panelDatos = (
                     <div className="space-y-4">
                         {/* Hero card del lead */}
@@ -922,7 +924,7 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                        se trabaja— y todo lo demás vive en pestañas, como en
                        cualquier CRM de WhatsApp: nada de una columna lateral
                        que le robe ancho al hilo. */
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col lg:min-h-0 h-[calc(100vh-11rem)] lg:h-auto">
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col lg:flex-1 lg:min-h-0 h-[calc(100vh-13rem)] lg:h-auto">
                         <div className="flex border-b border-gray-100 bg-white overflow-x-auto">
                             {[
                                 ['chat', '💬 Chat'],
@@ -1134,7 +1136,7 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                         )}
 
                         {tab === 'tasks' && (
-                            <div className="p-5 space-y-4 overflow-y-auto">
+                            <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
                                 <form
                                     onSubmit={(e) => { e.preventDefault(); taskForm.post(route('tasks.store'), { preserveScroll: true, onSuccess: () => taskForm.reset('text', 'due_at') }); }}
                                     className="rounded-xl bg-gray-50 border border-gray-100 p-4 space-y-3"
@@ -1193,7 +1195,7 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                         )}
 
                         {tab === 'notes' && (
-                            <div className="p-5 space-y-4 overflow-y-auto">
+                            <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
                                 <form
                                     onSubmit={(e) => { e.preventDefault(); noteForm.post(route('leads.notes.add', lead.id), { preserveScroll: true, onSuccess: () => noteForm.reset() }); }}
                                     className="flex gap-2"
@@ -1216,7 +1218,7 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                         )}
 
                         {tab === 'timeline' && (
-                            <div className="p-5 space-y-4 overflow-y-auto">
+                            <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
                                 {events.map((event) => <TimelineEvent key={event.id} event={event} />)}
                                 {events.length === 0 && <p className="py-8 text-center text-sm text-gray-400">Sin actividad todavía</p>}
                             </div>
@@ -1224,7 +1226,6 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                     </div>
                     );
                     })()}
-                </div>
             </div>
 
             <DeleteLeadModal
