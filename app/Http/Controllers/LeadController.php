@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Jobs\NotifyAssignmentOnTelegramJob;
 use App\Jobs\SyncLeadAssignmentToWacrmJob;
 use App\Models\AppNotification;
 use App\Models\Company;
@@ -159,7 +158,6 @@ class LeadController extends Controller
                             $accountId, $newResp, 'lead_assigned',
                             "Lead reasignado: {$lead->title}", null, $lead->id, $user->id,
                         );
-                        NotifyAssignmentOnTelegramJob::dispatch($lead->id, $newResp, $user->id);
                         // Mismo espejo que en el update individual: la
                         // conversacion del wacrm sigue al nuevo responsable.
                         SyncLeadAssignmentToWacrmJob::dispatch($lead->id);
@@ -356,8 +354,6 @@ class LeadController extends Controller
             $request->user()->id,
         );
 
-        NotifyAssignmentOnTelegramJob::dispatch($lead->id, $lead->responsible_user_id, $request->user()->id);
-
         return redirect()->route('leads.show', $lead)->with('success', 'Lead creado.');
     }
 
@@ -440,8 +436,6 @@ class LeadController extends Controller
                     $lead->id,
                     $request->user()->id,
                 );
-
-                NotifyAssignmentOnTelegramJob::dispatch($lead->id, $lead->responsible_user_id, $request->user()->id);
             }
 
             // Espeja la asignación en el wacrm: la conversación pasa al

@@ -1,13 +1,10 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head, usePage } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import DeleteUserForm from './Partials/DeleteUserForm';
-import TelegramForm from './Partials/TelegramForm';
 import UpdatePasswordForm from './Partials/UpdatePasswordForm';
 import UpdateProfileInformationForm from './Partials/UpdateProfileInformationForm';
 
-export default function Edit({ mustVerifyEmail, status, telegramBotConfigured }) {
-    const user = usePage().props.auth.user;
-
+export default function Edit({ mustVerifyEmail, status }) {
     return (
         <AuthenticatedLayout
             header={
@@ -28,10 +25,6 @@ export default function Edit({ mustVerifyEmail, status, telegramBotConfigured })
                     mustVerifyEmail={mustVerifyEmail}
                     status={status}
                 />
-
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6">
-                    <TelegramForm user={user} botConfigured={telegramBotConfigured} />
-                </div>
 
                 <UpdatePasswordForm />
 

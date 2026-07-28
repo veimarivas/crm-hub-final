@@ -27,13 +27,9 @@ class TeamController extends Controller
         $user = $request->user();
 
         return Inertia::render('Settings/Team', [
-            // `telegram_chat_id` viaja para saber quién falta vincular: el bot
-            // no puede escribirle a alguien que no lo inició, así que el admin
-            // necesita ver a quién reclamarle.
             'members' => User::where('account_id', $user->account_id)
                 ->orderBy('created_at')
-                ->get(['id', 'name', 'email', 'account_role', 'created_at', 'telegram_chat_id']),
-            'telegramBotConfigured' => (bool) config('services.telegram.bot_token'),
+                ->get(['id', 'name', 'email', 'account_role', 'created_at']),
             'invitations' => AccountInvitation::forAccount($user->account_id)
                 ->whereNull('accepted_at')
                 ->where('expires_at', '>', now())

@@ -12,19 +12,16 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[Fillable(['name', 'email', 'phone', 'password', 'avatar_url', 'account_id', 'account_role', 'booking_enabled', 'booking_slug', 'booking_duration_min', 'telegram_chat_id', 'telegram_link_token', 'telegram_linked_at'])]
-#[Hidden(['password', 'remember_token', 'telegram_link_token'])]
+#[Fillable(['name', 'email', 'phone', 'password', 'avatar_url', 'account_id', 'account_role', 'booking_enabled', 'booking_slug', 'booking_duration_min'])]
+#[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasUuids, Notifiable;
 
     public const ROLE_OWNER = 'owner';
-
     public const ROLE_ADMIN = 'admin';
-
     public const ROLE_AGENT = 'agent';
-
     public const ROLE_VIEWER = 'viewer';
 
     protected function casts(): array

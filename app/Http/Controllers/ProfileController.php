@@ -21,10 +21,6 @@ class ProfileController extends Controller
         return Inertia::render('Profile/Edit', [
             'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
             'status' => session('status'),
-            // Sin bot configurado en el servidor no tiene sentido ofrecer la
-            // vinculación: se explica en pantalla en vez de fallar al tocarla.
-            'telegramBotConfigured' => (bool) config('services.telegram.bot_token')
-                && (bool) config('services.telegram.bot_username'),
         ]);
     }
 
