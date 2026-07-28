@@ -495,17 +495,19 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
         <AuthenticatedLayout>
             <Head title={lead.title} />
 
-            {/* La ficha ocupa el alto disponible y reparte: encabezado fijo
-                arriba, columnas que scrollean por dentro. Con alturas en rem
-                calculadas a ojo el encabezado siempre terminaba desbordando y
-                la página entera se volvía scrolleable. */}
-            {/* Padding y separaciones al mínimo: cada rem que se lleva el
-                encabezado se lo saca al chat, que es donde se trabaja. */}
-            {/* `min-h-full` y no `h-full`: normalmente entra en pantalla, pero
-                en monitores bajos el panel conserva su mínimo legible y la
-                página scrollea un poco en vez de aplastar el historial. */}
+            {/*
+              La ficha reparte el alto disponible: encabezado arriba y panel de
+              pestañas abajo, que scrollea por dentro.
+
+              `min-h-full` y no `h-full`: normalmente entra en pantalla, pero en
+              monitores bajos el panel conserva su mínimo legible y la página
+              scrollea un poco, en vez de aplastar el historial del chat.
+
+              Padding y separaciones al mínimo: cada rem que se lleva el
+              encabezado se lo saca al chat, que es donde se trabaja.
+            */}
             <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8 py-3 flex flex-col gap-3 lg:min-h-full">
-                {/* Barra superior: back + toggle panel */}
+                {/* Barra superior: volver + ventana de servicio */}
                 <div className="flex items-center justify-between gap-3 shrink-0">
                     <Link href={route('leads.index')} className="text-sm text-emerald-600 hover:text-emerald-700 font-medium inline-flex items-center gap-1">
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" /></svg>
@@ -517,8 +519,11 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                     <ServiceWindowBadge window={serviceWindow} showOrigin />
                 </div>
 
-                {/* Header pro: contacto + título + acciones destacadas */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden shrink-0">
+                {/* Header pro: contacto + título + acciones destacadas.
+                    Sticky: cuando el panel supera el alto de pantalla y la
+                    página scrollea, el nombre y la etapa tienen que seguir a
+                    la vista — son la referencia de dónde estás parado. */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden shrink-0 sticky top-0 z-20">
                     <div className={`h-1.5 ${lead.status === 'won' ? 'bg-gradient-to-r from-emerald-500 to-teal-600' : lead.status === 'lost' ? 'bg-gradient-to-r from-red-400 to-rose-500' : 'bg-gradient-to-r from-sky-500 to-blue-600'}`} />
                     <div className="px-4 sm:px-5 py-3">
                         <div className="flex flex-col lg:flex-row lg:items-center gap-4">
