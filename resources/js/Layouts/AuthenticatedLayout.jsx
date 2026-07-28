@@ -1,4 +1,5 @@
 import Dropdown from '@/Components/Dropdown';
+import LiveInbound from '@/Components/LiveInbound';
 import CompleteTaskModal from '@/Components/CompleteTaskModal';
 import UndoToast from '@/Components/UndoToast';
 import { Link, usePage } from '@inertiajs/react';
@@ -454,6 +455,10 @@ export default function AuthenticatedLayout({ header, children }) {
                     <main className="flex-1 overflow-y-auto bg-gray-50">{children}</main>
                 </div>
             </div>
+            {/* Aviso en vivo de mensajes entrantes desde cualquier pantalla.
+                En el Inbox se desactiva: ahí ya se ven llegar con el polling
+                propio de la bandeja. */}
+            <LiveInbound enabled={!isActive('inbox')} />
             <UndoToast />
             <CompleteTaskModal />
         </div>

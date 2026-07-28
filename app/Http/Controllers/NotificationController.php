@@ -3,16 +3,95 @@
 namespace App\Http\Controllers;
 
 use App\Models\AppNotification;
+use App\Models\Lead;
+use App\Models\LeadEvent;
+use App\Models\User;
 use App\Services\WhatsApp\ServiceWindow;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class NotificationController extends Controller
 {
     private const TABS = ['all', 'unread', 'read'];
+
+    /**
+     * Mensajes entrantes nuevos desde `since`, para el aviso en vivo que corre
+     * en TODA la app (no solo en el Inbox).
+     *
+     * Va por polling y no por websocket: no hay Reverb en el servidor, así que
+     * un canal de Echo no llegaría nunca. Esto funciona con la infraestructura
+     * que hay.
+     *
+     * Respeta el rol: el agente solo se entera de SUS leads.
+     */
+    public function recentInbound(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $since = $request->query('since')
+            ? Carbon::parse($request->query('since'))
+            : now()->subMinute();
+
+        // Tope defensivo: un `since` viejo (pestaña dormida días) traería una
+        // avalancha de toasts. Se muestra lo reciente y nada más.
+        if ($since->lt(now()->subHour())) {
+            $since = now()->subHour();
+        }
+
+        $isAdmin = $user->hasRoleAtLeast(User::ROLE_ADMIN);
+
+        $leads = Lead::forAccount($user->account_id)
+            ->when(! $isAdmin, fn ($q) => $q->where('responsible_user_id', $user->id))
+            ->pluck('id');
+
+        $events = LeadEvent::whereIn('lead_id', $leads)
+            ->where('event_type', 'message_in')
+            ->where('created_at', '>', $since)
+            ->with('lead:id,title,contact_id')
+            ->with('lead.contact:id,name,phone')
+            ->orderByDesc('created_at')
+            ->limit(8)
+            ->get(['id', 'lead_id', 'payload', 'created_at']);
+
+        return response()->json([
+            // El reloj lo manda el servidor: si el del navegador está corrido,
+            // un `since` calculado en el cliente se saltearía mensajes.
+            'now' => now()->toIso8601String(),
+            'messages' => $events->map(fn (LeadEvent $e) => [
+                'id' => $e->id,
+                'lead_id' => $e->lead_id,
+                'contact' => $e->lead?->contact?->name
+                    ?: $e->lead?->contact?->phone
+                    ?: ($e->lead?->title ?: 'Contacto'),
+                'preview' => $this->preview($e->payload ?? []),
+                'at' => $e->created_at->toIso8601String(),
+            ])->values(),
+        ]);
+    }
+
+    /** Texto corto del mensaje; los adjuntos se describen por su tipo. */
+    private function preview(array $payload): string
+    {
+        $text = trim((string) ($payload['text'] ?? $payload['transcript'] ?? ''));
+
+        if ($text === '') {
+            return match ($payload['type'] ?? null) {
+                'audio' => '🎙 Audio',
+                'image' => '🖼️ Imagen',
+                'video' => '🎥 Video',
+                'document' => '📄 Documento',
+                'location' => '📍 Ubicación',
+                default => 'Mensaje nuevo',
+            };
+        }
+
+        return mb_strlen($text) > 120 ? mb_substr($text, 0, 120).'…' : $text;
+    }
 
     public function index(Request $request): Response
     {
