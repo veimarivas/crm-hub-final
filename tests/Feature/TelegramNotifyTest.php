@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\NotifyAssignmentOnTelegramJob;
 use App\Jobs\NotifyInboundOnTelegramJob;
 use App\Models\Account;
 use App\Models\Contact;
@@ -158,6 +159,45 @@ class TelegramNotifyTest extends TestCase
         $lead = $this->makeLead($this->agente);
 
         (new NotifyInboundOnTelegramJob($lead->id, 'Hola'))->handle();
+
+        Http::assertNothingSent();
+    }
+
+    // ---- Aviso al asignar ----
+
+    public function test_el_reparto_automatico_avisa_que_le_toco(): void
+    {
+        $this->fakeTelegram();
+        $lead = $this->makeLead($this->agente);
+
+        (new NotifyAssignmentOnTelegramJob($lead->id, $this->agente->id))->handle();
+
+        Http::assertSent(function ($request) {
+            return str_contains($request['text'], 'Nuevo contacto asignado')
+                && str_contains($request['text'], 'reparto autom')
+                && str_contains($request['text'], 'Ana Pérez');
+        });
+    }
+
+    public function test_la_asignacion_manual_dice_quien_la_hizo(): void
+    {
+        $this->fakeTelegram();
+        $lead = $this->makeLead($this->agente);
+
+        (new NotifyAssignmentOnTelegramJob($lead->id, $this->agente->id, $this->owner->id))->handle();
+
+        // Saber que hay una intención detrás cambia la urgencia con que se
+        // atiende: no es lo mismo que te lo derive el admin.
+        Http::assertSent(fn ($r) => str_contains($r['text'], 'Te lo asignó')
+            && str_contains($r['text'], 'Admin'));
+    }
+
+    public function test_no_avisa_al_que_se_asigna_a_si_mismo(): void
+    {
+        $this->fakeTelegram();
+        $lead = $this->makeLead($this->agente);
+
+        (new NotifyAssignmentOnTelegramJob($lead->id, $this->agente->id, $this->agente->id))->handle();
 
         Http::assertNothingSent();
     }

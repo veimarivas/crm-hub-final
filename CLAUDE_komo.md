@@ -290,7 +290,17 @@ Detalles que importan:
 - **Si Telegram rechaza el envío se desvincula al usuario** (`telegram_chat_id = null`). El caso típico es que bloqueó el bot: sin esto se reintentaría en cada mensaje para siempre.
 - `parse_mode` es HTML y no Markdown: los nombres de contacto traen guiones bajos y asteriscos que rompen el parseo de Markdown. El texto del contacto se escapa con `Client::escape()`.
 - El mensaje trae un botón inline directo a la ficha del lead.
-- Tests en `TelegramNotifyTest` (10).
+
+**Dos avisos distintos**, no uno:
+
+1. `NotifyInboundOnTelegramJob` — el contacto escribió. Con throttle.
+2. `NotifyAssignmentOnTelegramJob` — se le asignó un contacto. Se dispara en los **cuatro** puntos donde cambia el responsable: round-robin (`Lead::booted`), alta manual, edición de la ficha y asignación masiva. **Distingue el origen**: sin `assignedBy` = reparto automático; con él = «Te lo asignó Fulano». No es lo mismo que te derive el admin (hay una intención detrás) que que te toque por reparto, y eso cambia la urgencia con que se atiende. No se avisa a quien se asigna un lead a sí mismo.
+
+**Decisión tomada**: el envío vive en código y no en n8n, aunque n8n esté instalado en el servidor. Lo que decide a quién avisar (responsable, `chat_id`, throttle) está en la base; moverlo a n8n sería reconstruirlo por API, y dejaría los avisos dependiendo de que n8n esté levantado. La vinculación usuario ↔ Telegram no puede salir de la app en ningún caso: escribe en `users` y valida el token. Si más adelante hace falta derivar a más canales, el camino es que Komo emita un webhook y n8n lo consuma — se agrega sin tocar nada de esto.
+
+**Komo no rastrea presencia** (eso existe solo en el wacrm, `MemberPresence`), así que los avisos no se condicionan a «si el usuario no está conectado». Es a propósito: tener la pestaña abierta no significa estar mirando, y el throttle ya evita el spam.
+
+- Tests en `TelegramNotifyTest` (13).
 
 ## Pendiente (futuro, no bloquea)
 

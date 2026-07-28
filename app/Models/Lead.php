@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use App\Jobs\NotifyAssignmentOnTelegramJob;
 use App\Jobs\RunStageAutomationsJob;
 use App\Jobs\SyncLeadAssignmentToWacrmJob;
 use App\Models\Concerns\BelongsToAccount;
+use App\Models\Concerns\HasCustomFields;
 use App\Services\LeadAssignment\RoundRobin;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -26,7 +28,7 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
 ])]
 class Lead extends Model
 {
-    use \App\Models\Concerns\HasCustomFields, BelongsToAccount, HasUuids;
+    use BelongsToAccount, HasCustomFields, HasUuids;
 
     public const STATUS_OPEN = 'open';
 
@@ -112,6 +114,10 @@ class Lead extends Model
                     null,
                     $lead->id,
                 );
+
+                // Al teléfono: con el reparto automático nadie le avisa que
+                // le cayó trabajo. Sin `assignedBy` = fue el round-robin.
+                NotifyAssignmentOnTelegramJob::dispatch($lead->id, $assignee->id);
 
                 // Espeja la asignacion en el wacrm: sin esto la conversacion
                 // se queda "Sin asignar" en el Inbox aunque el lead ya tenga
