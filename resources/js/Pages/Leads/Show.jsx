@@ -496,9 +496,13 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
         <AuthenticatedLayout>
             <Head title={lead.title} />
 
-            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+            {/* La ficha ocupa el alto disponible y reparte: encabezado fijo
+                arriba, columnas que scrollean por dentro. Con alturas en rem
+                calculadas a ojo el encabezado siempre terminaba desbordando y
+                la página entera se volvía scrolleable. */}
+            <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex flex-col gap-4 lg:h-full lg:min-h-0">
                 {/* Barra superior: back + toggle panel */}
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center justify-between gap-3 shrink-0">
                     <Link href={route('leads.index')} className="text-sm text-emerald-600 hover:text-emerald-700 font-medium inline-flex items-center gap-1">
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" /></svg>
                         Volver a leads
@@ -517,7 +521,7 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                 </div>
 
                 {/* Header pro: contacto + título + acciones destacadas */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden shrink-0">
                     <div className={`h-1.5 ${lead.status === 'won' ? 'bg-gradient-to-r from-emerald-500 to-teal-600' : lead.status === 'lost' ? 'bg-gradient-to-r from-red-400 to-rose-500' : 'bg-gradient-to-r from-sky-500 to-blue-600'}`} />
                     <div className="p-5 sm:p-6">
                         <div className="flex flex-col lg:flex-row lg:items-start gap-5">
@@ -610,10 +614,16 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
 
                 {flash?.success && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700 shadow-sm">{flash.success}</div>}
 
-                <div className={`grid gap-6 ${showLeadPanel ? 'lg:grid-cols-3' : 'lg:grid-cols-1'}`}>
-                    {/* Columna izquierda: datos del lead (colapsable) */}
+                {/* En pantallas anchas el panel se lleva una parte fija y el
+                    chat el resto: con `lg:grid-cols-3` el panel crecía tanto
+                    que las fichas quedaban con muchísimo aire desaprovechado. */}
+                <div className={`grid gap-5 lg:flex-1 lg:min-h-0 ${showLeadPanel ? 'lg:grid-cols-[22rem_minmax(0,1fr)] xl:grid-cols-[24rem_minmax(0,1fr)]' : 'lg:grid-cols-1'}`}>
+                    {/* Columna izquierda: datos del lead (colapsable).
+                        Scrollea por dentro, a la misma altura que el chat: si
+                        no, la página entera crece y hay que bajar hasta el
+                        final para llegar a las secciones de abajo. */}
                     {showLeadPanel && (
-                    <div className="space-y-5">
+                    <div className="space-y-4 lg:overflow-y-auto lg:pr-1 lg:-mr-1 lg:min-h-0">
                         {/* Hero card del lead */}
                         {(() => {
                             const daysOpen = Math.max(0, Math.floor((new Date() - new Date(lead.created_at)) / 86400000));
@@ -765,7 +775,7 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                             </details>
 
                             {/* Sección: Vinculado con */}
-                            <details open className="group border-t border-gray-100">
+                            <details className="group border-t border-gray-100">
                                 <summary className="px-5 py-3.5 cursor-pointer list-none flex items-center justify-between hover:bg-gray-50 transition-colors">
                                     <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
                                         <span className="w-1 h-4 bg-emerald-500 rounded-full" />
@@ -798,7 +808,7 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
 
                             {/* Sección: Custom fields */}
                             {customFields.length > 0 && (
-                                <details open className="group border-t border-gray-100">
+                                <details className="group border-t border-gray-100">
                                     <summary className="px-5 py-3.5 cursor-pointer list-none flex items-center justify-between hover:bg-gray-50 transition-colors">
                                         <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
                                             <span className="w-1 h-4 bg-purple-500 rounded-full" />
@@ -835,7 +845,7 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                             )}
 
                             {/* Sección: Etiquetas */}
-                            <details open className="group border-t border-gray-100">
+                            <details className="group border-t border-gray-100">
                                 <summary className="px-5 py-3.5 cursor-pointer list-none flex items-center justify-between hover:bg-gray-50 transition-colors">
                                     <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
                                         <span className="w-1 h-4 bg-amber-500 rounded-full" />
@@ -919,7 +929,7 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                     )}
 
                     {/* Columna central+derecha: tabs (chat/tareas/notas/timeline) */}
-                    <div className={`${showLeadPanel ? 'lg:col-span-2' : ''} bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col`} style={{ height: 'calc(100vh - 12rem)', maxHeight: '900px' }}>
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col lg:min-h-0 h-[70vh] lg:h-auto">
                         <div className="flex border-b border-gray-100 bg-white">
                             {[
                                 ['chat', '💬 Chat'],
