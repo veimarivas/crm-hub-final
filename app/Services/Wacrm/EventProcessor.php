@@ -34,6 +34,7 @@ class EventProcessor
             'message.transcribed' => $this->handleTranscribed($integration, $data),
             'ai.pending_changed' => $this->handleAiPending($integration, $data),
             'ai.unavailable' => $this->handleAiUnavailable($integration, $data),
+            'ai.resumed' => $this->handleAiResumed($integration, $data),
             default => null, // eventos que no nos interesan se ignoran
         };
     }
@@ -81,6 +82,12 @@ class EventProcessor
             return;
         }
 
+        // Espeja la pausa para poder mostrar el mismo aviso en el chat: sin
+        // esto, acá la IA simplemente dejaba de contestar sin explicación.
+        if ($data['paused_until'] ?? null) {
+            $lead->update(['ai_paused_until' => $data['paused_until']]);
+        }
+
         AppNotification::notify(
             $integration->account_id,
             $lead->responsible_user_id ?? $integration->account->owner_user_id,
@@ -89,6 +96,24 @@ class EventProcessor
             $data['body'] ?? null,
             $lead->id,
         );
+    }
+
+    /**
+     * La pausa de la IA terminó — venció sola o un agente la levantó a mano.
+     * Sin este evento, Komo seguiría mostrando "en pausa hasta las HH:MM" con
+     * una hora ya vencida.
+     */
+    private function handleAiResumed(Integration $integration, array $data): void
+    {
+        $convId = $data['conversation_id'] ?? null;
+
+        if (! $convId) {
+            return;
+        }
+
+        Lead::forAccount($integration->account_id)
+            ->where('wacrm_conversation_id', $convId)
+            ->update(['ai_paused_until' => null]);
     }
 
     /**

@@ -2,7 +2,10 @@
 
 namespace App\Models;
 
+use App\Jobs\RunStageAutomationsJob;
+use App\Jobs\SyncLeadAssignmentToWacrmJob;
 use App\Models\Concerns\BelongsToAccount;
+use App\Services\LeadAssignment\RoundRobin;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -15,7 +18,7 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
     'account_id', 'pipeline_id', 'stage_id', 'contact_id', 'company_id',
     'responsible_user_id', 'ai_enabled', 'title', 'value', 'currency', 'source',
     'source_ref', 'source_url', 'meta_leadgen_id',
-    'status', 'closed_at', 'wacrm_conversation_id', 'ai_pending',
+    'status', 'closed_at', 'wacrm_conversation_id', 'ai_pending', 'ai_paused_until',
     'invoiced_cents', 'collected_cents',
     'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
     'gclid', 'fbclid', 'ttclid', 'msclkid',
@@ -23,10 +26,12 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
 ])]
 class Lead extends Model
 {
-    use BelongsToAccount, \App\Models\Concerns\HasCustomFields, HasUuids;
+    use \App\Models\Concerns\HasCustomFields, BelongsToAccount, HasUuids;
 
     public const STATUS_OPEN = 'open';
+
     public const STATUS_WON = 'won';
+
     public const STATUS_LOST = 'lost';
 
     protected function casts(): array
@@ -36,6 +41,7 @@ class Lead extends Model
             'closed_at' => 'datetime',
             'ai_enabled' => 'boolean',
             'ai_pending' => 'boolean',
+            'ai_paused_until' => 'datetime',
             'first_touch_at' => 'datetime',
         ];
     }
@@ -96,9 +102,9 @@ class Lead extends Model
             // Round-robin: si la cuenta lo tiene activo y el lead entra sin
             // responsable via source automatico (whatsapp/web_form/lead_ad/api),
             // asignarlo al agente con menos leads abiertos.
-            $assignee = app(\App\Services\LeadAssignment\RoundRobin::class)->assignIfEligible($lead);
+            $assignee = app(RoundRobin::class)->assignIfEligible($lead);
             if ($assignee) {
-                \App\Models\AppNotification::notify(
+                AppNotification::notify(
                     $lead->account_id,
                     $assignee->id,
                     'lead_assigned',
@@ -110,10 +116,10 @@ class Lead extends Model
                 // Espeja la asignacion en el wacrm: sin esto la conversacion
                 // se queda "Sin asignar" en el Inbox aunque el lead ya tenga
                 // responsable aqui.
-                \App\Jobs\SyncLeadAssignmentToWacrmJob::dispatch($lead->id);
+                SyncLeadAssignmentToWacrmJob::dispatch($lead->id);
             }
 
-            \App\Jobs\RunStageAutomationsJob::dispatch($lead->id, $lead->stage_id);
+            RunStageAutomationsJob::dispatch($lead->id, $lead->stage_id);
         });
     }
 
@@ -162,7 +168,7 @@ class Lead extends Model
         }
 
         // Digital Pipeline: dispara las automatizaciones de la etapa destino.
-        \App\Jobs\RunStageAutomationsJob::dispatch($this->id, $stage->id);
+        RunStageAutomationsJob::dispatch($this->id, $stage->id);
     }
 
     public function recordEvent(string $type, ?User $actor = null, array $payload = []): LeadEvent

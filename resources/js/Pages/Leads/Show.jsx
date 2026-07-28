@@ -9,6 +9,37 @@ import encoderPath from 'opus-recorder/dist/encoderWorker.min.js?url';
 
 function csrf() { return document.querySelector('meta[name="csrf-token"]')?.content ?? ''; }
 
+/**
+ * Aviso en el chat: la IA agotó su tope de respuestas en el wacrm y está en
+ * pausa hasta cierta hora, cuando retoma sola.
+ *
+ * Espejo del mismo aviso del Inbox del wacrm. Sin esto, acá la IA
+ * simplemente dejaba de contestar y no había forma de saber por qué. La
+ * reactivación manual se hace desde el toggle IA/Humano del header.
+ */
+function AiPausedNotice({ pausedUntil }) {
+    if (!pausedUntil) return null;
+
+    const hasta = new Date(pausedUntil);
+    if (hasta <= new Date()) return null; // ya venció: la IA retoma sola
+
+    const minutos = Math.max(1, Math.round((hasta - Date.now()) / 60000));
+    const restante = minutos >= 60 ? `${Math.floor(minutos / 60)}h ${minutos % 60}m` : `${minutos}m`;
+
+    return (
+        <div className="flex justify-center px-4">
+            <div className="max-w-md w-full rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-center">
+                <p className="text-xs font-bold text-amber-900">⏸ La IA llegó a su límite de respuestas</p>
+                <p className="text-[11px] text-amber-800 mt-1 leading-relaxed">
+                    Sigue <strong>activa</strong>, pero en pausa para no seguir respondiendo sola.
+                    Vuelve a contestar a las <strong>{hasta.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}</strong>
+                    {' '}(en {restante}). Mientras tanto, contestá vos.
+                </p>
+            </div>
+        </div>
+    );
+}
+
 /** Web Speech API: lee texto en voz alta (mismo patrón que wacrm). */
 const ttsState = { current: null };
 function speakText(text, onEnd) {
@@ -996,6 +1027,7 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                                             </div>
                                         </div>
                                     )}
+                                    <AiPausedNotice pausedUntil={lead.ai_paused_until} />
                                     <div ref={bottomRef} />
                                 </div>
 

@@ -123,6 +123,37 @@ class AiUnavailableTest extends TestCase
         $this->assertSame('ai_limit_reached', AppNotification::where('user_id', $this->agente->id)->sole()->type);
     }
 
+    public function test_espeja_la_pausa_para_mostrarla_en_el_chat(): void
+    {
+        $lead = $this->makeLead($this->agente);
+        $hasta = now()->addHours(3);
+
+        $this->process([
+            'conversation_id' => 'conv-1',
+            'reason' => 'limit_reached',
+            'title' => 'La IA llegó a su tope',
+            'paused_until' => $hasta->toIso8601String(),
+        ]);
+
+        $this->assertEqualsWithDelta(
+            $hasta->timestamp,
+            $lead->fresh()->ai_paused_until->timestamp,
+            5,
+            'Sin esto, acá la IA deja de contestar sin explicación.',
+        );
+    }
+
+    public function test_al_reanudarse_se_borra_la_pausa(): void
+    {
+        $lead = $this->makeLead($this->agente);
+        $lead->update(['ai_paused_until' => now()->addHours(3)]);
+
+        app(EventProcessor::class)->process($this->integration, 'ai.resumed', ['conversation_id' => 'conv-1']);
+
+        // Si no, Komo seguiría mostrando "en pausa" con una hora ya vencida.
+        $this->assertNull($lead->fresh()->ai_paused_until);
+    }
+
     public function test_una_conversacion_que_no_es_de_ningun_lead_se_ignora(): void
     {
         $this->makeLead($this->agente);
