@@ -501,7 +501,7 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                 la página entera se volvía scrolleable. */}
             {/* Padding y separaciones al mínimo: cada rem que se lleva el
                 encabezado se lo saca al chat, que es donde se trabaja. */}
-            <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8 py-3 flex flex-col gap-3 lg:h-full lg:min-h-0">
+            <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8 py-3 flex flex-col gap-3 lg:min-h-full">
                 {/* Barra superior: back + toggle panel */}
                 <div className="flex items-center justify-between gap-3 shrink-0">
                     <Link href={route('leads.index')} className="text-sm text-emerald-600 hover:text-emerald-700 font-medium inline-flex items-center gap-1">
@@ -924,7 +924,11 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                        se trabaja— y todo lo demás vive en pestañas, como en
                        cualquier CRM de WhatsApp: nada de una columna lateral
                        que le robe ancho al hilo. */
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col lg:flex-1 lg:min-h-0 h-[calc(100vh-13rem)] lg:h-auto">
+                    /* `flex-1` para tomar el alto sobrante cuando la pantalla
+                       da, y `min-h` para no quedar nunca apretado: si el
+                       monitor es chico, preferimos que la página scrollee
+                       antes que trabajar en un panel de 300px. */
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col lg:flex-1 min-h-[calc(100vh-13rem)] lg:min-h-[52rem]">
                         <div className="flex border-b border-gray-100 bg-white overflow-x-auto">
                             {[
                                 ['chat', '💬 Chat'],
