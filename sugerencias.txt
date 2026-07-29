@@ -1,0 +1,52 @@
+1. CRM-Builder (Formularios y Landing Pages)
+Lo que YA tienes: En komo (Fase 3) ya tienes Web Forms con tokens públicos, iframe, honeypot y creación automática de leads.
+La Mejora (Nivel 2): Formularios Inteligentes y LPs.
+Lógica Condicional en Formularios: Permite que un campo muestre/oculte otros (ej: Si elige "Posgrado", mostrar campos de "Profesión" y "Empresa").
+Captura de UTMs y Metadata: Que el formulario capture automáticamente utm_source, utm_campaign, gclid de la URL y los guarde como Custom Fields en el lead. Esto es vital para el ROI.
+Constructor de Landing Pages (Opcional pero recomendado): En lugar de hacer un builder desde cero (que es complejo), puedes integrar una librería React de Drag & Drop (como GrapesJS o Craft.js) para que marketing arme LPs simples que se guardan en tu BD y se sirven desde una ruta pública de komo (/p/{slug}).
+2. CRM-Email & Automation (El eslabón perdido)
+Lo que YA tienes: wacrm tiene Broadcasts y Flows (Chatbot). komo tiene Digital Pipeline (automatizaciones al cambiar de etapa). Todo enfocado a WhatsApp.
+La Mejora (Nivel 2): Motor de Email Marketing Nativo.
+El problema: WhatsApp es caro para nutrir leads fríos y tiene límites de tasa. El Email es gratis y escala.
+Módulo de Email en komo: Crea un módulo de campañas de email. Usa Laravel Mail con un driver transaccional (SendGrid, Postmark o AWS SES).
+Secuencias de Nutrición (Drip Campaigns): Permite crear flujos de 3 a 5 correos que se disparan cuando un lead entra a una etapa de komo (ej: Etapa "Interesado" -> Envía Email 1 con brochure -> Espera 2 días -> Email 2 con testimonios).
+Tracking: Genera un pixel de 1x1 para rastrear "Email Abierto" y envuelve los links en tu propio dominio para rastrear "Clicks". Guarda estos eventos en el Timeline del lead en komo.
+3. CRM-BI & Attribution (Inteligencia de Negocio)
+Lo que YA tienes: komo tiene reportes de conversión por fuente. meta_ads calcula ROAS. wacrm captura el referral de Meta. Tienes integración con Invoice para saber cuánto se cobró.
+La Mejora (Nivel 2): Dashboard de ROI Real y LTV.
+Cruce de Datos (El Santo Grial): Crea un reporte en el Hub o en komo que cruce: Gasto en Meta Ads (vía meta_ads) vs Revenue Real Cobrado (vía Invoice). Esto te dará el ROAS Financiero Real, no solo el de Facebook.
+Análisis de Cohortes: ¿De los leads que entraron en Enero por el Anuncio X, qué porcentaje compró en Enero vs Febrero?
+Métricas de Agentes: Cruzar el "Tiempo de respuesta" de wacrm con la "Tasa de cierre" de komo. (Ej: "El Agente A responde en 2 min pero cierra el 10%; el Agente B tarda 1 hora pero cierra el 40%").
+4. CRM-Reputation (Gestión de Reputación)
+Lo que YA tienes: wacrm tiene auto_tag_rules y broadcasts. komo tiene eventos de won (Ganado).
+La Mejora (Nivel 2): Automatización de Reseñas (Google Maps / Facebook).
+El Flujo: En komo, cuando un lead pasa a la etapa "Ganado" (o cuando Invoice registra pago total), se dispara una automatización.
+La Acción: wacrm envía un WhatsApp (o komo un Email) con un link a una "Micro-Landing" interna.
+El Filtro: En esa micro-landing, primero les pides una calificación interna (1 a 5 estrellas).
+Si dan 1-3 estrellas: Se abre un formulario de queja que crea un Ticket/Task de Soporte en komo (Protege tu reputación pública).
+Si dan 4-5 estrellas: Se les redirige automáticamente a tu ficha de Google Maps / Facebook para que dejen la reseña pública.
+5. CRM-Helpdesk (Post-Venta y Soporte)
+Lo que YA tienes: wacrm tiene un Inbox unificado y auto_tag_rules.
+La Mejora (Nivel 2): Enrutamiento Inteligente de Soporte.
+No construyas un Zendesk desde cero. Usa lo que tienes.
+Reglas de Enrutamiento: En wacrm, configura auto_tag_rules para palabras clave: "certificado", "problema", "no puedo entrar", "reclamo".
+Asignación Automática: Si se detecta esa keyword, el sistema debe: 1) Pausar la IA (ai_autoreply_disabled = true), 2) Poner el tag "Soporte", 3) Mover la conversación a una "Cola de Soporte" (puedes usar los estados de wacrm o crear un Pipeline de "Soporte" en komo).
+SLA (Acuerdos de Nivel de Servicio): En komo, crea un Custom Field de fecha "Vencimiento de SLA". Si un lead de soporte no se atiende en 4 horas, notifica al admin.
+6. CRM-Scheduler (Agendamiento de Citas)
+Lo que YA tienes: komo tiene Tareas con due_at. wacrm tiene mensajes interactivos y botones.
+La Mejora (Nivel 2): Calendario de Reservas Integrado.
+Módulo de Calendario: Crea una tabla appointments en komo.
+Integración con Google Calendar: Usa la API de Google Calendar para que, cuando el agente confirme una cita, se bloquee el horario en su calendario personal y se evite el doble booking.
+Flujo en WhatsApp: En wacrm, crea un Flow (Chatbot) o usa Quick Replies donde el agente envíe el link de su calendario (/book/{agent_id}). El cliente elige hora, se crea el Appointment en komo, se crea la Task de recordatorio, y se dispara un WhatsApp automático 24h antes y 1h antes de la cita.
+🚀 Mi Recomendación de Ruta de Implementación (Roadmap)
+Si yo estuviera liderando el desarrollo de tu ecosistema, este sería el orden lógico para maximizar el impacto comercial sin saturar al equipo de desarrollo:
+Prioridad 1: Motor de Email Marketing en komo (Nurturing).
+Por qué: Estás dependiendo al 100% de WhatsApp. Meta puede bloquear el número o los costos de las plantillas pueden subir. Necesitas un canal de "bajo costo" para nutrir a los leads que no están listos para comprar hoy.
+Prioridad 2: BI de ROI Real (Cruce meta_ads + komo + Invoice).
+Por qué: Ya tienes los datos en las 3 apps. Unirlos para mostrar el "Dinero que entra vs Dinero que sale" te permitirá tomar decisiones de marketing brutales y justificar la inversión en tu ecosistema.
+Prioridad 3: Enrutamiento de Soporte en wacrm + Micro-landing de Reseñas.
+Por qué: Mejora la experiencia del cliente actual. Separar ventas de soporte evitará que tus asesores comerciales se quemen atendiendo reclamos, y las reseñas te traerán tráfico orgánico (gratis).
+Prioridad 4: Scheduler (Calendario).
+Por qué: Reduce la fricción del "ida y vuelta" por WhatsApp para agendar llamadas o matrículas (muy útil si ESAM es educativa, como vi en la base de datos de Ollama).
+Nota sobre tu Stack:
+Tu uso de Laravel 13, Inertia.js, React y MariaDB es perfecto para esto. Para el motor de emails, puedes usar Laravel Queue (que ya dominas) para enviar los correos en background y rastrear los webhooks de apertura/click de SendGrid/SES. Para el calendario, la API de Google Calendar tiene un paquete de Laravel excelente (spatie/laravel-google-calendar).

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Lead;
+use App\Models\LeadEvent;
 use App\Models\Pipeline;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -58,6 +59,9 @@ class AsesoresController extends Controller
             $wonLeads = $leads->where('status', Lead::STATUS_WON);
             $lostLeads = $leads->where('status', Lead::STATUS_LOST);
 
+            // Daily history (last 30 days): leads received, responded, current status
+            $dailyHistory = $this->buildDailyHistory($agent->id, $accountId);
+
             return [
                 'id' => $agent->id,
                 'name' => $agent->name,
@@ -70,6 +74,7 @@ class AsesoresController extends Controller
                 'lost_leads' => $lostLeads->count(),
                 'won_value' => (float) $wonLeads->sum('value'),
                 'by_pipeline' => array_values($byPipeline->toArray()),
+                'daily_history' => $dailyHistory,
             ];
         });
 
@@ -96,5 +101,65 @@ class AsesoresController extends Controller
             'isAdmin' => $isAdmin,
             'currency' => $user->account->default_currency ?? 'USD',
         ]);
+    }
+
+    /**
+     * Build daily lead history for the last 30 days for a given agent.
+     */
+    private function buildDailyHistory(string $agentId, string $accountId): array
+    {
+        $thirtyDaysAgo = now()->subDays(29)->startOfDay();
+
+        $leads = Lead::forAccount($accountId)
+            ->where('responsible_user_id', $agentId)
+            ->where('created_at', '>=', $thirtyDaysAgo)
+            ->get(['id', 'status', 'created_at']);
+
+        if ($leads->isEmpty()) {
+            return [];
+        }
+
+        $leadIds = $leads->pluck('id');
+
+        // Get responded leads (those with at least one message_out event)
+        $respondedIds = LeadEvent::whereIn('lead_id', $leadIds)
+            ->where('event_type', 'message_out')
+            ->where('account_id', $accountId)
+            ->distinct('lead_id')
+            ->pluck('lead_id')
+            ->toArray();
+
+        $respondedSet = array_flip($respondedIds);
+
+        // Build day map for the last 30 days
+        $dayMap = [];
+        $cursor = now()->subDays(29)->startOfDay();
+        for ($i = 0; $i < 30; $i++) {
+            $key = $cursor->format('Y-m-d');
+            $dayMap[$key] = [
+                'date' => $key,
+                'label' => $cursor->format('d/m'),
+                'total' => 0,
+                'responded' => 0,
+                'open' => 0,
+                'won' => 0,
+                'lost' => 0,
+            ];
+            $cursor->addDay();
+        }
+
+        foreach ($leads as $lead) {
+            $key = $lead->created_at->format('Y-m-d');
+            if (! isset($dayMap[$key])) {
+                continue;
+            }
+            $dayMap[$key]['total']++;
+            $dayMap[$key][$lead->status]++;
+            if (isset($respondedSet[$lead->id])) {
+                $dayMap[$key]['responded']++;
+            }
+        }
+
+        return array_values($dayMap);
     }
 }

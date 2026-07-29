@@ -21,10 +21,122 @@ function KpiCard({ label, value, sub, gradient, iconPath, extra }) {
     );
 }
 
+function DailyChart({ history }) {
+    if (!history || history.length === 0) return null;
+
+    const maxTotal = Math.max(1, ...history.map(d => d.total));
+    const totalReceived = history.reduce((s, d) => s + d.total, 0);
+    const totalResponded = history.reduce((s, d) => s + d.responded, 0);
+    const responseRate = totalReceived > 0 ? Math.round((totalResponded / totalReceived) * 100) : 0;
+
+    // Only show last 14 days on mobile, 30 on desktop
+    const displayData = window.innerWidth < 640 ? history.slice(-14) : history;
+
+    return (
+        <div>
+            <div className="flex items-center justify-between mb-3">
+                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#045474]" />
+                    Leads por día (últimos {displayData.length} días)
+                </h4>
+                <div className="flex items-center gap-3 text-[10px] font-medium text-gray-500">
+                    <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-sm bg-amber-500" /> Abiertos
+                    </span>
+                    <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-sm bg-emerald-500" /> Ganados
+                    </span>
+                    <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-sm bg-red-500" /> Perdidos
+                    </span>
+                    <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-sm bg-blue-500" /> Respondidos
+                    </span>
+                </div>
+            </div>
+
+            <div className="bg-gray-50/50 rounded-xl p-4">
+                {/* Response rate bar */}
+                <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-200">
+                    <span className="text-xs font-semibold text-gray-600">Tasa de respuesta:</span>
+                    <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden max-w-xs">
+                        <div
+                            className={`h-full rounded-full ${
+                                responseRate >= 80 ? 'bg-gradient-to-r from-emerald-500 to-teal-600' :
+                                responseRate >= 50 ? 'bg-gradient-to-r from-amber-400 to-orange-500' :
+                                'bg-gradient-to-r from-red-400 to-rose-500'
+                            }`}
+                            style={{ width: `${responseRate}%` }}
+                        />
+                    </div>
+                    <span className={`text-xs font-bold tabular-nums ${
+                        responseRate >= 80 ? 'text-emerald-600' :
+                        responseRate >= 50 ? 'text-amber-600' :
+                        'text-red-600'
+                    }`}>
+                        {responseRate}%
+                    </span>
+                    <span className="text-[10px] text-gray-400">({totalResponded}/{totalReceived})</span>
+                </div>
+
+                {/* Chart */}
+                <div className="flex items-end gap-[2px] h-32 sm:h-40">
+                    {displayData.map((day) => {
+                        const total = day.total || 0;
+                        const pct = total > 0 ? (total / maxTotal) * 100 : 0;
+                        const openPct = total > 0 ? (day.open / total) * pct : 0;
+                        const wonPct = total > 0 ? (day.won / total) * pct : 0;
+                        const lostPct = total > 0 ? (day.lost / total) * pct : 0;
+                        const hasResponse = day.responded > 0;
+
+                        return (
+                            <div
+                                key={day.date}
+                                className="flex-1 flex flex-col items-center justify-end h-full group cursor-pointer relative"
+                                title={`${day.date}: ${day.total} leads (${day.open} abiertos, ${day.won} ganados, ${day.lost} perdidos, ${day.responded} respondidos)`}
+                            >
+                                {/* Tooltip on hover */}
+                                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[9px] rounded-lg px-2 py-1 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-lg pointer-events-none">
+                                    {day.total} leads · {day.responded} respondidos
+                                </div>
+
+                                {/* Stacked bar */}
+                                <div className="w-full flex flex-col justify-end rounded-t" style={{ height: `${Math.max(pct, total > 0 ? 4 : 0)}%` }}>
+                                    {/* Lost segment */}
+                                    {day.lost > 0 && (
+                                        <div className="w-full bg-red-500" style={{ height: `${(day.lost / total) * 100}%`, minHeight: day.lost > 0 ? '2px' : '0' }} />
+                                    )}
+                                    {/* Won segment */}
+                                    {day.won > 0 && (
+                                        <div className="w-full bg-emerald-500" style={{ height: `${(day.won / total) * 100}%`, minHeight: day.won > 0 ? '2px' : '0' }} />
+                                    )}
+                                    {/* Open segment */}
+                                    {day.open > 0 && (
+                                        <div className="w-full bg-amber-500 rounded-t-sm" style={{ height: `${(day.open / total) * 100}%`, minHeight: day.open > 0 ? '2px' : '0' }} />
+                                    )}
+                                </div>
+
+                                {/* Response dot */}
+                                {hasResponse && (
+                                    <div className="absolute -bottom-0.5 w-1.5 h-1.5 rounded-full bg-blue-500 ring-1 ring-white" />
+                                )}
+
+                                {/* Day label (show every 5th) */}
+                                {displayData.indexOf(day) % 5 === 0 && (
+                                    <span className="text-[8px] text-gray-400 mt-1.5">{day.label}</span>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function AgentCard({ agent, currency }) {
     const [expanded, setExpanded] = useState(false);
     const conversionRate = agent.total_leads > 0 ? Math.round((agent.won_leads / agent.total_leads) * 100) : 0;
-    const openRate = agent.total_leads > 0 ? Math.round((agent.open_leads / agent.total_leads) * 100) : 0;
     const hasLeads = agent.total_leads > 0;
 
     const roleBadge = {
@@ -117,6 +229,9 @@ function AgentCard({ agent, currency }) {
                             </div>
                         </div>
                     )}
+
+                    {/* Daily history chart */}
+                    <DailyChart history={agent.daily_history} />
 
                     {agent.by_pipeline.map((pipeline) => {
                         if (pipeline.total === 0) return null;
