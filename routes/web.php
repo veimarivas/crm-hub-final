@@ -114,6 +114,11 @@ Route::middleware('auth')->group(function () {
         ->middleware('admin.only')
         ->name('supervision.index');
 
+    // Asesores: desempeño individual con desglose por pipeline (admin-only)
+    Route::get('/asesores', [\App\Http\Controllers\AsesoresController::class, 'index'])
+        ->middleware('admin.only')
+        ->name('asesores.index');
+
     // Avisos del admin al equipo: notas y recordatorios (admin-only)
     Route::middleware('admin.only')->group(function () {
         Route::get('/team-messages', [\App\Http\Controllers\TeamMessageController::class, 'index'])->name('team-messages.index');

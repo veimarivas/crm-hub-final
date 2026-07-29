@@ -94,6 +94,17 @@ const navigation = [
         ),
     },
     {
+        name: 'Asesores',
+        pattern: 'asesores.*',
+        routeName: 'asesores.index',
+        adminOnly: true,
+        icon: (
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+            </svg>
+        ),
+    },
+    {
         name: 'Seguimiento',
         pattern: 'supervision.*',
         routeName: 'supervision.index',
@@ -252,9 +263,14 @@ export default function AuthenticatedLayout({ header, children }) {
         return route().current(pattern);
     };
 
-    const visibleNav = navigation.filter((item) => !item.adminOnly || isAdmin);
-    const mainNav = visibleNav.filter((item) => !item.adminOnly);
-    const adminNav = visibleNav.filter((item) => item.adminOnly);
+const visibleNav = navigation.filter((item) => !item.adminOnly || isAdmin);
+const mainNav = visibleNav.filter((item) => !item.adminOnly);
+const adminNav = visibleNav.filter((item) => item.adminOnly);
+
+// Separar items de supervision (admin-only en el area principal)
+const supervisionItems = ['Asesores', 'Seguimiento', 'Avisos'];
+const supervisionNav = adminNav.filter((item) => supervisionItems.includes(item.name));
+const configNav = adminNav.filter((item) => !supervisionItems.includes(item.name));
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -320,43 +336,85 @@ export default function AuthenticatedLayout({ header, children }) {
                             </div>
 
                             {!sidebarCollapsed && adminNav.length > 0 && (
-                                <div className="mt-6 pt-4 border-t border-white/10">
-                                    <div className="px-3 mb-1.5">
-                                        <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
-                                            Configuración
-                                        </span>
-                                    </div>
-                                    <div className="space-y-0.5">
-                                        {adminNav.map((item) => {
-                                            const active = isActive(item.pattern);
-                                            return (
-                                                <Link
-                                                    key={item.name}
-                                                    href={route(item.routeName)}
-                                                    onClick={() => setSidebarOpen(false)}
-                                                    className={`group relative flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
-                                                        active
-                                                            ? 'bg-[#045474]/20 text-white/90 shadow-sm'
-                                                            : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
-                                                    }`}
-                                                >
-                                                    {active && (
-                                                        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 rounded-r-full bg-[#e6dd5e]/80" />
-                                                    )}
-                                                    <span
-                                                        className={`flex-shrink-0 ${
-                                                            active ? 'text-[#e6dd5e]/80' : 'text-gray-500 group-hover:text-gray-300'
-                                                        }`}
-                                                    >
-                                                        {item.icon}
-                                                    </span>
-                                                    <span className="truncate">{item.name}</span>
-                                                </Link>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
+    <>
+        {supervisionNav.length > 0 && (
+            <div className="mt-6 pt-4 border-t border-white/10">
+                <div className="px-3 mb-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                        Supervisión
+                    </span>
+                </div>
+                <div className="space-y-0.5">
+                    {supervisionNav.map((item) => {
+                        const active = isActive(item.pattern);
+                        return (
+                            <Link
+                                key={item.name}
+                                href={route(item.routeName)}
+                                onClick={() => setSidebarOpen(false)}
+                                className={`group relative flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
+                                    active
+                                        ? 'bg-[#045474]/20 text-white/90 shadow-sm'
+                                        : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
+                                }`}
+                            >
+                                {active && (
+                                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 rounded-r-full bg-[#e6dd5e]/80" />
+                                )}
+                                <span
+                                    className={`flex-shrink-0 ${
+                                        active ? 'text-[#e6dd5e]/80' : 'text-gray-500 group-hover:text-gray-300'
+                                    }`}
+                                >
+                                    {item.icon}
+                                </span>
+                                <span className="truncate">{item.name}</span>
+                            </Link>
+                        );
+                    })}
+                </div>
+            </div>
+        )}
+        {configNav.length > 0 && (
+            <div className={supervisionNav.length > 0 ? 'mt-4 pt-4 border-t border-white/10' : 'mt-6 pt-4 border-t border-white/10'}>
+                <div className="px-3 mb-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                        Configuración
+                    </span>
+                </div>
+                <div className="space-y-0.5">
+                    {configNav.map((item) => {
+                        const active = isActive(item.pattern);
+                        return (
+                            <Link
+                                key={item.name}
+                                href={route(item.routeName)}
+                                onClick={() => setSidebarOpen(false)}
+                                className={`group relative flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
+                                    active
+                                        ? 'bg-[#045474]/20 text-white/90 shadow-sm'
+                                        : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
+                                }`}
+                            >
+                                {active && (
+                                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 rounded-r-full bg-[#e6dd5e]/80" />
+                                )}
+                                <span
+                                    className={`flex-shrink-0 ${
+                                        active ? 'text-[#e6dd5e]/80' : 'text-gray-500 group-hover:text-gray-300'
+                                    }`}
+                                >
+                                    {item.icon}
+                                </span>
+                                <span className="truncate">{item.name}</span>
+                            </Link>
+                        );
+                    })}
+                </div>
+            </div>
+        )}
+    </>
+)}
                         </nav>
 
                         <div className={`p-3 border-t border-white/10 ${sidebarCollapsed ? 'text-center' : ''}`}>
