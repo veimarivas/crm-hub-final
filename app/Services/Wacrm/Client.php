@@ -136,6 +136,18 @@ class Client
         ]));
     }
 
+    /**
+     * Mueve el deal de la conversación a la etapa del Komo (fuente de verdad
+     * del pipeline). Requiere scope conversations:write.
+     */
+    public function setConversationStage(string $conversationId, string $stageName, ?string $status = null): array
+    {
+        return $this->unwrap($this->request()->patch("/conversations/{$conversationId}/stage", array_filter([
+            'stage_name' => $stageName,
+            'status' => $status,
+        ])));
+    }
+
     private function unwrap($response): array
     {
         if ($response->failed()) {

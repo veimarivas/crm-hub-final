@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Jobs\RunStageAutomationsJob;
 use App\Jobs\SyncLeadAssignmentToWacrmJob;
+use App\Jobs\SyncLeadStageToWacrmJob;
 use App\Models\Concerns\BelongsToAccount;
 use App\Services\LeadAssignment\RoundRobin;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -169,6 +170,10 @@ class Lead extends Model
 
         // Digital Pipeline: dispara las automatizaciones de la etapa destino.
         RunStageAutomationsJob::dispatch($this->id, $stage->id);
+
+        // Espeja la etapa en el wacrm: la columna de /pipelines debe reflejar
+        // la misma columna que el kanban del Komo. En cola — mover no espera al HTTP.
+        SyncLeadStageToWacrmJob::dispatch($this->id);
     }
 
     public function recordEvent(string $type, ?User $actor = null, array $payload = []): LeadEvent
