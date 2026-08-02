@@ -230,7 +230,7 @@ function ChatBubble({ event, contactName, onOpenImage }) {
                     {p.type === 'image' && p.media_id && (
                         <button
                             type="button"
-                            onClick={(e) => { e.stopPropagation(); onOpenImage?.(route('leads.media', p.media_id), 'Imagen'); }}
+                            onClick={(e) => { e.stopPropagation(); onOpenImage?.({ src: route('leads.media', p.media_id), alt: 'Imagen' }); }}
                             className="block my-1 cursor-zoom-in"
                         >
                             <img src={route('leads.media', p.media_id)} alt="" className="max-h-56 rounded-lg" />
