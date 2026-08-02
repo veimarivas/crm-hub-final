@@ -152,4 +152,14 @@ class LiveInboundTest extends TestCase
 
         $this->assertSame('🎙 Audio', $data['messages'][0]['preview']);
     }
+
+    public function test_un_sticker_se_describe_por_su_tipo(): void
+    {
+        $lead = $this->leadWithMessage($this->agente, 'Ana', '');
+        LeadEvent::where('lead_id', $lead->id)->update(['payload' => json_encode(['type' => 'sticker'])]);
+
+        $data = $this->poll($this->agente, now()->subMinutes(5)->toIso8601String());
+
+        $this->assertSame('🟪 Sticker', $data['messages'][0]['preview']);
+    }
 }

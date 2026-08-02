@@ -102,6 +102,7 @@ class InboxController extends Controller
                     'image' => '🖼️ Imagen',
                     'video' => '🎥 Video',
                     'document' => '📄 Documento',
+                    'sticker' => '🟪 Sticker',
                     default => '['.$payload['type'].']',
                 };
             }

@@ -85,6 +85,7 @@ class NotificationController extends Controller
                 'image' => '🖼️ Imagen',
                 'video' => '🎥 Video',
                 'document' => '📄 Documento',
+                'sticker' => '🟪 Sticker',
                 'location' => '📍 Ubicación',
                 default => 'Mensaje nuevo',
             };

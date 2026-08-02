@@ -176,6 +176,7 @@ const TYPE_META = {
     image: { icon: '🖼️', label: 'Imagen' },
     video: { icon: '🎥', label: 'Video' },
     document: { icon: '📄', label: 'Documento' },
+    sticker: { icon: '🟪', label: 'Sticker' },
 };
 
 function ChatBubble({ event, contactName }) {
@@ -229,6 +230,9 @@ function ChatBubble({ event, contactName }) {
                         <a href={route('leads.media', p.media_id)} target="_blank" rel="noreferrer">
                             <img src={route('leads.media', p.media_id)} alt="" className="max-h-56 rounded-lg my-1" />
                         </a>
+                    )}
+                    {p.type === 'sticker' && p.media_id && (
+                        <img src={route('leads.media', p.media_id)} alt="Sticker" className="h-32 w-32 object-contain my-1" />
                     )}
                     {p.type === 'document' && p.media_id && (
                         <a
