@@ -410,6 +410,7 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
     const noteForm = useForm({ text: '' });
     const taskForm = useForm({ lead_id: lead.id, task_type: 'call', text: '', due_at: '', assigned_to: '' });
     const waForm = useForm({ text: '' });
+    const waInputRef = useRef(null);
     const fileInputRef = useRef(null);
     const [quickReplies, setQuickReplies] = useState([]);
     const [showQuickReplies, setShowQuickReplies] = useState(false);
@@ -430,6 +431,15 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
     const insertQuickReply = (r) => {
         waForm.setData('text', (waForm.data.text ? waForm.data.text + ' ' : '') + renderTemplate(r.content));
         setShowQuickReplies(false);
+    };
+
+    const sendWhatsapp = () => {
+        if (!whatsappEnabled || !waForm.data.text.trim()) return;
+        waForm.post(route('leads.whatsapp', lead.id), {
+            preserveScroll: true,
+            onSuccess: () => waForm.reset(),
+            onFinish: () => requestAnimationFrame(() => waInputRef.current?.focus()),
+        });
     };
 
     const sendFile = async (file) => {
@@ -1077,7 +1087,7 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
 
                                 {/* Composer */}
                                 <form
-                                    onSubmit={(e) => { e.preventDefault(); if (whatsappEnabled) waForm.post(route('leads.whatsapp', lead.id), { preserveScroll: true, onSuccess: () => waForm.reset() }); }}
+                                    onSubmit={(e) => { e.preventDefault(); sendWhatsapp(); }}
                                     className="border-t border-gray-100 bg-white p-3"
                                 >
                                     {!whatsappEnabled ? (
@@ -1140,10 +1150,11 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                                                 </div>
 
                                                 <textarea
+                                                    ref={waInputRef}
                                                     rows={1}
                                                     value={waForm.data.text}
                                                     onChange={(e) => waForm.setData('text', e.target.value)}
-                                                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (waForm.data.text.trim()) waForm.post(route('leads.whatsapp', lead.id), { preserveScroll: true, onSuccess: () => waForm.reset() }); } }}
+                                                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendWhatsapp(); } }}
                                                     placeholder={`Mensaje para ${contactName}…`}
                                                     className="flex-1 min-w-[200px] resize-none px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#045474]/20 focus:border-[#045474] focus:bg-white max-h-32"
                                                 />
