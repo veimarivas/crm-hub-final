@@ -1,6 +1,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { completeTask } from '@/Components/CompleteTaskModal';
 import ServiceWindowBadge, { ServiceWindowCard } from '@/Components/ServiceWindowBadge';
+import ImageModal from '@/Components/ImageModal';
 import Modal from '@/Components/Modal';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -179,7 +180,7 @@ const TYPE_META = {
     sticker: { icon: '🟪', label: 'Sticker' },
 };
 
-function ChatBubble({ event, contactName }) {
+function ChatBubble({ event, contactName, onOpenImage }) {
     const isCustomer = event.event_type === 'message_in';
     const p = event.payload ?? {};
     const time = new Date(event.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -227,9 +228,13 @@ function ChatBubble({ event, contactName }) {
                         <video controls src={route('leads.media', p.media_id)} className="max-h-56 rounded-lg my-1" />
                     )}
                     {p.type === 'image' && p.media_id && (
-                        <a href={route('leads.media', p.media_id)} target="_blank" rel="noreferrer">
-                            <img src={route('leads.media', p.media_id)} alt="" className="max-h-56 rounded-lg my-1" />
-                        </a>
+                        <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); onOpenImage?.(route('leads.media', p.media_id), 'Imagen'); }}
+                            className="block my-1 cursor-zoom-in"
+                        >
+                            <img src={route('leads.media', p.media_id)} alt="" className="max-h-56 rounded-lg" />
+                        </button>
                     )}
                     {p.type === 'sticker' && p.media_id && (
                         <img src={route('leads.media', p.media_id)} alt="Sticker" className="h-32 w-32 object-contain my-1" />
@@ -409,6 +414,7 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
     const [quickReplies, setQuickReplies] = useState([]);
     const [showQuickReplies, setShowQuickReplies] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [lightbox, setLightbox] = useState(null);
 
     // Cargar plantillas rápidas (delegadas al wacrm)
     useEffect(() => {
@@ -1049,7 +1055,7 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                                     )}
                                     {chatItems.map((it) => {
                                         if (it.kind === 'day') return <DateSeparator key={it.id} label={it.label} />;
-                                        if (it.kind === 'bubble') return <ChatBubble key={it.event.id} event={it.event} contactName={contactName} />;
+                                        if (it.kind === 'bubble') return <ChatBubble key={it.event.id} event={it.event} contactName={contactName} onOpenImage={setLightbox} />;
                                         return <SystemEvent key={it.event.id} event={it.event} />;
                                     })}
                                     {lead.ai_pending && (
@@ -1250,6 +1256,7 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                 show={confirmDelete}
                 onClose={() => setConfirmDelete(false)}
             />
+            <ImageModal src={lightbox?.src} alt={lightbox?.alt} onClose={() => setLightbox(null)} />
         </AuthenticatedLayout>
     );
 }
