@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\SyncPipelinesToWacrmJob;
 use App\Models\Pipeline;
 use App\Models\PipelineStage;
 use Illuminate\Http\RedirectResponse;
@@ -12,6 +13,12 @@ use Inertia\Response;
 
 class PipelineController extends Controller
 {
+    /** Espeja la estructura completa en el wacrm (Komo es la fuente de verdad). */
+    private function syncToWacrm(Request $request): void
+    {
+        SyncPipelinesToWacrmJob::dispatch($request->user()->account_id);
+    }
+
     public function index(Request $request): Response
     {
         $accountId = $request->user()->account_id;
@@ -37,13 +44,16 @@ class PipelineController extends Controller
                 'is_default' => false,
             ]);
 
-            // Etapas base al crear: Nuevo (open) + Ganado (won) + Perdido (lost)
+            // Etapas base al crear: Nuevo (open) + Ganado (won) + Perdido (lost).
+            // La tabla no tiene updated_at (PipelineStage::$UPDATED_AT = null).
             PipelineStage::insert([
-                ['id' => (string) \Str::uuid(), 'pipeline_id' => $pipeline->id, 'name' => 'Nuevo', 'color' => '#0ea5e9', 'position' => 1, 'stage_type' => 'open', 'created_at' => now(), 'updated_at' => now()],
-                ['id' => (string) \Str::uuid(), 'pipeline_id' => $pipeline->id, 'name' => 'Ganado', 'color' => '#10b981', 'position' => 100, 'stage_type' => 'won', 'created_at' => now(), 'updated_at' => now()],
-                ['id' => (string) \Str::uuid(), 'pipeline_id' => $pipeline->id, 'name' => 'Perdido', 'color' => '#ef4444', 'position' => 101, 'stage_type' => 'lost', 'created_at' => now(), 'updated_at' => now()],
+                ['id' => (string) \Str::uuid(), 'pipeline_id' => $pipeline->id, 'name' => 'Nuevo', 'color' => '#0ea5e9', 'position' => 1, 'stage_type' => 'open', 'created_at' => now()],
+                ['id' => (string) \Str::uuid(), 'pipeline_id' => $pipeline->id, 'name' => 'Ganado', 'color' => '#10b981', 'position' => 100, 'stage_type' => 'won', 'created_at' => now()],
+                ['id' => (string) \Str::uuid(), 'pipeline_id' => $pipeline->id, 'name' => 'Perdido', 'color' => '#ef4444', 'position' => 101, 'stage_type' => 'lost', 'created_at' => now()],
             ]);
         });
+
+        $this->syncToWacrm($request);
 
         return back()->with('success', 'Pipeline creado.');
     }
@@ -67,6 +77,8 @@ class PipelineController extends Controller
             ]);
         });
 
+        $this->syncToWacrm($request);
+
         return back()->with('success', 'Pipeline actualizado.');
     }
 
@@ -77,6 +89,8 @@ class PipelineController extends Controller
         abort_if($pipeline->leads()->exists(), 422, 'Este pipeline tiene leads — muévelos o bórralos antes.');
 
         $pipeline->delete();
+
+        $this->syncToWacrm($request);
 
         return redirect()->route('settings.pipelines')->with('success', 'Pipeline eliminado.');
     }
@@ -101,6 +115,8 @@ class PipelineController extends Controller
             'stage_type' => 'open',
         ]);
 
+        $this->syncToWacrm($request);
+
         return back()->with('success', 'Etapa creada.');
     }
 
@@ -115,6 +131,8 @@ class PipelineController extends Controller
 
         $stage->update($validated);
 
+        $this->syncToWacrm($request);
+
         return back()->with('success', 'Etapa actualizada.');
     }
 
@@ -125,6 +143,8 @@ class PipelineController extends Controller
         abort_if($stage->leads()->exists(), 422, 'Esta etapa tiene leads — muévelos primero.');
 
         $stage->delete();
+
+        $this->syncToWacrm($request);
 
         return back()->with('success', 'Etapa eliminada.');
     }
@@ -148,6 +168,8 @@ class PipelineController extends Controller
                 PipelineStage::where('id', $id)->update(['position' => $index + 1]);
             }
         });
+
+        $this->syncToWacrm($request);
 
         return back()->with('success', 'Orden guardado.');
     }

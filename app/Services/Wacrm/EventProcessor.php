@@ -35,8 +35,43 @@ class EventProcessor
             'ai.pending_changed' => $this->handleAiPending($integration, $data),
             'ai.unavailable' => $this->handleAiUnavailable($integration, $data),
             'ai.resumed' => $this->handleAiResumed($integration, $data),
+            'deal.stage_changed' => $this->handleDealStageChanged($integration, $data),
             default => null, // eventos que no nos interesan se ignoran
         };
+    }
+
+    /**
+     * El wacrm movió el deal en su kanban (/pipelines). Espejamos el lead
+     * del Komo a la misma columna: el wacrm manda el nombre de la etapa y el
+     * estado. Idempotente — si el lead ya está en esa etapa no hace nada.
+     */
+    private function handleDealStageChanged(Integration $integration, array $data): void
+    {
+        $convId = $data['conversation_id'] ?? null;
+        $stageName = $data['stage_name'] ?? null;
+
+        if (! $convId || ! $stageName) {
+            return;
+        }
+
+        $lead = Lead::forAccount($integration->account_id)
+            ->where('wacrm_conversation_id', $convId)
+            ->latest()
+            ->first();
+
+        if (! $lead || ! $lead->pipeline) {
+            return;
+        }
+
+        $stage = $lead->pipeline->stages()->where('name', $stageName)->first();
+
+        if (! $stage || $lead->stage_id === $stage->id) {
+            return;
+        }
+
+        // moveToStage espeja el cambio de vuelta al wacrm (misma etapa → no
+        // rebota: el deal ya está allí, el espejo no dispara otro webhook).
+        $lead->moveToStage($stage, null);
     }
 
     /**

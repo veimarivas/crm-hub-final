@@ -148,6 +148,18 @@ class Client
         ])));
     }
 
+    /**
+     * Replica en el wacrm la estructura completa de pipelines/etapas de la
+     * cuenta (Komo es la fuente de verdad de las columnas de /pipelines).
+     * Requiere scope conversations:write.
+     */
+    public function syncPipelines(array $pipelines): array
+    {
+        return $this->unwrap($this->request()->post('/pipelines/sync', [
+            'pipelines' => $pipelines,
+        ]));
+    }
+
     private function unwrap($response): array
     {
         if ($response->failed()) {
