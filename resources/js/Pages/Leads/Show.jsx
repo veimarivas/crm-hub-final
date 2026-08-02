@@ -645,6 +645,32 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                                 carga, y solo hace falta la primera vez. */}
                         </div>
                     </div>
+
+                    {/* Pestañas. Viven dentro del encabezado sticky para que,
+                        cuando la conversación se alarga y la página scrollea,
+                        sigan siempre accesibles junto al nombre del contacto —
+                        sin tener que subir a la parte superior para cambiar. */}
+                    <div className="flex border-b border-gray-100 bg-white overflow-x-auto">
+                        {[
+                            ['chat', '💬 Chat'],
+                            ['datos', '📋 Datos del lead'],
+                            ['tasks', `✅ Tareas (${pendingTasks.length})`],
+                            ['notes', `📝 Notas (${notes.length})`],
+                            ['timeline', `🕑 Timeline (${events.length})`],
+                        ].map(([key, label]) => (
+                            <button
+                                key={key}
+                                onClick={() => setTab(key)}
+                                className={`px-4 sm:px-5 py-3.5 text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
+                                    tab === key
+                                        ? 'border-emerald-500 text-emerald-700'
+                                        : 'border-transparent text-gray-400 hover:text-gray-600'
+                                }`}
+                            >
+                                {label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
                 {flash?.success && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700 shadow-sm">{flash.success}</div>}
@@ -969,28 +995,6 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                        sidebar: sin scroll de página, todo el trabajo pasa
                        dentro del panel. */
                     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col lg:flex-1 h-[calc(100vh-13rem)] lg:h-auto lg:min-h-[34rem]">
-                        <div className="flex border-b border-gray-100 bg-white overflow-x-auto">
-                            {[
-                                ['chat', '💬 Chat'],
-                                ['datos', '📋 Datos del lead'],
-                                ['tasks', `✅ Tareas (${pendingTasks.length})`],
-                                ['notes', `📝 Notas (${notes.length})`],
-                                ['timeline', `🕑 Timeline (${events.length})`],
-                            ].map(([key, label]) => (
-                                <button
-                                    key={key}
-                                    onClick={() => setTab(key)}
-                                    className={`px-4 sm:px-5 py-3.5 text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
-                                        tab === key
-                                            ? 'border-emerald-500 text-emerald-700'
-                                            : 'border-transparent text-gray-400 hover:text-gray-600'
-                                    }`}
-                                >
-                                    {label}
-                                </button>
-                            ))}
-                        </div>
-
                         {tab === 'datos' && (
                             <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5">
                                 {/* Dos columnas en pantallas anchas: el
