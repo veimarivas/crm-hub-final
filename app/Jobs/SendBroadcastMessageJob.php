@@ -9,6 +9,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Middleware\ThrottlesExceptions;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Envia el mensaje de un broadcast a un unico destinatario.
@@ -50,7 +51,22 @@ class SendBroadcastMessageJob implements ShouldQueue
         }
 
         try {
-            Client::for($integration)->sendMessage($recipient->phone_normalized, $broadcast->message);
+            // Si el broadcast lleva imagen adjunta, la enviamos con el texto
+            // como caption; si no, texto simple.
+            if ($broadcast->media_path && Storage::disk('local')->exists($broadcast->media_path)) {
+                $contents = Storage::disk('local')->get($broadcast->media_path);
+                $mime = Storage::disk('local')->mimeType($broadcast->media_path) ?: 'image/jpeg';
+
+                Client::for($integration)->sendMedia(
+                    $recipient->phone_normalized,
+                    base64_encode($contents),
+                    $mime,
+                    'imagen.jpg',
+                    $broadcast->message,
+                );
+            } else {
+                Client::for($integration)->sendMessage($recipient->phone_normalized, $broadcast->message);
+            }
 
             $recipient->update(['status' => 'sent', 'sent_at' => now(), 'error' => null]);
             $broadcast->increment('sent_count');

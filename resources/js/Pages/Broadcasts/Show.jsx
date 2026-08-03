@@ -70,6 +70,13 @@ export default function Show({ broadcast, recipients }) {
                         {/* Mensaje */}
                         <div className="mt-5 pt-5 border-t border-gray-100">
                             <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Mensaje enviado</p>
+                            {broadcast.media_path && (
+                                <img
+                                    src={route('broadcasts.media', broadcast.id)}
+                                    alt="Imagen del broadcast"
+                                    className="max-w-sm w-full rounded-xl border border-gray-200 mb-3 shadow-sm"
+                                />
+                            )}
                             <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-100 text-sm text-gray-800 whitespace-pre-wrap">
                                 {broadcast.message}
                             </div>

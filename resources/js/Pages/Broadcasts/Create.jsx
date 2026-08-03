@@ -4,11 +4,13 @@ import { useEffect, useState } from 'react';
 
 export default function Create({ segments }) {
     const [preview, setPreview] = useState({ count: null, sample: [], loading: false });
+    const [imagePreview, setImagePreview] = useState(null);
     const form = useForm({
         name: '',
         message: '',
         segment_id: '',
         filters: {},
+        image: null,
     });
 
     // Cuando cambia el segment, cargamos los filtros y hacemos preview
@@ -22,6 +24,18 @@ export default function Create({ segments }) {
         if (!seg) return;
         form.setData('filters', seg.filters || {});
     }, [form.data.segment_id]);
+
+    const handleImage = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        form.setData('image', file);
+        setImagePreview(URL.createObjectURL(file));
+    };
+
+    const clearImage = () => {
+        form.setData('image', null);
+        setImagePreview(null);
+    };
 
     // Preview cada vez que cambian los filtros
     useEffect(() => {
@@ -79,6 +93,29 @@ export default function Create({ segments }) {
                         </div>
 
                         <div>
+                            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Imagen adjunta (opcional)</label>
+                            {imagePreview ? (
+                                <div className="flex items-center gap-3 rounded-xl border border-gray-200 p-3">
+                                    <img src={imagePreview} alt="Vista previa" className="w-16 h-16 rounded-lg object-cover border border-gray-200 shadow-sm" />
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-sm font-medium text-gray-800 truncate">{form.data.image?.name}</p>
+                                        <p className="text-[11px] text-gray-400">Se enviará junto al texto del mensaje.</p>
+                                    </div>
+                                    <button type="button" onClick={clearImage} className="px-3 py-1.5 text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100">Quitar</button>
+                                </div>
+                            ) : (
+                                <label className="block cursor-pointer rounded-xl border-2 border-dashed border-gray-300 p-5 text-center hover:border-emerald-400 hover:bg-emerald-50/30 transition-all">
+                                    <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={handleImage} className="hidden" />
+                                    <span className="text-sm text-gray-500">
+                                        <span className="font-semibold text-emerald-600">📷 Adjuntar imagen</span>
+                                        <span className="block text-[11px] text-gray-400 mt-0.5">JPG, PNG, WEBP o GIF · máx 10 MB</span>
+                                    </span>
+                                </label>
+                            )}
+                            {form.errors.image && <p className="mt-1 text-xs text-red-500 font-medium">{form.errors.image}</p>}
+                        </div>
+
+                        <div>
                             <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Mensaje</label>
                             <textarea
                                 value={form.data.message}
@@ -118,7 +155,7 @@ export default function Create({ segments }) {
 
                     <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-xs text-amber-800">
                         <p className="font-bold mb-1">⚠ Ventana de 24h de Meta</p>
-                        <p>WhatsApp Business API solo permite mensajes de texto libre a contactos que escribieron en las últimas 24h. Fuera de esa ventana necesitás templates aprobados (esta versión aún no los soporta — se envía texto simple; los fallos aparecen en el detalle del broadcast).</p>
+                        <p>WhatsApp Business API solo permite mensajes de texto libre a contactos que escribieron en las últimas 24h. Fuera de esa ventana necesitás templates aprobados (esta versión aún no los soporta). Se envía texto simple o imagen con caption; los fallos aparecen en el detalle del broadcast.</p>
                     </div>
 
                     <div className="flex justify-end gap-3">

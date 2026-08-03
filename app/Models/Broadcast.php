@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
-    'account_id', 'user_id', 'name', 'message', 'filters', 'status',
+    'account_id', 'user_id', 'name', 'message', 'media_path', 'filters', 'status',
     'total_recipients', 'sent_count', 'failed_count', 'sent_at', 'completed_at',
 ])]
 class Broadcast extends Model

@@ -11,6 +11,7 @@ use App\Models\SavedSegment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -69,6 +70,7 @@ class BroadcastController extends Controller
             'name' => 'required|string|max:150',
             'message' => 'required|string|max:4000',
             'filters' => 'nullable|array',
+            'image' => 'nullable|file|image|mimes:jpeg,png,webp,gif|max:10240',
         ]);
 
         $accountId = $request->user()->account_id;
@@ -76,12 +78,19 @@ class BroadcastController extends Controller
 
         abort_if(empty($recipients), 422, 'Sin destinatarios validos con estos filtros.');
 
-        DB::transaction(function () use ($request, $validated, $accountId, $recipients, &$broadcast) {
+        // Guarda la imagen del broadcast (se reutiliza para cada destinatario).
+        $mediaPath = null;
+        if ($request->hasFile('image')) {
+            $mediaPath = $request->file('image')->store('broadcasts');
+        }
+
+        DB::transaction(function () use ($request, $validated, $accountId, $recipients, &$broadcast, $mediaPath) {
             $broadcast = Broadcast::create([
                 'account_id' => $accountId,
                 'user_id' => $request->user()->id,
                 'name' => $validated['name'],
                 'message' => $validated['message'],
+                'media_path' => $mediaPath,
                 'filters' => $validated['filters'] ?? [],
                 'status' => 'running',
                 'total_recipients' => count($recipients),
@@ -126,6 +135,15 @@ class BroadcastController extends Controller
                 ->limit(200)
                 ->get(),
         ]);
+    }
+
+    /** Sirve la imagen adjunta al broadcast (autorizada por pertenencia a la cuenta). */
+    public function media(Request $request, Broadcast $broadcast)
+    {
+        abort_if($broadcast->account_id !== $request->user()->account_id, 403);
+        abort_if(! $broadcast->media_path || ! Storage::disk('local')->exists($broadcast->media_path), 404);
+
+        return Storage::disk('local')->response($broadcast->media_path);
     }
 
     /**

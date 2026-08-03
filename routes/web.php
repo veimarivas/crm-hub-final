@@ -144,6 +144,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/broadcasts/preview', [\App\Http\Controllers\BroadcastController::class, 'preview'])->name('broadcasts.preview');
         Route::post('/broadcasts', [\App\Http\Controllers\BroadcastController::class, 'store'])->name('broadcasts.store');
         Route::get('/broadcasts/{broadcast}', [\App\Http\Controllers\BroadcastController::class, 'show'])->name('broadcasts.show');
+        Route::get('/broadcasts/{broadcast}/media', [\App\Http\Controllers\BroadcastController::class, 'media'])->name('broadcasts.media');
     });
 
     // Bookings (admin del propio usuario)
