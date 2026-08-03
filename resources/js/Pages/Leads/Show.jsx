@@ -95,7 +95,7 @@ function OriginCard({ lead }) {
 }
 
 function money(value, currency) {
-    return new Intl.NumberFormat('es', { style: 'currency', currency: currency || 'USD', maximumFractionDigits: 0 }).format(value || 0);
+    return 'Bs. ' + new Intl.NumberFormat('es', { maximumFractionDigits: 0 }).format(value || 0);
 }
 
 const EVENT_META = {
@@ -812,7 +812,7 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                                         <input value={editForm.data.title} onChange={(e) => editForm.setData('title', e.target.value)} className={inputClass} />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Valor ({lead.currency})</label>
+                                        <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Valor (Bs.)</label>
                                         <input type="number" step="0.01" min="0" value={editForm.data.value} onChange={(e) => editForm.setData('value', e.target.value)} className={inputClass} />
                                     </div>
                                     <div>

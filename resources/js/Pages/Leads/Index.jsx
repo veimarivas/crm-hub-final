@@ -6,7 +6,7 @@ import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useEffect, useMemo, useState } from 'react';
 
 function money(value, currency) {
-    return new Intl.NumberFormat('es', { style: 'currency', currency: currency || 'USD', maximumFractionDigits: 0 }).format(value || 0);
+    return 'Bs. ' + new Intl.NumberFormat('es', { maximumFractionDigits: 0 }).format(value || 0);
 }
 
 function waitLabel(mins) {

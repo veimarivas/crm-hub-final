@@ -29,7 +29,7 @@ function initials(name) {
 }
 
 function money(v, currency) {
-    return new Intl.NumberFormat('es', { style: 'currency', currency: currency || 'USD', maximumFractionDigits: 0 }).format(v || 0);
+    return 'Bs. ' + new Intl.NumberFormat('es', { maximumFractionDigits: 0 }).format(v || 0);
 }
 
 function dayLabel(iso) {
