@@ -145,7 +145,12 @@ export default function Create({ segments, tags = [], members = [], pricing }) {
 
     const submit = (e) => {
         e.preventDefault();
-        form.transform((d) => ({ ...d, lead_ids: elegidos.map((r) => r.lead_id) })).post(route('broadcasts.store'));
+
+        // OJO: `transform()` no devuelve el form en @inertiajs/react v2, así
+        // que encadenarle `.post()` revienta con un TypeError y el botón no
+        // hace absolutamente nada. Van en dos sentencias.
+        form.transform((d) => ({ ...d, lead_ids: elegidos.map((r) => r.lead_id) }));
+        form.post(route('broadcasts.store'), { preserveScroll: true });
     };
 
     const inputClass = 'w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 focus:bg-white transition-all';
@@ -390,6 +395,13 @@ export default function Create({ segments, tags = [], members = [], pricing }) {
 
                     {/* Barra de envío */}
                     <div className="sticky bottom-4 z-20">
+                        {/* Cualquier motivo por el que el envío no salga tiene
+                            que verse acá: al lado del botón que se apretó. */}
+                        {(form.errors.lead_ids || form.errors.name || form.errors.message || form.errors.image) && (
+                            <div className="mb-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs font-semibold text-red-700 shadow-sm">
+                                {form.errors.lead_ids || form.errors.name || form.errors.message || form.errors.image}
+                            </div>
+                        )}
                         <div className="rounded-2xl border border-gray-200 bg-white shadow-xl p-4 flex flex-wrap items-center gap-3">
                             <div className="min-w-0">
                                 <p className="text-sm font-bold text-gray-900">

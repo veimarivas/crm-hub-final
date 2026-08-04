@@ -17,6 +17,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -122,7 +123,14 @@ class BroadcastController extends Controller
             $recipients = array_values(array_filter($recipients, fn ($r) => isset($elegidos[$r->lead_id])));
         }
 
-        abort_if(empty($recipients), 422, 'Sin destinatarios validos con estos filtros.');
+        // Como excepción de validación y no `abort(422)`: un abort pelado no
+        // es una respuesta de validación, así que Inertia lo descarta y el
+        // botón parece no hacer nada. Así el motivo aterriza en la pantalla.
+        if (empty($recipients)) {
+            throw ValidationException::withMessages([
+                'lead_ids' => 'Ningún destinatario válido: revisá que los seleccionados sigan teniendo teléfono y coincidan con los filtros.',
+            ]);
+        }
 
         // Guarda la imagen del broadcast (se reutiliza para cada destinatario).
         $mediaPath = null;
