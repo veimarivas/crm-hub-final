@@ -3,9 +3,10 @@ import ServiceWindowBadge from '@/Components/ServiceWindowBadge';
 import LiveIndicator from '@/Components/LiveIndicator';
 import Modal from '@/Components/Modal';
 import { showUndo } from '@/Components/UndoToast';
+import useBoardActivity from '@/Hooks/useBoardActivity';
 import useLiveBoard from '@/Hooks/useLiveBoard';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 function money(value, currency) {
     return 'Bs. ' + new Intl.NumberFormat('es', { maximumFractionDigits: 0 }).format(value || 0);
@@ -35,11 +36,33 @@ const SOURCE_META = {
     other: { icon: '❓', label: 'Otro' },
 };
 
-function LeadCard({ lead, currency, slaMinutes, selected, onToggleSelect, anySelected, onDragging, isNew = false }) {
+/**
+ * Colores de la tarjeta, de mayor a menor prioridad. Cada uno responde una
+ * pregunta distinta del asesor y por eso no se mezclan:
+ *
+ * - verde  = contacto nuevo, escribio por primera vez.
+ * - celeste= le entro un mensaje ahora mismo a un lead que ya estaba.
+ * - ambar  = el ultimo mensaje es del contacto y nadie contesto todavia.
+ * - rojo   = eso mismo pero ya paso el SLA.
+ */
+function cardTone({ mark, isUrgent, awaiting }) {
+    if (mark === 'nuevo') return { ring: 'border-emerald-400 ring-2 ring-emerald-300 bg-emerald-50/60', badge: 'bg-emerald-600', label: 'NUEVO CONTACTO' };
+    if (mark === 'mensaje') return { ring: 'border-sky-400 ring-2 ring-sky-300 bg-sky-50/60', badge: 'bg-sky-600', label: '💬 MENSAJE NUEVO' };
+    if (isUrgent) return { ring: 'border-red-300 ring-1 ring-red-200 bg-red-50/40', badge: null, label: null };
+    if (awaiting) return { ring: 'border-amber-300 ring-1 ring-amber-200 bg-amber-50/40', badge: null, label: null };
+
+    return { ring: 'border-gray-100 hover:border-gray-300', badge: null, label: null };
+}
+
+function LeadCard({ lead, currency, slaMinutes, selected, onToggleSelect, anySelected, onDragging, mark = null }) {
     const contactName = lead.contact?.name || lead.contact?.phone || 'Sin contacto';
     const av = avatarFor(contactName);
     const src = SOURCE_META[lead.source] ?? SOURCE_META.other;
     const isUrgent = lead.waiting_minutes >= slaMinutes && lead.last_message_direction === 'in';
+    // Sin responder: el ultimo mensaje del hilo es del contacto. Dura hasta
+    // que alguien contesta — no es un parpadeo de 20s como la marca.
+    const awaiting = lead.last_message_direction === 'in' && ! isUrgent;
+    const tone = cardTone({ mark, isUrgent, awaiting });
     const phone = lead.contact?.phone_normalized || lead.contact?.phone;
 
     return (
@@ -47,11 +70,11 @@ function LeadCard({ lead, currency, slaMinutes, selected, onToggleSelect, anySel
             draggable={!anySelected}
             onDragStart={(e) => { e.dataTransfer.setData('text/lead-id', lead.id); e.dataTransfer.effectAllowed = 'move'; onDragging?.(true); }}
             onDragEnd={() => onDragging?.(false)}
-            className={`group relative rounded-xl border bg-white p-3 shadow-sm hover:shadow-md transition-all ${anySelected ? '' : 'cursor-grab active:cursor-grabbing'} ${selected ? 'border-emerald-400 ring-2 ring-emerald-200 bg-emerald-50/30' : isNew ? 'border-emerald-400 ring-2 ring-emerald-300 bg-emerald-50/40' : isUrgent ? 'border-red-300 ring-1 ring-red-200' : 'border-gray-100 hover:border-gray-300'}`}
+            className={`group relative rounded-xl border bg-white p-3 shadow-sm hover:shadow-md transition-all ${anySelected ? '' : 'cursor-grab active:cursor-grabbing'} ${selected ? 'border-emerald-400 ring-2 ring-emerald-200 bg-emerald-50/30' : tone.ring}`}
         >
-            {isNew && (
-                <span className="absolute -top-2 right-2 z-10 px-1.5 py-0.5 rounded-full bg-emerald-600 text-white text-[9px] font-bold shadow">
-                    NUEVO
+            {tone.label && (
+                <span className={`absolute -top-2 right-2 z-10 px-1.5 py-0.5 rounded-full ${tone.badge} text-white text-[9px] font-bold shadow animate-pulse`}>
+                    {tone.label}
                 </span>
             )}
             <div className={`absolute top-2 left-2 z-10 transition-opacity ${selected || anySelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
@@ -133,14 +156,26 @@ function LeadCard({ lead, currency, slaMinutes, selected, onToggleSelect, anySel
     );
 }
 
-function LeadRow({ lead, currency, slaMinutes, selected, onToggleSelect, anySelected }) {
+function LeadRow({ lead, currency, slaMinutes, selected, onToggleSelect, anySelected, mark = null }) {
     const contactName = lead.contact?.name || lead.contact?.phone || 'Sin contacto';
     const av = avatarFor(contactName);
     const src = SOURCE_META[lead.source] ?? SOURCE_META.other;
     const isUrgent = lead.waiting_minutes >= slaMinutes && lead.last_message_direction === 'in';
+    const awaiting = lead.last_message_direction === 'in' && ! isUrgent;
+
+    // Misma escala de color que el kanban, en la franja izquierda de la fila.
+    const rowTone = mark === 'nuevo'
+        ? 'border-emerald-500 bg-emerald-50/60'
+        : mark === 'mensaje'
+        ? 'border-sky-500 bg-sky-50/60'
+        : isUrgent
+        ? 'border-red-500 bg-red-50/40'
+        : awaiting
+        ? 'border-amber-400 bg-amber-50/40'
+        : 'border-transparent';
 
     return (
-        <div className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors border-l-4 ${selected ? 'border-emerald-500 bg-emerald-50/40' : isUrgent ? 'border-red-500 bg-red-50/40' : 'border-transparent'}`}>
+        <div className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors border-l-4 ${selected ? 'border-emerald-500 bg-emerald-50/40' : rowTone}`}>
             <input
                 type="checkbox"
                 checked={selected}
@@ -403,24 +438,10 @@ export default function Index({ pipelines, pipeline, leads, members, contacts, a
         paused: dragging || anySelected,
     });
 
-    // Aviso de leads que aparecieron o subieron desde el ultimo vistazo: un
-    // tablero que se reordena solo no deja ver QUE cambio.
-    const seenRef = useRef(null);
-    const [fresh, setFresh] = useState(() => new Set());
-    useEffect(() => {
-        const ids = leads.map((l) => l.id);
-        if (seenRef.current === null) { seenRef.current = new Set(ids); return; }
-        const nuevos = ids.filter((id) => !seenRef.current.has(id));
-        seenRef.current = new Set(ids);
-        if (nuevos.length === 0) return;
-        setFresh((prev) => new Set([...prev, ...nuevos]));
-        const t = setTimeout(() => setFresh((prev) => {
-            const next = new Set(prev);
-            nuevos.forEach((id) => next.delete(id));
-            return next;
-        }), 15000);
-        return () => clearTimeout(t);
-    }, [leads]);
+    // Que cambio desde el ultimo vistazo: contacto nuevo (verde) vs. mensaje
+    // que entro en un lead que ya estaba (celeste). Un tablero que se reordena
+    // solo, sin decir que se movio, obliga a compararlo de memoria.
+    const { markOf } = useBoardActivity(leads);
 
     const applyFilter = (patch) => {
         router.get(route('leads.index'), { ...filters, pipeline: pipeline?.id, ...patch }, { preserveState: true, preserveScroll: true, replace: true });
@@ -629,6 +650,14 @@ export default function Index({ pipelines, pipeline, leads, members, contacts, a
                     )}
                 </div>
 
+                {/* Leyenda: un color sin explicar se termina ignorando. */}
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-500 px-1">
+                    <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-emerald-400 ring-1 ring-emerald-300" /> Contacto nuevo</span>
+                    <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-sky-400 ring-1 ring-sky-300" /> Mensaje recién llegado</span>
+                    <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-amber-400 ring-1 ring-amber-300" /> Esperando respuesta</span>
+                    <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-red-400 ring-1 ring-red-300" /> Sin responder +{slaMinutes}m</span>
+                </div>
+
                 {flash?.success && (
                     <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700 shadow-sm">{flash.success}</div>
                 )}
@@ -671,7 +700,7 @@ export default function Index({ pipelines, pipeline, leads, members, contacts, a
                                     </div>
                                     {/* ~15 leads visibles; de ahí scrollea hacia abajo */}
                                     <div className="flex flex-1 flex-col gap-2 p-2.5 min-h-[180px] overflow-y-auto" style={{ maxHeight: 2500 }}>
-                                        {stageLeads.map((lead) => <LeadCard key={lead.id} lead={lead} currency={currency} slaMinutes={slaMinutes} selected={selectedIds.has(lead.id)} onToggleSelect={toggleSelect} anySelected={anySelected} onDragging={setDragging} isNew={fresh.has(lead.id)} />)}
+                                        {stageLeads.map((lead) => <LeadCard key={lead.id} lead={lead} currency={currency} slaMinutes={slaMinutes} selected={selectedIds.has(lead.id)} onToggleSelect={toggleSelect} anySelected={anySelected} onDragging={setDragging} mark={markOf(lead.id)} />)}
                                         {stageLeads.length === 0 && (
                                             <p className="py-8 text-center text-xs text-gray-400 font-medium">{isTerminal ? '—' : 'Arrastra leads aquí'}</p>
                                         )}
@@ -686,7 +715,7 @@ export default function Index({ pipelines, pipeline, leads, members, contacts, a
                             <div className="p-14 text-center text-sm text-gray-400">Sin leads con estos filtros</div>
                         ) : (
                             <ul className="divide-y divide-gray-50">
-                                {leads.map((l) => <li key={l.id}><LeadRow lead={l} currency={currency} slaMinutes={slaMinutes} selected={selectedIds.has(l.id)} onToggleSelect={toggleSelect} anySelected={anySelected} /></li>)}
+                                {leads.map((l) => <li key={l.id}><LeadRow lead={l} currency={currency} slaMinutes={slaMinutes} selected={selectedIds.has(l.id)} onToggleSelect={toggleSelect} anySelected={anySelected} mark={markOf(l.id)} /></li>)}
                             </ul>
                         )}
                     </div>

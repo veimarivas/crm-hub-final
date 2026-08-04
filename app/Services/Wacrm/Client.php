@@ -125,7 +125,11 @@ class Client
      */
     public function aiStatus(): array
     {
-        return $this->unwrap($this->request()->timeout(5)->get('/ai/status'));
+        // 8s y no 5: del otro lado la comprobación de que Ollama responde tiene
+        // su propio timeout de 3s, y con el TLS y el arranque de Laravel encima
+        // los 5s se rozaban cada vez que expiraba el caché de allá — el header
+        // decía «Sin conexión» por medio segundo de más.
+        return $this->unwrap($this->request()->timeout(8)->get('/ai/status'));
     }
 
     /** Modo IA/Humano de la conversación en el wacrm (true = IA activa). */
@@ -165,7 +169,7 @@ class Client
         if ($response->failed()) {
             $error = $response->json('message') ?? "HTTP {$response->status()}";
 
-            throw new RuntimeException("wacrm API: {$error}");
+            throw new WacrmApiException($response->status(), "wacrm API: {$error}");
         }
 
         return $response->json() ?? [];

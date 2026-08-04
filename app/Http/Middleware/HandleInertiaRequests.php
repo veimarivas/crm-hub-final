@@ -3,10 +3,8 @@
 namespace App\Http\Middleware;
 
 use App\Models\AppNotification;
-use App\Models\Integration;
-use App\Services\Wacrm\Client;
+use App\Services\Wacrm\AiStatusProbe;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -54,37 +52,19 @@ class HandleInertiaRequests extends Middleware
     /**
      * Estado de la IA del wacrm para el indicador del header.
      *
-     * Nunca lanza: si el wacrm no responde, el indicador dice "sin conexión"
-     * en vez de tumbar la página entera.
+     * Nunca lanza: si el wacrm no responde, el indicador muestra el motivo en
+     * vez de tumbar la página entera.
+     *
+     * La lógica vive en `AiStatusProbe` porque el comando de diagnóstico
+     * (`komo:ai-status`) tiene que dar exactamente el mismo veredicto que el
+     * header — si no, se diagnostica algo distinto de lo que se ve.
      *
      * @return array<string, mixed>|null
      */
     private function aiStatus(Request $request): ?array
     {
-        $user = $request->user();
-
         // Un usuario recién registrado todavía no tiene cuenta: sin account_id
-        // no hay integración que consultar (y `forAccount(null)` revienta).
-        if (! $user || ! $user->account_id) {
-            return null;
-        }
-
-        return Cache::remember(
-            "ai_status:{$user->account_id}",
-            now()->addMinutes(2),
-            function () use ($user) {
-                $integration = Integration::forAccount($user->account_id)->first();
-
-                if (! $integration || ! $integration->wacrm_url || ! $integration->wacrm_api_key) {
-                    return null;
-                }
-
-                try {
-                    return Client::for($integration)->aiStatus();
-                } catch (\Throwable $e) {
-                    return ['configured' => true, 'available' => false, 'reason' => 'unreachable'];
-                }
-            },
-        );
+        // no hay integración que consultar.
+        return app(AiStatusProbe::class)->forAccount($request->user()?->account_id);
     }
 }

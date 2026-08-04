@@ -220,7 +220,11 @@ const AI_STATUS_META = {
     auto_reply_off: { dot: 'bg-gray-400', text: 'text-gray-600', bg: 'bg-gray-50 ring-gray-200', label: 'IA manual', title: 'La IA está activa pero no responde sola: solo genera borradores.' },
     provider_down: { dot: 'bg-red-500', text: 'text-red-700', bg: 'bg-red-50 ring-red-200', label: 'IA caída', title: 'El modelo no responde. Las conversaciones quedan para un humano.' },
     after_hours: { dot: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50 ring-amber-200', label: 'Fuera de horario', title: 'Estamos fuera del horario de atención configurado.' },
-    unreachable: { dot: 'bg-red-500', text: 'text-red-700', bg: 'bg-red-50 ring-red-200', label: 'Sin conexión', title: 'No se pudo consultar el CRM de WhatsApp.' },
+    unreachable: { dot: 'bg-red-500', text: 'text-red-700', bg: 'bg-red-50 ring-red-200', label: 'Sin conexión', title: 'No se pudo llegar al CRM de WhatsApp (red, DNS o servidor caído). Revisá la URL en Ajustes → Integración.' },
+    // Los dos motivos que antes se pintaban como «Sin conexión» y mandaban a
+    // revisar la red cuando el problema era otro.
+    unauthorized: { dot: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50 ring-amber-200', label: 'IA sin permiso', title: 'El CRM de WhatsApp rechazó la API key: falta el scope conversations:read o fue revocada. Generá una nueva en el wacrm y pegala en Ajustes → Integración.' },
+    not_supported: { dot: 'bg-gray-400', text: 'text-gray-600', bg: 'bg-gray-50 ring-gray-200', label: 'IA no disponible', title: 'Ese CRM de WhatsApp todavía no expone el estado de la IA: hay que desplegarlo con la versión que trae /api/v1/ai/status.' },
     not_configured: { dot: 'bg-gray-300', text: 'text-gray-500', bg: 'bg-gray-50 ring-gray-200', label: 'IA sin configurar', title: 'No hay un asistente configurado en esta cuenta.' },
 };
 
