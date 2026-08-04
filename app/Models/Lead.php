@@ -100,6 +100,8 @@ class Lead extends Model
         // Digital Pipeline: crear un lead también cuenta como "entrar"
         // a su primera etapa (cubre creación manual, WhatsApp y web forms).
         static::created(function (Lead $lead) {
+            $lead->tagAsNew();
+
             // Round-robin: si la cuenta lo tiene activo y el lead entra sin
             // responsable via source automatico (whatsapp/web_form/lead_ad/api),
             // asignarlo al agente con menos leads abiertos.
@@ -235,5 +237,32 @@ class Lead extends Model
     public function notes(): MorphMany
     {
         return $this->morphMany(Note::class, 'noteable')->latest();
+    }
+
+    /**
+     * Marca el lead recién nacido con la etiqueta «Nuevo».
+     *
+     * Sirve para difundir a los que acaban de llegar sin tener que etiquetar a
+     * mano uno por uno — que en la práctica significaba no hacerlo. La etiqueta
+     * se saca a mano cuando el lead se trabaja; no se quita sola, porque cuándo
+     * deja de ser nuevo lo decide el equipo, no un reloj.
+     *
+     * Silencioso a propósito: que falle no puede impedir que el lead exista, y
+     * un lead sin etiqueta se arregla en un clic.
+     */
+    public function tagAsNew(): void
+    {
+        rescue(function () {
+            $tag = Tag::forAccount($this->account_id)
+                ->whereRaw('LOWER(name) = ?', [mb_strtolower(Tag::NEW_LEAD)])
+                ->first()
+                ?? Tag::create([
+                    'account_id' => $this->account_id,
+                    'name' => Tag::NEW_LEAD,
+                    'color' => Tag::NEW_LEAD_COLOR,
+                ]);
+
+            $this->tags()->syncWithoutDetaching([$tag->id]);
+        }, report: false);
     }
 }

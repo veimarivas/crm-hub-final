@@ -3,6 +3,7 @@ import { completeTask } from '@/Components/CompleteTaskModal';
 import ServiceWindowBadge, { ServiceWindowCard } from '@/Components/ServiceWindowBadge';
 import ImageModal from '@/Components/ImageModal';
 import Modal from '@/Components/Modal';
+import TagPicker from '@/Components/TagPicker';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Recorder from 'opus-recorder';
@@ -394,7 +395,6 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
     const { flash, auth } = usePage().props;
     const isAdmin = auth?.user?.account_role === 'owner' || auth?.user?.account_role === 'admin';
     const [tab, setTab] = useState('chat');
-    const [newTag, setNewTag] = useState(null);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const bottomRef = useRef(null);
 
@@ -463,12 +463,6 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
 
     const saveEdit = (e) => { e.preventDefault(); editForm.patch(route('leads.update', lead.id), { preserveScroll: true }); };
     const moveTo = (stageId) => router.patch(route('leads.move', lead.id), { stage_id: stageId }, { preserveScroll: true });
-    const toggleTag = (tagId) => {
-        const current = (lead.tags ?? []).map((t) => t.id);
-        const next = current.includes(tagId) ? current.filter((id) => id !== tagId) : [...current, tagId];
-        router.patch(route('leads.tags', lead.id), { tag_ids: next }, { preserveScroll: true });
-    };
-
     const wonStage = stages.find((s) => s.stage_type === 'won');
     const lostStage = stages.find((s) => s.stage_type === 'lost');
     const pendingTasks = tasks.filter((t) => !t.completed_at);
@@ -567,15 +561,16 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                                         <span className="text-gray-300">·</span>
                                         <span className="text-base font-extrabold text-gray-900 tabular-nums">{money(lead.value, lead.currency)}</span>
                                     </div>
-                                    {(lead.tags ?? []).length > 0 && (
-                                        <div className="flex flex-wrap gap-1 mt-1">
-                                            {lead.tags.map((t) => (
-                                                <span key={t.id} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold text-white shadow-sm" style={{ backgroundColor: t.color }}>
-                                                    {t.name}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    )}
+                                    {/* Etiquetar donde se mira, no dentro de un panel plegado
+                                        al final de la columna: es lo primero que se hace al
+                                        abrir un lead. */}
+                                    <div className="mt-1.5">
+                                        <TagPicker
+                                            allTags={allTags}
+                                            value={lead.tags ?? []}
+                                            onChange={(ids) => router.patch(route('leads.tags', lead.id), { tag_ids: ids }, { preserveScroll: true })}
+                                        />
+                                    </div>
                                     {lead.source_ref && (
                                         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 mt-1.5 rounded-full text-[10px] font-bold ring-1 bg-blue-50 text-blue-800 ring-blue-200">
                                             <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
@@ -902,57 +897,9 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                                 </details>
                             )}
 
-                            {/* Sección: Etiquetas */}
-                            <details className="group bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                                <summary className="px-5 py-3.5 cursor-pointer list-none flex items-center justify-between hover:bg-gray-50 transition-colors">
-                                    <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                                        <span className="w-1 h-4 bg-amber-500 rounded-full" />
-                                        Etiquetas
-                                        {(lead.tags?.length ?? 0) > 0 && <span className="text-[10px] font-medium text-gray-400 normal-case">({lead.tags.length})</span>}
-                                    </h3>
-                                    <svg className="w-4 h-4 text-gray-400 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
-                                </summary>
-                                <div className="px-5 pb-5 border-t border-gray-100 pt-4">
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {allTags.map((tag) => {
-                                            const active = (lead.tags ?? []).some((t) => t.id === tag.id);
-                                            return (
-                                                <button
-                                                    key={tag.id}
-                                                    type="button"
-                                                    onClick={() => toggleTag(tag.id)}
-                                                    className={`rounded-full px-2.5 py-1 text-xs font-medium transition-all ${active ? 'text-white shadow-md scale-105' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-                                                    style={active ? { backgroundColor: tag.color } : {}}
-                                                >
-                                                    {tag.name}
-                                                </button>
-                                            );
-                                        })}
-                                        {newTag === null ? (
-                                            <button type="button" onClick={() => setNewTag('')} className="rounded-full px-2.5 py-1 text-xs font-medium border border-dashed border-gray-300 text-gray-400 hover:border-emerald-400 hover:text-emerald-600 transition-all">
-                                                + Nueva
-                                            </button>
-                                        ) : (
-                                            <span className="inline-flex items-center gap-1">
-                                                <input
-                                                    autoFocus
-                                                    value={newTag}
-                                                    onChange={(e) => setNewTag(e.target.value)}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter') {
-                                                            e.preventDefault();
-                                                            if (newTag.trim()) router.post(route('tags.store'), { name: newTag.trim() }, { preserveScroll: true, onSuccess: () => setNewTag(null) });
-                                                        }
-                                                        if (e.key === 'Escape') setNewTag(null);
-                                                    }}
-                                                    placeholder="nombre + Enter"
-                                                    className="w-28 px-2 py-1 border border-emerald-300 rounded-full text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                                                />
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                            </details>
+                            {/* El panel plegable de Etiquetas se reemplazó por el
+                                selector del encabezado: estaba al final de la
+                                columna y cerrado, o sea que nadie etiquetaba. */}
 
                             {/* Acciones */}
                             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-2">

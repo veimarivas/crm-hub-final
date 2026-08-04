@@ -224,6 +224,8 @@ function LeadRow({ lead, currency, slaMinutes, selected, onToggleSelect, anySele
 
 function BulkBar({ count, onClear, pipeline, members, allTags, isAdmin }) {
     const [mode, setMode] = useState(null); // 'move' | 'assign' | 'tag' | null
+    const [tagQuery, setTagQuery] = useState('');
+    const [removeMode, setRemoveMode] = useState(false);
 
     const perform = (action, payload) => {
         router.post(route('leads.bulk'), { ids: Array.from(count.ids), action, ...payload }, {
@@ -288,31 +290,39 @@ function BulkBar({ count, onClear, pipeline, members, allTags, isAdmin }) {
                     </>
                 ) : mode === 'tag' ? (
                     <>
-                        <select
-                            id="bulk-tag-select"
-                            defaultValue=""
-                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                        >
-                            <option value="" disabled>Elegir etiqueta…</option>
-                            {allTags.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                        </select>
+                        {/* Un clic en la etiqueta la aplica. El desplegable
+                            anterior obligaba a elegir y después apretar otro
+                            botón, y con quince etiquetas era una lista ciega. */}
+                        <input
+                            autoFocus
+                            value={tagQuery}
+                            onChange={(e) => setTagQuery(e.target.value)}
+                            placeholder="Buscar etiqueta…"
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 w-36"
+                        />
+                        <div className="flex flex-wrap items-center gap-1 max-w-md">
+                            {allTags
+                                .filter((t) => t.name.toLowerCase().includes(tagQuery.trim().toLowerCase()))
+                                .slice(0, 8)
+                                .map((t) => (
+                                    <button
+                                        key={t.id}
+                                        onClick={() => perform('tag', { tag_id: t.id, tag_mode: removeMode ? 'remove' : 'add' })}
+                                        className="px-2.5 py-1 rounded-full text-[11px] font-bold text-white shadow-sm hover:opacity-80 transition-opacity"
+                                        style={{ backgroundColor: t.color }}
+                                        title={removeMode ? `Quitar «${t.name}»` : `Agregar «${t.name}»`}
+                                    >
+                                        {removeMode ? '−' : '+'} {t.name}
+                                    </button>
+                                ))}
+                            {allTags.length === 0 && <span className="text-xs text-slate-400">Sin etiquetas — creá una en Etiquetas.</span>}
+                        </div>
                         <button
-                            onClick={() => {
-                                const v = document.getElementById('bulk-tag-select').value;
-                                if (v) perform('tag', { tag_id: v, tag_mode: 'add' });
-                            }}
-                            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500"
+                            onClick={() => setRemoveMode((r) => !r)}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors ${removeMode ? 'bg-red-700 hover:bg-red-600' : 'bg-slate-700 hover:bg-slate-600'}`}
+                            title="Alternar entre agregar y quitar"
                         >
-                            + Agregar
-                        </button>
-                        <button
-                            onClick={() => {
-                                const v = document.getElementById('bulk-tag-select').value;
-                                if (v) perform('tag', { tag_id: v, tag_mode: 'remove' });
-                            }}
-                            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-700 hover:bg-slate-600"
-                        >
-                            − Quitar
+                            {removeMode ? 'Quitando' : 'Agregando'}
                         </button>
                         <button onClick={() => setMode(null)} className="text-xs text-slate-400 hover:text-white px-2">← Volver</button>
                     </>

@@ -8,6 +8,10 @@ use App\Models\BroadcastRecipient;
 use App\Models\Contact;
 use App\Models\Lead;
 use App\Models\SavedSegment;
+use App\Models\Tag;
+use App\Models\User;
+use App\Services\WhatsApp\MessagingCost;
+use App\Services\WhatsApp\ServiceWindow;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -44,23 +48,54 @@ class BroadcastController extends Controller
 
         return Inertia::render('Broadcasts/Create', [
             'segments' => $segments,
+            // Filtrar por etiqueta es la forma natural de armar un envío
+            // ("los Nuevos", "los del MBA"), asi que las etiquetas viajan con
+            // la pantalla en vez de esconderse detras de una lista guardada.
+            'tags' => Tag::forAccount($accountId)
+                ->withCount('leads')
+                ->orderBy('name')
+                ->get(['id', 'name', 'color']),
+            'members' => User::where('account_id', $accountId)->orderBy('name')->get(['id', 'name']),
+            'pricing' => app(MessagingCost::class)->rates(),
         ]);
     }
 
-    /** Preview: cuenta cuantos destinatarios matchean el segmento. */
+    /**
+     * Lista de candidatos con su ventana de servicio.
+     *
+     * Antes esto devolvia solo un numero y tres nombres de muestra: se enviaba
+     * a ciegas. Ahora vuelve la lista entera para que se vea a quien se le va
+     * a escribir, y sobre todo a quien NO conviene.
+     */
     public function preview(Request $request)
     {
         $accountId = $request->user()->account_id;
         $filters = $request->input('filters', []);
 
-        $ids = $this->recipientPhones($accountId, $filters);
+        $recipients = $this->recipientPhones($accountId, $filters);
+
+        $inWindow = array_values(array_filter($recipients, fn ($r) => $r->window['is_open']));
+        $outOfWindow = array_values(array_filter($recipients, fn ($r) => ! $r->window['is_open']));
 
         return response()->json([
-            'count' => count($ids),
-            'sample' => array_slice(array_map(fn ($r) => [
+            'count' => count($recipients),
+            'in_window' => count($inWindow),
+            'out_of_window' => count($outOfWindow),
+            // Tope defensivo: un envio de 5.000 no tiene por que reventar el
+            // navegador. Se avisa en la UI con `truncated`.
+            'recipients' => array_map(fn ($r) => [
+                'lead_id' => $r->lead_id,
+                'contact_id' => $r->contact_id,
                 'name' => $r->name,
                 'phone' => $r->phone,
-            ], $ids), 0, 5),
+                'title' => $r->title,
+                'tags' => $r->tags,
+                'window' => $r->window,
+            ], array_slice($recipients, 0, 500)),
+            'truncated' => count($recipients) > 500,
+            // Lo que costaria escribirle a los de afuera CON plantilla
+            // aprobada, que es la unica forma de que les llegue.
+            'cost_out_of_window' => app(MessagingCost::class)->estimate(count($outOfWindow)),
         ]);
     }
 
@@ -70,11 +105,22 @@ class BroadcastController extends Controller
             'name' => 'required|string|max:150',
             'message' => 'required|string|max:4000',
             'filters' => 'nullable|array',
+            'lead_ids' => 'nullable|array|max:5000',
+            'lead_ids.*' => 'uuid',
             'image' => 'nullable|file|image|mimes:jpeg,png,webp,gif|max:10240',
         ]);
 
         $accountId = $request->user()->account_id;
         $recipients = $this->recipientPhones($accountId, $validated['filters'] ?? []);
+
+        // La seleccion de la pantalla manda: los filtros arman la lista, pero
+        // quien recibe lo decide la persona destildando a mano. Se intersecta
+        // contra la lista recien calculada, asi que un id de otra cuenta o de
+        // un lead que dejo de matchear no entra igual.
+        if (! empty($validated['lead_ids'])) {
+            $elegidos = array_flip($validated['lead_ids']);
+            $recipients = array_values(array_filter($recipients, fn ($r) => isset($elegidos[$r->lead_id])));
+        }
 
         abort_if(empty($recipients), 422, 'Sin destinatarios validos con estos filtros.');
 
@@ -147,17 +193,23 @@ class BroadcastController extends Controller
     }
 
     /**
-     * Devuelve destinatarios [{lead_id, contact_id, name, phone}] segun los filtros
-     * (mismos que LeadController@index) — solo leads con contact.phone_normalized.
+     * Destinatarios candidatos con su ventana de servicio, segun los filtros
+     * (los mismos que `LeadController@index`) — solo leads con telefono.
+     *
+     * @return array<int, object>
      */
     private function recipientPhones(string $accountId, array $filters): array
     {
+        // `tags` (varias, OR) reemplaza a `tag` (una). Se sigue aceptando la
+        // vieja porque las listas guardadas la traen adentro.
+        $tagIds = array_filter((array) ($filters['tags'] ?? array_filter([$filters['tag'] ?? null])));
+
         $query = Lead::forAccount($accountId)
             ->whereHas('contact', fn ($q) => $q->whereNotNull('phone_normalized'))
-            ->with(['contact:id,name,phone_normalized'])
+            ->with(['contact:id,name,phone_normalized', 'tags:id,name,color'])
             ->when($filters['responsible'] ?? null, fn ($q, $v) => $v === 'none' ? $q->whereNull('responsible_user_id') : $q->where('responsible_user_id', $v))
             ->when($filters['source'] ?? null, fn ($q, $v) => $q->where('source', $v))
-            ->when($filters['tag'] ?? null, fn ($q, $v) => $q->whereHas('tags', fn ($tq) => $tq->where('tags.id', $v)))
+            ->when($tagIds, fn ($q, $ids) => $q->whereHas('tags', fn ($tq) => $tq->whereIn('tags.id', $ids)))
             ->when(! empty($filters['no_task']), fn ($q) => $q->whereDoesntHave('tasks', fn ($t) => $t->whereNull('completed_at')))
             ->when(! empty($filters['q']), function ($q) use ($filters) {
                 $t = $filters['q'];
@@ -172,7 +224,11 @@ class BroadcastController extends Controller
             $query->where('status', 'open');
         }
 
-        $leads = $query->get(['id', 'contact_id', 'responsible_user_id']);
+        $leads = $query->get(['id', 'contact_id', 'responsible_user_id', 'title', 'source_ref', 'created_at']);
+
+        // Ventana de servicio de todos de una: dice a quien se le puede
+        // escribir gratis y a quien no. Dos queries para la lista entera.
+        $windows = app(ServiceWindow::class)->forLeads($leads);
 
         // Dedup por phone_normalized (mismo contacto en 2 leads = un solo msg)
         $seen = [];
@@ -188,8 +244,21 @@ class BroadcastController extends Controller
                 'contact_id' => $lead->contact_id,
                 'name' => $lead->contact->name,
                 'phone' => $phone,
+                'title' => $lead->title,
+                'tags' => $lead->tags->map(fn ($t) => ['id' => $t->id, 'name' => $t->name, 'color' => $t->color])->all(),
+                'window' => $windows[$lead->id] ?? app(ServiceWindow::class)->build(null, null),
             ];
         }
+
+        // Los que estan por vencer primero: si hay que apurar un envio, es a
+        // ellos. Los que ya estan fuera de ventana, al final.
+        usort($out, function ($a, $b) {
+            if ($a->window['is_open'] !== $b->window['is_open']) {
+                return $a->window['is_open'] ? -1 : 1;
+            }
+
+            return $a->window['remaining_seconds'] <=> $b->window['remaining_seconds'];
+        });
 
         return $out;
     }

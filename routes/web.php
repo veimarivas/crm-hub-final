@@ -62,7 +62,9 @@ Route::middleware('auth')->group(function () {
     Route::patch('/leads/{lead}/tags', [\App\Http\Controllers\LeadController::class, 'syncTags'])->name('leads.tags');
 
     // Etiquetas
+    Route::get('/tags', [\App\Http\Controllers\TagController::class, 'index'])->name('tags.index');
     Route::post('/tags', [\App\Http\Controllers\TagController::class, 'store'])->name('tags.store');
+    Route::patch('/tags/{tag}', [\App\Http\Controllers\TagController::class, 'update'])->name('tags.update');
     Route::delete('/tags/{tag}', [\App\Http\Controllers\TagController::class, 'destroy'])->name('tags.destroy');
     Route::post('/leads/{lead}/whatsapp', [\App\Http\Controllers\LeadController::class, 'sendWhatsapp'])->name('leads.whatsapp');
     Route::post('/leads/{lead}/whatsapp-media', [\App\Http\Controllers\LeadController::class, 'sendMedia'])->name('leads.whatsapp-media');
