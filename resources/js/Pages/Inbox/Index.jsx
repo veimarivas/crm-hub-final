@@ -389,7 +389,17 @@ export default function InboxIndex({ items, counts, filter, q, isAdmin, slaMinut
                                         </span>
                                     ) : conversation.lead.ai_enabled ? (
                                         <span className="hidden md:inline-flex text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">✨ IA</span>
-                                    ) : null}
+                                    ) : (
+                                        /* Que la IA esté apagada tiene que verse. El wacrm la
+                                           apaga solo cuando un agente contesta a mano, y sin
+                                           este cartel la conversación parece rota. */
+                                        <span
+                                            className="hidden md:inline-flex text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600"
+                                            title="La IA no responde en esta conversación. Se apaga sola cuando un agente contesta manualmente."
+                                        >
+                                            👤 Solo humanos
+                                        </span>
+                                    )}
                                 </header>
 
                                 {/* Hilo */}

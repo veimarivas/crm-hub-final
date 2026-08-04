@@ -33,6 +33,7 @@ class EventProcessor
             'message.sent' => $this->handleOutboundMessage($integration, $data),
             'message.transcribed' => $this->handleTranscribed($integration, $data),
             'ai.pending_changed' => $this->handleAiPending($integration, $data),
+            'ai.mode_changed' => $this->handleAiModeChanged($integration, $data),
             'ai.unavailable' => $this->handleAiUnavailable($integration, $data),
             'ai.resumed' => $this->handleAiResumed($integration, $data),
             'deal.stage_changed' => $this->handleDealStageChanged($integration, $data),
@@ -72,6 +73,28 @@ class EventProcessor
         // moveToStage espeja el cambio de vuelta al wacrm (misma etapa → no
         // rebota: el deal ya está allí, el espejo no dispara otro webhook).
         $lead->moveToStage($stage, null);
+    }
+
+    /**
+     * La IA se encendió o se apagó del lado del wacrm.
+     *
+     * El caso que esto arregla: el agente contesta a mano y el wacrm apaga la
+     * IA en esa conversación (regla suya: si contesta un humano, el bot se
+     * calla). Komo no se enteraba, así que su ficha seguía mostrando «✨ IA
+     * activa» — el toggle decía encendido y no contestaba nadie. Media tarde
+     * buscando un fallo que no existía.
+     */
+    private function handleAiModeChanged(Integration $integration, array $data): void
+    {
+        $convId = $data['conversation_id'] ?? null;
+
+        if (! $convId) {
+            return;
+        }
+
+        Lead::forAccount($integration->account_id)
+            ->where('wacrm_conversation_id', $convId)
+            ->update(['ai_enabled' => (bool) ($data['ai_enabled'] ?? false)]);
     }
 
     /**
