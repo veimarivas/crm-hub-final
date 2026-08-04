@@ -139,15 +139,18 @@ Route::middleware('auth')->group(function () {
         Route::post('/settings/pipelines/{pipeline}/stages/reorder', [\App\Http\Controllers\PipelineController::class, 'reorderStages'])->name('pipelines.stages.reorder');
     });
 
-    // Broadcasts (envio masivo por WhatsApp usando segments)
-    Route::middleware('admin.only')->group(function () {
-        Route::get('/broadcasts', [\App\Http\Controllers\BroadcastController::class, 'index'])->name('broadcasts.index');
-        Route::get('/broadcasts/create', [\App\Http\Controllers\BroadcastController::class, 'create'])->name('broadcasts.create');
-        Route::post('/broadcasts/preview', [\App\Http\Controllers\BroadcastController::class, 'preview'])->name('broadcasts.preview');
-        Route::post('/broadcasts', [\App\Http\Controllers\BroadcastController::class, 'store'])->name('broadcasts.store');
-        Route::get('/broadcasts/{broadcast}', [\App\Http\Controllers\BroadcastController::class, 'show'])->name('broadcasts.show');
-        Route::get('/broadcasts/{broadcast}/media', [\App\Http\Controllers\BroadcastController::class, 'media'])->name('broadcasts.media');
-    });
+    // Broadcasts (envio masivo por WhatsApp).
+    //
+    // Abierto a los agentes: el corte no es "quien entra" sino "a quien le
+    // puede escribir" — el controlador limita al agente a los leads que tiene
+    // asignados, igual que el Inbox y el tablero. Cerrarlo por completo
+    // obligaba a pedirle al admin cada difusion de la propia cartera.
+    Route::get('/broadcasts', [\App\Http\Controllers\BroadcastController::class, 'index'])->name('broadcasts.index');
+    Route::get('/broadcasts/create', [\App\Http\Controllers\BroadcastController::class, 'create'])->name('broadcasts.create');
+    Route::post('/broadcasts/preview', [\App\Http\Controllers\BroadcastController::class, 'preview'])->name('broadcasts.preview');
+    Route::post('/broadcasts', [\App\Http\Controllers\BroadcastController::class, 'store'])->name('broadcasts.store');
+    Route::get('/broadcasts/{broadcast}', [\App\Http\Controllers\BroadcastController::class, 'show'])->name('broadcasts.show');
+    Route::get('/broadcasts/{broadcast}/media', [\App\Http\Controllers\BroadcastController::class, 'media'])->name('broadcasts.media');
 
     // Bookings (admin del propio usuario)
     Route::get('/bookings', [\App\Http\Controllers\BookingController::class, 'index'])->name('bookings.index');

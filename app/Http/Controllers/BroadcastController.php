@@ -26,8 +26,12 @@ class BroadcastController extends Controller
     public function index(Request $request): Response
     {
         $accountId = $request->user()->account_id;
+        $isAdmin = $request->user()->hasRoleAtLeast(User::ROLE_ADMIN);
 
         $broadcasts = Broadcast::forAccount($accountId)
+            // El agente ve el historial de SUS envios. Los del equipo no le
+            // aportan y muestran a quien le escribio otro.
+            ->when(! $isAdmin, fn ($q) => $q->where('user_id', $request->user()->id))
             ->with('user:id,name')
             ->latest()
             ->limit(50)
@@ -35,12 +39,14 @@ class BroadcastController extends Controller
 
         return Inertia::render('Broadcasts/Index', [
             'broadcasts' => $broadcasts,
+            'isAdmin' => $isAdmin,
         ]);
     }
 
     public function create(Request $request): Response
     {
         $accountId = $request->user()->account_id;
+        $isAdmin = $request->user()->hasRoleAtLeast(User::ROLE_ADMIN);
 
         $segments = SavedSegment::forAccount($accountId)
             ->where(fn ($q) => $q->where('user_id', $request->user()->id)->orWhere('is_shared', true))
@@ -52,12 +58,21 @@ class BroadcastController extends Controller
             // Filtrar por etiqueta es la forma natural de armar un envío
             // ("los Nuevos", "los del MBA"), asi que las etiquetas viajan con
             // la pantalla en vez de esconderse detras de una lista guardada.
+            //
+            // El contador de leads por etiqueta respeta el alcance de quien
+            // mira: si el agente ve "Nuevo (120)" y al elegirla le aparecen 9,
+            // el numero mintio.
             'tags' => Tag::forAccount($accountId)
-                ->withCount('leads')
+                ->withCount(['leads' => fn ($q) => $isAdmin ? $q : $q->where('responsible_user_id', $request->user()->id)])
                 ->orderBy('name')
                 ->get(['id', 'name', 'color']),
-            'members' => User::where('account_id', $accountId)->orderBy('name')->get(['id', 'name']),
+            // Elegir responsable es del admin; el agente solo se tiene a si
+            // mismo, asi que el desplegable no tendria nada que filtrar.
+            'members' => $isAdmin
+                ? User::where('account_id', $accountId)->orderBy('name')->get(['id', 'name'])
+                : [],
             'pricing' => app(MessagingCost::class)->rates(),
+            'isAdmin' => $isAdmin,
         ]);
     }
 
@@ -73,7 +88,7 @@ class BroadcastController extends Controller
         $accountId = $request->user()->account_id;
         $filters = $request->input('filters', []);
 
-        $recipients = $this->recipientPhones($accountId, $filters);
+        $recipients = $this->recipientPhones($request, $filters);
 
         $inWindow = array_values(array_filter($recipients, fn ($r) => $r->window['is_open']));
         $outOfWindow = array_values(array_filter($recipients, fn ($r) => ! $r->window['is_open']));
@@ -112,7 +127,7 @@ class BroadcastController extends Controller
         ]);
 
         $accountId = $request->user()->account_id;
-        $recipients = $this->recipientPhones($accountId, $validated['filters'] ?? []);
+        $recipients = $this->recipientPhones($request, $validated['filters'] ?? []);
 
         // La seleccion de la pantalla manda: los filtros arman la lista, pero
         // quien recibe lo decide la persona destildando a mano. Se intersecta
@@ -178,7 +193,7 @@ class BroadcastController extends Controller
 
     public function show(Request $request, Broadcast $broadcast): Response
     {
-        abort_if($broadcast->account_id !== $request->user()->account_id, 403);
+        $this->authorizeBroadcast($request, $broadcast);
         $broadcast->refresh();
 
         return Inertia::render('Broadcasts/Show', [
@@ -194,10 +209,27 @@ class BroadcastController extends Controller
     /** Sirve la imagen adjunta al broadcast (autorizada por pertenencia a la cuenta). */
     public function media(Request $request, Broadcast $broadcast)
     {
-        abort_if($broadcast->account_id !== $request->user()->account_id, 403);
+        $this->authorizeBroadcast($request, $broadcast);
         abort_if(! $broadcast->media_path || ! Storage::disk('local')->exists($broadcast->media_path), 404);
 
         return Storage::disk('local')->response($broadcast->media_path);
+    }
+
+    /**
+     * De la cuenta, y del agente si no es admin.
+     *
+     * El listado ya oculta los envíos ajenos, pero ocultar no es cortar: con
+     * el id a mano se abría igual, y el detalle muestra a quién le escribió
+     * otro asesor.
+     */
+    private function authorizeBroadcast(Request $request, Broadcast $broadcast): void
+    {
+        abort_if($broadcast->account_id !== $request->user()->account_id, 403);
+
+        abort_if(
+            ! $request->user()->hasRoleAtLeast(User::ROLE_ADMIN) && $broadcast->user_id !== $request->user()->id,
+            403,
+        );
     }
 
     /**
@@ -206,16 +238,26 @@ class BroadcastController extends Controller
      *
      * @return array<int, object>
      */
-    private function recipientPhones(string $accountId, array $filters): array
+    private function recipientPhones(Request $request, array $filters): array
     {
+        $user = $request->user();
+        $isAdmin = $user->hasRoleAtLeast(User::ROLE_ADMIN);
+
         // `tags` (varias, OR) reemplaza a `tag` (una). Se sigue aceptando la
         // vieja porque las listas guardadas la traen adentro.
         $tagIds = array_filter((array) ($filters['tags'] ?? array_filter([$filters['tag'] ?? null])));
 
-        $query = Lead::forAccount($accountId)
+        $query = Lead::forAccount($user->account_id)
+            // El corte del agente: solo su cartera. Va acá y no en la pantalla
+            // porque este método alimenta TANTO la vista previa como el envío
+            // — filtrar solo en el front dejaría el `store` abierto a mandar
+            // un lead_id ajeno.
+            ->when(! $isAdmin, fn ($q) => $q->where('responsible_user_id', $user->id))
             ->whereHas('contact', fn ($q) => $q->whereNotNull('phone_normalized'))
             ->with(['contact:id,name,phone_normalized', 'tags:id,name,color'])
-            ->when($filters['responsible'] ?? null, fn ($q, $v) => $v === 'none' ? $q->whereNull('responsible_user_id') : $q->where('responsible_user_id', $v))
+            ->when($filters['responsible'] ?? null, fn ($q, $v) => $isAdmin
+                ? ($v === 'none' ? $q->whereNull('responsible_user_id') : $q->where('responsible_user_id', $v))
+                : $q)
             ->when($filters['source'] ?? null, fn ($q, $v) => $q->where('source', $v))
             ->when($tagIds, fn ($q, $ids) => $q->whereHas('tags', fn ($tq) => $tq->whereIn('tags.id', $ids)))
             ->when(! empty($filters['no_task']), fn ($q) => $q->whereDoesntHave('tasks', fn ($t) => $t->whereNull('completed_at')))

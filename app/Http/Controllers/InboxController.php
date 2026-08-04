@@ -11,6 +11,17 @@ use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
+/**
+ * Bandeja de conversaciones, a tres columnas como el Inbox del wacrm:
+ * lista de chats · hilo · datos del lead.
+ *
+ * Antes era un listado que sacaba de la bandeja: cada respuesta obligaba a
+ * entrar a la ficha del lead y volver. Ahora se lee y se contesta sin salir,
+ * que es lo que hace usable atender veinte conversaciones seguidas.
+ *
+ * El alcance por rol no cambia y se corta en el servidor: el admin ve todo,
+ * el agente ve y contesta EXCLUSIVAMENTE los leads que tiene asignados.
+ */
 class InboxController extends Controller
 {
     // Umbral SLA: leads con ultimo mensaje entrante hace mas de N minutos y sin respuesta
@@ -53,7 +64,7 @@ class InboxController extends Controller
 
         // Traer los leads con relaciones
         $leadsQuery = (clone $base)
-            ->with(['contact:id,name,phone,phone_normalized', 'responsible:id,name', 'stage:id,name,color'])
+            ->with(['contact:id,name,phone,phone_normalized', 'responsible:id,name', 'stage:id,name,color', 'tags:id,name,color'])
             ->withCount(['tasks as pending_tasks_count' => fn ($qq) => $qq->whereNull('completed_at')]);
 
         if ($q !== '') {
@@ -117,12 +128,15 @@ class InboxController extends Controller
                 'contact' => $lead->contact ? [
                     'name' => $lead->contact->name,
                     'phone' => $lead->contact->phone,
+                    'phone_normalized' => $lead->contact->phone_normalized,
                 ] : null,
                 'responsible' => $lead->responsible ? [
                     'id' => $lead->responsible->id,
                     'name' => $lead->responsible->name,
                 ] : null,
+                'tags' => $lead->tags->map(fn ($t) => ['id' => $t->id, 'name' => $t->name, 'color' => $t->color])->all(),
                 'ai_enabled' => (bool) $lead->ai_enabled,
+                'value' => $lead->value,
                 'pending_tasks' => (int) $lead->pending_tasks_count,
                 'last_message' => $last ? [
                     'direction' => $last->event_type === 'message_in' ? 'in' : 'out',
@@ -154,13 +168,83 @@ class InboxController extends Controller
             'all' => $items->count(),
         ];
 
+        $filtered = $filtered->values();
+
+        // Conversación abierta: la pedida por ?lead=, y si no la primera de la
+        // bandeja — entrar al Inbox y encontrar el panel vacío obliga a un
+        // clic que no aporta nada.
+        $selectedId = $request->query('lead') ?: $filtered->first()['id'] ?? null;
+
         return Inertia::render('Inbox/Index', [
-            'items' => $filtered->values(),
+            'items' => $filtered,
             'counts' => $counts,
             'filter' => $filter,
             'q' => $q,
             'isAdmin' => $isAdmin,
             'slaMinutes' => self::SLA_MINUTES,
+            'conversation' => $selectedId ? $this->conversation($request, $selectedId) : null,
         ]);
+    }
+
+    /**
+     * Hilo de una conversación para el panel central.
+     *
+     * Devuelve null en vez de 403 cuando el lead no es de quien mira: el id
+     * puede venir de un enlace viejo o de una conversación que se reasignó, y
+     * tumbar la pantalla entera por eso sería peor que mostrarla vacía. El
+     * corte igual existe — sin este método no se ve ni un mensaje.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function conversation(Request $request, string $leadId): ?array
+    {
+        $user = $request->user();
+
+        $lead = Lead::forAccount($user->account_id)
+            ->with(['contact', 'responsible:id,name', 'stage:id,name,color', 'tags:id,name,color'])
+            ->find($leadId);
+
+        if (! $lead) {
+            return null;
+        }
+
+        if (! $user->hasRoleAtLeast(User::ROLE_ADMIN) && $lead->responsible_user_id !== $user->id) {
+            return null;
+        }
+
+        // Solo el tramo reciente: el Inbox es para atender, no para auditar.
+        // El historial completo sigue en la ficha del lead.
+        $events = $lead->events()
+            ->latest()
+            ->limit(80)
+            ->get(['id', 'lead_id', 'event_type', 'payload', 'created_at'])
+            ->sortBy('created_at')
+            ->values();
+
+        return [
+            'lead' => [
+                'id' => $lead->id,
+                'title' => $lead->title,
+                'value' => $lead->value,
+                'currency' => $lead->currency,
+                'status' => $lead->status,
+                'ai_enabled' => (bool) $lead->ai_enabled,
+                'ai_pending' => (bool) $lead->ai_pending,
+                'ai_paused_until' => $lead->ai_paused_until,
+                'stage' => $lead->stage ? ['id' => $lead->stage->id, 'name' => $lead->stage->name, 'color' => $lead->stage->color] : null,
+                'responsible' => $lead->responsible ? ['id' => $lead->responsible->id, 'name' => $lead->responsible->name] : null,
+                'tags' => $lead->tags->map(fn ($t) => ['id' => $t->id, 'name' => $t->name, 'color' => $t->color])->all(),
+                'contact' => $lead->contact ? [
+                    'id' => $lead->contact->id,
+                    'name' => $lead->contact->name,
+                    'phone' => $lead->contact->phone,
+                    'phone_normalized' => $lead->contact->phone_normalized,
+                    'email' => $lead->contact->email,
+                ] : null,
+            ],
+            'events' => $events,
+            'service_window' => app(ServiceWindow::class)->forLead($lead),
+            'can_write' => true,
+        ];
     }
 }

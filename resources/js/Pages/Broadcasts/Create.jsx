@@ -37,7 +37,7 @@ function VentanaBadge({ win }) {
 
 const money = (usd) => `US$ ${usd.toFixed(2)}`;
 
-export default function Create({ segments, tags = [], members = [], pricing }) {
+export default function Create({ segments, tags = [], members = [], pricing, isAdmin = false }) {
     const [data, setData] = useState({ count: null, in_window: 0, out_of_window: 0, recipients: [], truncated: false, cost_out_of_window: null, loading: false });
     const [imagePreview, setImagePreview] = useState(null);
     const [excluidos, setExcluidos] = useState(() => new Set()); // ids destildados a mano
@@ -210,11 +210,22 @@ export default function Create({ segments, tags = [], members = [], pricing }) {
                         <div className="grid sm:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Responsable</label>
-                                <select value={responsable} disabled={!!form.data.segment_id} onChange={(e) => setResponsable(e.target.value)} className={inputClass}>
-                                    <option value="">Todos</option>
-                                    <option value="none">Sin asignar</option>
-                                    {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                                </select>
+                                {/* Elegir asesor es del admin. El agente solo difunde a su
+                                    propia cartera, así que el desplegable no filtraría nada
+                                    y un valor a mano le devolvería una lista vacía que se
+                                    lee como "no hay nadie". */}
+                                {isAdmin ? (
+                                    <select value={responsable} disabled={!!form.data.segment_id} onChange={(e) => setResponsable(e.target.value)} className={inputClass}>
+                                        <option value="">Todos</option>
+                                        <option value="none">Sin asignar</option>
+                                        {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                    </select>
+                                ) : (
+                                    <span className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 w-full">
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                                        Solo tus leads asignados
+                                    </span>
+                                )}
                             </div>
                             <div>
                                 <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">…o una lista guardada</label>
