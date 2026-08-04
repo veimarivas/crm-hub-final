@@ -1,9 +1,11 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ServiceWindowBadge from '@/Components/ServiceWindowBadge';
+import LiveIndicator from '@/Components/LiveIndicator';
 import Modal from '@/Components/Modal';
 import { showUndo } from '@/Components/UndoToast';
+import useLiveBoard from '@/Hooks/useLiveBoard';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 function money(value, currency) {
     return 'Bs. ' + new Intl.NumberFormat('es', { maximumFractionDigits: 0 }).format(value || 0);
@@ -33,7 +35,7 @@ const SOURCE_META = {
     other: { icon: '❓', label: 'Otro' },
 };
 
-function LeadCard({ lead, currency, slaMinutes, selected, onToggleSelect, anySelected }) {
+function LeadCard({ lead, currency, slaMinutes, selected, onToggleSelect, anySelected, onDragging, isNew = false }) {
     const contactName = lead.contact?.name || lead.contact?.phone || 'Sin contacto';
     const av = avatarFor(contactName);
     const src = SOURCE_META[lead.source] ?? SOURCE_META.other;
@@ -43,9 +45,15 @@ function LeadCard({ lead, currency, slaMinutes, selected, onToggleSelect, anySel
     return (
         <div
             draggable={!anySelected}
-            onDragStart={(e) => { e.dataTransfer.setData('text/lead-id', lead.id); e.dataTransfer.effectAllowed = 'move'; }}
-            className={`group relative rounded-xl border bg-white p-3 shadow-sm hover:shadow-md transition-all ${anySelected ? '' : 'cursor-grab active:cursor-grabbing'} ${selected ? 'border-emerald-400 ring-2 ring-emerald-200 bg-emerald-50/30' : isUrgent ? 'border-red-300 ring-1 ring-red-200' : 'border-gray-100 hover:border-gray-300'}`}
+            onDragStart={(e) => { e.dataTransfer.setData('text/lead-id', lead.id); e.dataTransfer.effectAllowed = 'move'; onDragging?.(true); }}
+            onDragEnd={() => onDragging?.(false)}
+            className={`group relative rounded-xl border bg-white p-3 shadow-sm hover:shadow-md transition-all ${anySelected ? '' : 'cursor-grab active:cursor-grabbing'} ${selected ? 'border-emerald-400 ring-2 ring-emerald-200 bg-emerald-50/30' : isNew ? 'border-emerald-400 ring-2 ring-emerald-300 bg-emerald-50/40' : isUrgent ? 'border-red-300 ring-1 ring-red-200' : 'border-gray-100 hover:border-gray-300'}`}
         >
+            {isNew && (
+                <span className="absolute -top-2 right-2 z-10 px-1.5 py-0.5 rounded-full bg-emerald-600 text-white text-[9px] font-bold shadow">
+                    NUEVO
+                </span>
+            )}
             <div className={`absolute top-2 left-2 z-10 transition-opacity ${selected || anySelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                 <input
                     type="checkbox"
@@ -361,6 +369,7 @@ export default function Index({ pipelines, pipeline, leads, members, contacts, a
     const [view, setView] = useState(() => localStorage.getItem('leads.view') || 'kanban');
     const [query, setQuery] = useState(filters?.q || '');
     const [selectedIds, setSelectedIds] = useState(() => new Set());
+    const [dragging, setDragging] = useState(false);
 
     const toggleSelect = (id) => setSelectedIds((prev) => {
         const next = new Set(prev);
@@ -381,6 +390,38 @@ export default function Index({ pipelines, pipeline, leads, members, contacts, a
         return () => clearTimeout(t);
     }, [query]);
 
+    // Actualizacion en vivo: cuando entra un mensaje de un contacto, su lead
+    // sube a la cima de la columna sin que nadie recargue. El orden lo decide
+    // el servidor (ultima actividad primero), aca solo se re-traen los leads.
+    //
+    // Se suspende mientras se arrastra una tarjeta o hay una seleccion abierta:
+    // reordenar debajo del cursor cancela el drag y descoloca la seleccion.
+    const live = useLiveBoard({
+        only: ['leads'],
+        enabled: !!pipeline?.id,
+        interval: 5000,
+        paused: dragging || anySelected,
+    });
+
+    // Aviso de leads que aparecieron o subieron desde el ultimo vistazo: un
+    // tablero que se reordena solo no deja ver QUE cambio.
+    const seenRef = useRef(null);
+    const [fresh, setFresh] = useState(() => new Set());
+    useEffect(() => {
+        const ids = leads.map((l) => l.id);
+        if (seenRef.current === null) { seenRef.current = new Set(ids); return; }
+        const nuevos = ids.filter((id) => !seenRef.current.has(id));
+        seenRef.current = new Set(ids);
+        if (nuevos.length === 0) return;
+        setFresh((prev) => new Set([...prev, ...nuevos]));
+        const t = setTimeout(() => setFresh((prev) => {
+            const next = new Set(prev);
+            nuevos.forEach((id) => next.delete(id));
+            return next;
+        }), 15000);
+        return () => clearTimeout(t);
+    }, [leads]);
+
     const applyFilter = (patch) => {
         router.get(route('leads.index'), { ...filters, pipeline: pipeline?.id, ...patch }, { preserveState: true, preserveScroll: true, replace: true });
     };
@@ -398,6 +439,7 @@ export default function Index({ pipelines, pipeline, leads, members, contacts, a
     const dropOnStage = (e, stageId) => {
         e.preventDefault();
         setDragOver(null);
+        setDragging(false);
         const leadId = e.dataTransfer.getData('text/lead-id');
         const lead = leads.find((l) => l.id === leadId);
         if (lead && lead.stage_id !== stageId) {
@@ -439,6 +481,12 @@ export default function Index({ pipelines, pipeline, leads, members, contacts, a
                         </p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
+                        <LiveIndicator
+                            refreshing={live.refreshing}
+                            lastSync={live.lastSync}
+                            onRefresh={live.refresh}
+                            paused={dragging || anySelected}
+                        />
                         {/* Toggle vista */}
                         <div className="inline-flex bg-white border border-gray-200 rounded-xl shadow-sm p-0.5">
                             <button
@@ -623,7 +671,7 @@ export default function Index({ pipelines, pipeline, leads, members, contacts, a
                                     </div>
                                     {/* ~15 leads visibles; de ahí scrollea hacia abajo */}
                                     <div className="flex flex-1 flex-col gap-2 p-2.5 min-h-[180px] overflow-y-auto" style={{ maxHeight: 2500 }}>
-                                        {stageLeads.map((lead) => <LeadCard key={lead.id} lead={lead} currency={currency} slaMinutes={slaMinutes} selected={selectedIds.has(lead.id)} onToggleSelect={toggleSelect} anySelected={anySelected} />)}
+                                        {stageLeads.map((lead) => <LeadCard key={lead.id} lead={lead} currency={currency} slaMinutes={slaMinutes} selected={selectedIds.has(lead.id)} onToggleSelect={toggleSelect} anySelected={anySelected} onDragging={setDragging} isNew={fresh.has(lead.id)} />)}
                                         {stageLeads.length === 0 && (
                                             <p className="py-8 text-center text-xs text-gray-400 font-medium">{isTerminal ? '—' : 'Arrastra leads aquí'}</p>
                                         )}

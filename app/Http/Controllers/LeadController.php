@@ -305,7 +305,14 @@ class LeadController extends Controller
             $lead->setAttribute('service_window', $windows[$lead->id] ?? null);
 
             return $lead;
-        });
+        })
+            // Ultima actividad primero: un mensaje que entra sube la tarjeta a
+            // la cima de su columna, y un lead recien creado (sin mensajes aun)
+            // arranca arriba por su created_at. Ordenar por created_at a secas
+            // dejaba enterrada la conversacion que acababa de moverse, que es
+            // justo la que hay que atender.
+            ->sortByDesc(fn ($lead) => ($lead->last_message_at ?? $lead->created_at)?->getTimestamp() ?? 0)
+            ->values();
     }
 
     public function store(Request $request): RedirectResponse
