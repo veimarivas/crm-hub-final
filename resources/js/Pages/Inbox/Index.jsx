@@ -263,6 +263,15 @@ export default function InboxIndex({ items, counts, filter, q, isAdmin, slaMinut
     const contactName = conversation?.lead?.contact?.name || conversation?.lead?.contact?.phone || 'Sin contacto';
     const ventanaCerrada = conversation && !conversation.service_window?.is_open;
 
+    // Pausa vigente de la IA (null si ya venció: en ese caso retoma sola).
+    const pausaIa = (() => {
+        const hasta = conversation?.lead?.ai_paused_until;
+        if (!hasta) return null;
+        const fecha = new Date(hasta);
+
+        return fecha > new Date() ? fecha : null;
+    })();
+
     return (
         <AuthenticatedLayout>
             <Head title="Inbox" />
@@ -367,9 +376,20 @@ export default function InboxIndex({ items, counts, filter, q, isAdmin, slaMinut
                                             {conversation.lead.stage.name}
                                         </span>
                                     )}
-                                    {conversation.lead.ai_enabled && (
+                                    {/* La pausa por tope es la causa nº1 de «dice IA activa y
+                                        no contesta»: el toggle sigue encendido porque la IA no
+                                        está apagada, solo esperando. Se dice acá o no se
+                                        entiende el silencio. */}
+                                    {conversation.lead.ai_enabled && pausaIa ? (
+                                        <span
+                                            className="hidden md:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800"
+                                            title="Llegó a su tope de respuestas en esta conversación. Retoma sola; hasta entonces contestá vos."
+                                        >
+                                            ⏸ IA en pausa · vuelve {pausaIa.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                    ) : conversation.lead.ai_enabled ? (
                                         <span className="hidden md:inline-flex text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">✨ IA</span>
-                                    )}
+                                    ) : null}
                                 </header>
 
                                 {/* Hilo */}
