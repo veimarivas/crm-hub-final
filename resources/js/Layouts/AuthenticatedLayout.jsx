@@ -242,6 +242,9 @@ const AI_STATUS_META = {
     // revisar la red cuando el problema era otro.
     unauthorized: { dot: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50 ring-amber-200', label: 'IA sin permiso', title: 'El CRM de WhatsApp rechazó la API key: falta el scope conversations:read o fue revocada. Generá una nueva en el wacrm y pegala en Ajustes → Integración.' },
     not_supported: { dot: 'bg-gray-400', text: 'text-gray-600', bg: 'bg-gray-50 ring-gray-200', label: 'IA no disponible', title: 'Ese CRM de WhatsApp todavía no expone el estado de la IA: hay que desplegarlo con la versión que trae /api/v1/ai/status.' },
+    // El wacrm respondió, pero reventó al calcular su propio estado. No es un
+    // problema de red: mandar a revisar la conexión sería mandar a buscar mal.
+    status_error: { dot: 'bg-red-500', text: 'text-red-700', bg: 'bg-red-50 ring-red-200', label: 'Error de la IA', title: 'El CRM de WhatsApp falló al calcular el estado de su IA. Revisá su log: el detalle quedó ahí.' },
     not_configured: { dot: 'bg-gray-300', text: 'text-gray-500', bg: 'bg-gray-50 ring-gray-200', label: 'IA sin configurar', title: 'No hay un asistente configurado en esta cuenta.' },
 };
 
