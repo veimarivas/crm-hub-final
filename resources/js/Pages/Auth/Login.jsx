@@ -30,12 +30,9 @@ export default function Login({ status, canResetPassword }) {
                                 alt="Conecta"
                                 className="h-28 w-auto mx-auto mb-4"
                             />
-                            <h4 className="text-2xl font-bold text-[#042048]">
-                                ¡Bienvenido al Komo CRM!
-                            </h4>
-                            <p className="text-sm text-[#718ca4] mt-1.5">
-                                Inicia sesión para continuar
-                            </p>
+<h4 className="text-2xl font-bold text-[#042048]">
+                                    Bienvenido a ESAM HUB
+                                </h4>
                         </div>
 
                         {status && (
