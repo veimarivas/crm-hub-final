@@ -94,6 +94,7 @@ function LeadCard({ lead, currency, slaMinutes, selected, onToggleSelect, anySel
                     </div>
                     <div className="min-w-0 flex-1">
                         <p className="text-xs font-semibold text-gray-800 truncate">{contactName}</p>
+                        {phone && <p className="text-[10px] text-gray-400 font-mono truncate">{phone}</p>}
                     </div>
                     <span title={src.label} className="text-sm">{src.icon}</span>
                 </div>
@@ -191,6 +192,7 @@ function LeadRow({ lead, currency, slaMinutes, selected, onToggleSelect, anySele
                     <p className="font-semibold text-sm text-gray-900 truncate">{contactName}</p>
                     <span title={src.label} className="text-sm shrink-0">{src.icon}</span>
                 </div>
+                <p className="text-[11px] text-gray-400 font-mono truncate">{lead.contact?.phone_normalized || lead.contact?.phone}</p>
                 <p className="text-xs text-gray-600 truncate">
                     {lead.title}
                     {lead.stage && <span> · <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: lead.stage.color }} /><span style={{ color: lead.stage.color }} className="font-semibold">{lead.stage.name}</span></span></span>}
