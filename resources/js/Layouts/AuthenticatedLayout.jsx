@@ -313,7 +313,7 @@ const configNav = adminNav.filter((item) => !supervisionItems.includes(item.name
                                     className="h-12 w-auto shrink-0"
                                 />
                                 {!sidebarCollapsed && (
-                                    <span className="text-white font-bold text-sm tracking-tight truncate">Komo</span>
+                                    <span className="text-white font-bold text-sm tracking-tight truncate">ESAM HUB</span>
                                 )}
                             </Link>
                         </div>
