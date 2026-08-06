@@ -308,9 +308,9 @@ const configNav = adminNav.filter((item) => !supervisionItems.includes(item.name
                         <div className={`flex items-center h-16 px-4 border-b border-white/10 ${sidebarCollapsed ? 'justify-center' : ''}`}>
                             <Link href={route('dashboard')} className="flex items-center gap-2.5 min-w-0">
                                 <img
-                                    src="/esam_pequenio.png"
+                                    src="/HUB.png"
                                     alt="Logo"
-                                    className="h-10 w-auto shrink-0"
+                                    className="h-12 w-auto shrink-0"
                                 />
                                 {!sidebarCollapsed && (
                                     <span className="text-white font-bold text-sm tracking-tight truncate">Komo</span>
