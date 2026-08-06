@@ -155,6 +155,7 @@ export default function InboxIndex({ items, counts, filter, q, isAdmin, slaMinut
     const [error, setError] = useState(null);
     const [image, setImage] = useState(null);
     const [listOpen, setListOpen] = useState(true);
+    const [showContactPanel, setShowContactPanel] = useState(true);
     const [quickReplies, setQuickReplies] = useState(null);
     const [showQuick, setShowQuick] = useState(false);
     const fileRef = useRef(null);
@@ -400,6 +401,16 @@ export default function InboxIndex({ items, counts, filter, q, isAdmin, slaMinut
                                             👤 Solo humanos
                                         </span>
                                     )}
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowContactPanel(!showContactPanel)}
+                                        title={showContactPanel ? 'Ocultar panel' : 'Mostrar panel'}
+                                        className={`hidden lg:inline-flex rounded-xl border p-2 transition-all ${showContactPanel ? 'border-[#045474] bg-[#045474]/5 text-[#045474]' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                                    >
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                        </svg>
+                                    </button>
                                 </header>
 
                                 {/* Hilo */}
@@ -496,7 +507,7 @@ export default function InboxIndex({ items, counts, filter, q, isAdmin, slaMinut
                     </section>
 
                     {/* ── Columna 3: el lead ──────────────────────────────── */}
-                    {conversation && (
+                    {conversation && showContactPanel && (
                         <aside className="hidden lg:block w-72 shrink-0 border-l border-gray-100 bg-gray-50/50">
                             <LeadPanel conv={conversation} isAdmin={isAdmin} />
                         </aside>
