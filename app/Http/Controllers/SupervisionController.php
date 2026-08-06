@@ -45,4 +45,32 @@ class SupervisionController extends Controller
                 ->get(['id', 'name', 'account_role']),
         ]);
     }
+
+    /**
+     * Ficha de un responsable: KPIs, histograma, embudo de sus leads abiertos
+     * y los pendientes operativos de su bandeja.
+     */
+    public function show(Request $request, User $user): Response
+    {
+        abort_unless($user->account_id === $request->user()->account_id, 403,
+            'El responsable no pertenece a tu cuenta.');
+
+        $days = (int) $request->query('days', 30);
+
+        if (! in_array($days, self::RANGES, true)) {
+            $days = 30;
+        }
+
+        $data = (new ResponseMetrics(
+            $request->user()->account_id,
+            now()->subDays($days)->startOfDay(),
+        ))->forResponsible($user->id);
+
+        return Inertia::render('Supervision/Agent', [
+            ...$data,
+            'days' => $days,
+            'ranges' => self::RANGES,
+            'sla_minutes' => ResponseMetrics::SLA_MINUTES,
+        ]);
+    }
 }

@@ -19,6 +19,7 @@ Ronda de cambios de interfaz espejados con el wacrm (Ronda 17 de allá):
 Suite: **31 tests / 99 aserciones en verde** (`php artisan test`). Usuario de pruebas: `admin@gmail.com` / `admin123` (owner, con pipeline "Ventas" sembrado).
 
 Fase 2 (UI completa, estilo Velzon del wacrm — cards rounded-2xl, gradientes, marca #045474):
+
 - Layout propio con **sidebar fija** (`Layouts/AuthenticatedLayout.jsx`): Dashboard, Leads, Tareas, Contactos, Empresas, Integración.
 - `Dashboard` (KPIs: abiertos/ganados mes/tareas hoy/**leads sin tarea** — la métrica Kommo), `Leads/Index` (Kanban drag&drop HTML5, punto rojo = sin tarea pendiente), `Leads/Show` (la página estrella: tabs Timeline/Tareas/Notas, editor de datos, botones Ganado/Perdido, panel de **enviar WhatsApp** vía wacrm), `Tasks/Index` (agenda con tabs pendientes/hoy/vencidas/completadas, completar con nota de resultado), `Contacts/Index` y `Companies/Index` (tablas con modal CRUD), `Settings/Integration` (wizard 2 pasos: credenciales+probar conexión / URL del webhook para pegar en el wacrm).
 - Controladores: Dashboard, Lead (index/store/show/update/move/destroy/addNote/**sendWhatsapp**), Task (index/store/complete/destroy), Contact, Company, Integration (edit/update/**test** → llama /api/v1/me del wacrm).
@@ -43,8 +44,8 @@ Tabla `integrations` (una por cuenta): `wacrm_url`, `wacrm_api_key` (cifrada; sc
 
 - **komo → wacrm**: `Services/Wacrm/Client.php` consume `/api/v1` del wacrm (me, contacts, conversations, sendMessage).
 - **wacrm → komo**: el wacrm registra un webhook saliente apuntando a `POST /webhooks/wacrm/{accountId}` de aquí (sin CSRF, firma HMAC verificada contra `webhook_secret`). `Services/Wacrm/EventProcessor.php`:
-  - `contact.created` → contacto espejo (dedup por phone_normalized).
-  - `message.received` → si el contacto no tiene lead ABIERTO, crea uno (source whatsapp, primera etapa open del pipeline default, guarda `wacrm_conversation_id`); el mensaje se registra como `message_in` en el timeline. Un lead won/lost NO se reabre — nace un lead nuevo (regla Kommo).
+    - `contact.created` → contacto espejo (dedup por phone_normalized).
+    - `message.received` → si el contacto no tiene lead ABIERTO, crea uno (source whatsapp, primera etapa open del pipeline default, guarda `wacrm_conversation_id`); el mensaje se registra como `message_in` en el timeline. Un lead won/lost NO se reabre — nace un lead nuevo (regla Kommo).
 
 Cableado manual de la integración: en el wacrm crear API key + webhook saliente (eventos message.received y contact.created, URL = komo `/webhooks/wacrm/{account_id}`); en komo guardar url+api_key+whsec en `integrations`.
 
@@ -113,9 +114,9 @@ Después de la Ronda 14 del wacrm (que agregó típing/fallback IA + plantillas 
 - **Handler `message.transcribed`** (`EventProcessor@handleTranscribed`) — nuevo evento del wacrm que llega cuando Whisper termina. Busca eventos `message_in`/`message_out` del lead por `wamid` (via `whereJsonContains('payload->wamid', $wamid)`) y actualiza `payload.text` y `payload.transcript` con el texto transcrito. Así los audios pasan de mostrar "[sin texto]" a mostrar la transcripción real. El evento se activa en el webhook saliente del wacrm; hay que marcar el checkbox `message.transcribed` en Ajustes → Equipo → Webhooks del wacrm (o vía tinker que actualice el array `events` del `WebhookEndpoint`).
 - **TTS en el chat** — mismo patrón que wacrm: singleton `ttsState.current` + Web Speech API con `lang: 'es-BO'`. Botón 🔊 aparece al hover en cada burbuja con texto o transcript. Click alterna play/pause; segundo click al mismo lo detiene.
 - **Composer completo** en el chat del lead (paridad wacrm):
-  - **Adjuntar archivo** (📎): `<input type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt">`. Endpoint `POST /leads/{lead}/whatsapp-media` (`LeadController@sendMedia`): valida `file` max 16MB, encodea base64, llama a `Wacrm/Client::sendMedia($phone, $b64, $mime, $filename, $caption)` que a su vez hitea `POST /api/v1/messages/media` del wacrm.
-  - **Grabar voz** (🎤): componente `VoiceRecorder` con `opus-recorder` (nuevo devDependency de Komo, mismo setup que wacrm). Estados idle→recording→preview→sending. Al enviar hace `POST /leads/{lead}/whatsapp-media` con un `File` .ogg audio/ogg.
-  - **Plantillas rápidas** (📋): endpoint `GET /leads-quick-replies` (`LeadController@quickReplies`) hitea `GET /api/v1/quick-replies` del wacrm (scope `messages:write`) → lista las compartidas del equipo. Dropdown en el composer, click inserta con `renderTemplate()` que sustituye `{name}` `{phone}` `{email}` con datos del `lead.contact`.
+    - **Adjuntar archivo** (📎): `<input type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt">`. Endpoint `POST /leads/{lead}/whatsapp-media` (`LeadController@sendMedia`): valida `file` max 16MB, encodea base64, llama a `Wacrm/Client::sendMedia($phone, $b64, $mime, $filename, $caption)` que a su vez hitea `POST /api/v1/messages/media` del wacrm.
+    - **Grabar voz** (🎤): componente `VoiceRecorder` con `opus-recorder` (nuevo devDependency de Komo, mismo setup que wacrm). Estados idle→recording→preview→sending. Al enviar hace `POST /leads/{lead}/whatsapp-media` con un `File` .ogg audio/ogg.
+    - **Plantillas rápidas** (📋): endpoint `GET /leads-quick-replies` (`LeadController@quickReplies`) hitea `GET /api/v1/quick-replies` del wacrm (scope `messages:write`) → lista las compartidas del equipo. Dropdown en el composer, click inserta con `renderTemplate()` que sustituye `{name}` `{phone}` `{email}` con datos del `lead.contact`.
 - **Botón 📞 "Llamar" en el header del chat** — abre `https://wa.me/{phone_normalized}` en nueva pestaña. En móvil abre la app de WhatsApp del agente y permite iniciar llamada de voz/video. **Aclaración**: WhatsApp Business Cloud API NO soporta llamadas programáticamente (la Calling API está en beta cerrada de Meta) — el botón es solo un puente al WhatsApp personal del agente.
 - **`opus-recorder` en `package.json`** — agregado con `npm install opus-recorder --legacy-peer-deps`. Import del worker con `import encoderPath from 'opus-recorder/dist/encoderWorker.min.js?url'` para que Vite lo empaquete y sirva. Config `encoderApplication: 2049 (VOIP), encoderSampleRate: 48000, numberOfChannels: 1, streamPages: false` → produce ogg/opus (único formato de audio que Meta acepta).
 - **`Wacrm/Client` extendido** con 3 métodos nuevos: `sendMedia($phone, $b64, $mime, $filename, $caption)`, `quickReplies()`, `downloadMedia($mediaId)` (retorna `[contentType, bytes]`).
@@ -137,10 +138,10 @@ Después de la Ronda 14 del wacrm (que agregó típing/fallback IA + plantillas 
 
 - **`EventProcessor@handleOutboundMessage`**: además de `sender` (agent|bot), guarda `sender_name` y `sender_role` en `payload` del evento `message_out`. Vienen del webhook `message.sent` del wacrm (Ronda 12 del wacrm — receptor compatible con eventos viejos que no los traen: se guardan como null).
 - **`Show.jsx` — `outboundAuthor(payload)` + label sobre la burbuja**: sobre cada burbuja saliente del chat del lead aparece:
-  - `✨ IA` (violeta) para `sender=bot`.
-  - `{sender_name}` para agents, con sufijo `· Admin` cuando `sender_role` es owner/admin.
-  - Fallback `Agente` si el payload no trae `sender_name` (eventos viejos anteriores a este cambio).
-  - Layout envuelto en `flex flex-col items-end` (o items-start para message_in) — el nombre queda pegado al borde de la burbuja del lado correspondiente.
+    - `✨ IA` (violeta) para `sender=bot`.
+    - `{sender_name}` para agents, con sufijo `· Admin` cuando `sender_role` es owner/admin.
+    - Fallback `Agente` si el payload no trae `sender_name` (eventos viejos anteriores a este cambio).
+    - Layout envuelto en `flex flex-col items-end` (o items-start para message_in) — el nombre queda pegado al borde de la burbuja del lado correspondiente.
 
 ## Fase 12 (2026-07-21/22) — Producción, integración total con wacrm y restricciones por rol
 
@@ -150,27 +151,27 @@ Ronda de integración end-to-end en producción. Komo desplegado en `https://kom
 - **Ficha del lead estilo chat WhatsApp** (`Leads/Show.jsx` completo): nueva tab **"💬 Chat"** como principal — reemplaza el Timeline como vista default. Header con avatar circular de iniciales + gradiente por hash del nombre (8 AVATAR_COLORS), teléfono en monoespaciado, badge "Activo". Hilo con burbujas rounded-2xl agrupadas por día vía `dayLabel()` (Hoy/Ayer/nombre), separadores `DateSeparator`, `ChatBubble` (message_in bg-white izq / message_out gradiente marca der con ✓✓), `SystemEvent` (chip centrado para stage_changed/won/lost/note/task). Composer inferior con textarea auto-crece + Enter=enviar. Tabs originales (Tareas/Notas/Timeline) siguen accesibles. **Polling 5s** con `router.reload({ only: ['events','tasks','notes','lead'] })` mientras la tab Chat esté activa y `!document.hidden`.
 - **Handler `message.sent`** (`Services/Wacrm/EventProcessor@handleOutboundMessage`): registra los mensajes salientes del wacrm (agente o IA) como evento `message_out` en el timeline del lead. Idempotente por wamid (`whereJsonContains('payload->wamid', $wamid)`). Ignora silenciosamente si no hay lead abierto para el contacto.
 - **`Wacrm/Client` extendido** con 3 métodos nuevos (todos requieren scopes nuevos en la API key del wacrm):
-  - `provisionUser(email, name, password, role)` — POST `/api/v1/team/provision`.
-  - `assignConversation(conversationId, email)` — PATCH `/api/v1/conversations/{id}/assign`.
-  - `setAiMode(conversationId, aiEnabled)` — PATCH `/api/v1/conversations/{id}/ai-mode`.
+    - `provisionUser(email, name, password, role)` — POST `/api/v1/team/provision`.
+    - `assignConversation(conversationId, email)` — PATCH `/api/v1/conversations/{id}/assign`.
+    - `setAiMode(conversationId, aiEnabled)` — PATCH `/api/v1/conversations/{id}/ai-mode`.
 - **Sync de responsable Komo → wacrm** (`Jobs\SyncLeadAssignmentToWacrmJob`, ver también la sección de asignación más abajo): cuando cambia `responsible_user_id` de un lead con `wacrm_conversation_id`, llama a `Client::assignConversation()` con el email del nuevo responsable. Falla silenciosa con Log::warning si la red o la API responden mal.
 - **Auto-provisión de user en wacrm al aceptar invitación** (`TeamController@redeem` → `provisionInWacrm()`): tras crear el user local, llama a `Client::provisionUser()` con **el mismo email y password**. Así el agente logueado en el Komo puede entrar al Inbox del wacrm con las mismas credenciales. Traducción de roles: admin→admin, agent/viewer→agent.
 - **Toggle IA/Humano por lead** (columna `leads.ai_enabled` boolean default true, migración `2026_07_22_000001`): botón violeta "✨ IA activa" / gris "👤 Humano" en el header del chat de la ficha. Endpoint `PATCH /leads/{lead}/ai-mode` (`leads.ai-mode`) llama a `LeadController@setAiMode` → actualiza el lead + espeja a wacrm via `Client::setAiMode()`. Permisos: si el lead **no tiene responsable**, solo admin/owner puede togglear; si tiene, solo el responsable o el admin. Otros agents ven el estado como badge readonly.
 - **Restricción por rol** (todas las secciones):
-  - **Middleware `admin.only`** (`Http/Middleware/AdminOnly.php`, alias en `bootstrap/app.php`): 403 para no-admin. Aplicado en `routes/web.php` a Formularios, Campos, Equipo, Integración (grupo `Route::middleware('admin.only')`). Notificaciones queda fuera del grupo (todos las ven).
-  - **Sidebar** (`Layouts/AuthenticatedLayout.jsx`): items del NAV marcados `adminOnly: true` se filtran por `visibleNav` según `user.account_role`. Ocultos para agent: Formularios, Campos, Equipo, Integración.
-  - **`LeadController`**: `index` filtra por `responsible_user_id = user.id` para no-admin; `authorizeLead` bloquea Show/update/whatsapp/etc de leads ajenos; `update` descarta `responsible_user_id` del validated si el user no es admin (agent no puede reasignarse ni pasarlo a otro).
-  - **`InboxController`**: el agente ve **exclusivamente** los leads con `responsible_user_id = user.id`. **Ya no ve los leads sin responsable** (antes el scope era `suyos OR whereNull`): con el round-robin repartiendo automáticamente, un lead sin asignar es trabajo que el admin todavía no distribuyó, no una bandeja común. Las pestañas "Sin asignar" y "Todo el equipo" son admin-only en `Inbox/Index.jsx`, y un `?filter=` de admin llegado a mano cae a `mine` en vez de mostrar un vacío que se lee como "no hay nada". Tests en `InboxScopeTest`.
-  - **`TaskController`**: el agente ve **solo sus tareas** — `mine` queda forzado a `true` para no-admin, así un `?mine=0` a mano no abre la agenda del equipo (el toggle "Solo mías" es del admin y se oculta para el resto). `authorizeTask()` cubre complete/uncomplete/snooze/destroy: antes solo comprobaban la cuenta, así que con el ID de una tarea ajena se podía completar o borrar la agenda de un compañero. `store`: agent solo puede crear tareas en leads asignados a él.
-  - **Empresas (`/companies`) es admin-only** y vive en la sección CONFIGURACIÓN del sidebar: es un catálogo que se mantiene, no una pantalla de trabajo diario. El agente sigue pudiendo asociar una empresa desde la ficha del lead — ese desplegable se alimenta del `LeadController`, no de estas rutas.
-  - **`LeadController@destroy` es admin-only.** Borrar un lead se lleva por delante su historial de conversación y no hay vuelta atrás; un responsable no puede hacer desaparecer el registro de lo que habló con el contacto. La "Zona peligrosa" de `Leads/Show` se oculta para no-admin **y** el servidor corta con 403. El borrado pide **escribir el nombre del contacto** en un modal (`DeleteLeadModal`) en vez de un `confirm()`, que se acepta por reflejo sin leerlo.
-  - **Tablero de leads**: el filtro por responsable es **admin-only**. `$filters['responsible']` se fuerza a `null` para no-admin — si se aplicara, un `?responsible=<otro>` le devolvería lista vacía, que se lee como "no hay leads" y no como "eso no es tuyo". El agente ve un chip "Tus leads" en lugar del desplegable. `isAdmin` viaja como prop desde el controlador (el mismo que decide qué leads devuelve) en vez de derivarse en el front.
-  - **`/pipelines` es un alias de `/leads`** (mismo `LeadController@index`): en el wacrm el tablero vive en esa URL, así que las dos apps se navegan igual. `/leads` sigue funcionando para links viejos y el item del sidebar se marca activo en ambas (`isActive` acepta array de patterns).
-  - Tests en `RoleScopeTest` (10): todos nacieron del mismo patrón — la UI ocultaba la opción pero el servidor no la cortaba.
-  - **`ContactController@index` + `CompanyController@index`**: filtro `whereHas('leads', responsible_user_id=user.id)` para no-admin.
-  - **`DashboardController`**: todos los KPIs y `recentLeads` scoped por responsable (agent solo ve sus números). `myTasks` ya filtraba por user.
-  - **`ReportController`**: mismo scope. `byUser` (ranking del equipo) queda vacío para no-admin (solo admin compara equipo). Pasa `isAdmin` como prop.
-  - **`Show.jsx`** (frontend): campo Responsable es dropdown solo para admin; para agent aparece como texto readonly con el nombre. Consumido de `auth.user.account_role`.
+    - **Middleware `admin.only`** (`Http/Middleware/AdminOnly.php`, alias en `bootstrap/app.php`): 403 para no-admin. Aplicado en `routes/web.php` a Formularios, Campos, Equipo, Integración (grupo `Route::middleware('admin.only')`). Notificaciones queda fuera del grupo (todos las ven).
+    - **Sidebar** (`Layouts/AuthenticatedLayout.jsx`): items del NAV marcados `adminOnly: true` se filtran por `visibleNav` según `user.account_role`. Ocultos para agent: Formularios, Campos, Equipo, Integración.
+    - **`LeadController`**: `index` filtra por `responsible_user_id = user.id` para no-admin; `authorizeLead` bloquea Show/update/whatsapp/etc de leads ajenos; `update` descarta `responsible_user_id` del validated si el user no es admin (agent no puede reasignarse ni pasarlo a otro).
+    - **`InboxController`**: el agente ve **exclusivamente** los leads con `responsible_user_id = user.id`. **Ya no ve los leads sin responsable** (antes el scope era `suyos OR whereNull`): con el round-robin repartiendo automáticamente, un lead sin asignar es trabajo que el admin todavía no distribuyó, no una bandeja común. Las pestañas "Sin asignar" y "Todo el equipo" son admin-only en `Inbox/Index.jsx`, y un `?filter=` de admin llegado a mano cae a `mine` en vez de mostrar un vacío que se lee como "no hay nada". Tests en `InboxScopeTest`.
+    - **`TaskController`**: el agente ve **solo sus tareas** — `mine` queda forzado a `true` para no-admin, así un `?mine=0` a mano no abre la agenda del equipo (el toggle "Solo mías" es del admin y se oculta para el resto). `authorizeTask()` cubre complete/uncomplete/snooze/destroy: antes solo comprobaban la cuenta, así que con el ID de una tarea ajena se podía completar o borrar la agenda de un compañero. `store`: agent solo puede crear tareas en leads asignados a él.
+    - **Empresas (`/companies`) es admin-only** y vive en la sección CONFIGURACIÓN del sidebar: es un catálogo que se mantiene, no una pantalla de trabajo diario. El agente sigue pudiendo asociar una empresa desde la ficha del lead — ese desplegable se alimenta del `LeadController`, no de estas rutas.
+    - **`LeadController@destroy` es admin-only.** Borrar un lead se lleva por delante su historial de conversación y no hay vuelta atrás; un responsable no puede hacer desaparecer el registro de lo que habló con el contacto. La "Zona peligrosa" de `Leads/Show` se oculta para no-admin **y** el servidor corta con 403. El borrado pide **escribir el nombre del contacto** en un modal (`DeleteLeadModal`) en vez de un `confirm()`, que se acepta por reflejo sin leerlo.
+    - **Tablero de leads**: el filtro por responsable es **admin-only**. `$filters['responsible']` se fuerza a `null` para no-admin — si se aplicara, un `?responsible=<otro>` le devolvería lista vacía, que se lee como "no hay leads" y no como "eso no es tuyo". El agente ve un chip "Tus leads" en lugar del desplegable. `isAdmin` viaja como prop desde el controlador (el mismo que decide qué leads devuelve) en vez de derivarse en el front.
+    - **`/pipelines` es un alias de `/leads`** (mismo `LeadController@index`): en el wacrm el tablero vive en esa URL, así que las dos apps se navegan igual. `/leads` sigue funcionando para links viejos y el item del sidebar se marca activo en ambas (`isActive` acepta array de patterns).
+    - Tests en `RoleScopeTest` (10): todos nacieron del mismo patrón — la UI ocultaba la opción pero el servidor no la cortaba.
+    - **`ContactController@index` + `CompanyController@index`**: filtro `whereHas('leads', responsible_user_id=user.id)` para no-admin.
+    - **`DashboardController`**: todos los KPIs y `recentLeads` scoped por responsable (agent solo ve sus números). `myTasks` ya filtraba por user.
+    - **`ReportController`**: mismo scope. `byUser` (ranking del equipo) queda vacío para no-admin (solo admin compara equipo). Pasa `isAdmin` como prop.
+    - **`Show.jsx`** (frontend): campo Responsable es dropdown solo para admin; para agent aparece como texto readonly con el nombre. Consumido de `auth.user.account_role`.
 - **Botón "🔄 Regenerar link" en invitaciones pendientes** (`TeamController@regenerateInvitation` + `Settings/Team.jsx`): crea un token nuevo para una invitación existente (útil cuando el admin perdió el link original que solo se muestra una vez). Ruta `POST /settings/team/invitations/{invitation}/regenerate` (`team.invitations.regenerate`). Renueva `expires_at` a +7 días.
 - **Artisan `komo:sync-assignments`** (`Console/Commands/SyncAssignmentsToWacrm.php`): recorre todos los leads con `wacrm_conversation_id` + `responsible_user_id` y llama a `Client::assignConversation` para cada uno. Con `--account={uuid}` filtra a una cuenta. Barra de progreso + total OK/fallos. Uso: `php artisan komo:sync-assignments` — one-shot para migrar asignaciones existentes cuando se activa la restricción por primera vez.
 - **Requisito operativo importante**: los agentes deben existir en AMBOS sistemas (Komo + wacrm) con **exactamente el mismo email** (la correlación es por email). La auto-provisión cubre esto automáticamente para agentes creados vía invitación; los agentes viejos (pre-Fase 12) hay que provisionarlos a mano (tinker: `\App\Models\User::create(...)` en ambas apps).
@@ -179,6 +180,7 @@ Ronda de integración end-to-end en producción. Komo desplegado en `https://kom
 ## Fase 12 (2026-07-22) — Integración con Komo Invoice — suite 63/63 (284 aserciones)
 
 Cierre del ciclo comercial: el lead ganado se conecta con Komo Invoice (5ª app del ecosistema, puerto 8004) para cotizar y cobrar. Cambios:
+
 - Migración `2026_07_22_000001_add_invoice_fields_to_leads`: `leads.invoiced_cents` + `collected_cents` (revenue REAL cobrado, alimentado por Invoice via API).
 - Migración `2026_07_22_000002_add_invoice_integration`: `integrations.invoice_url` + `invoice_api_key` (cifrada). El hub la cablea en la Fase 4 F4-Invoice.
 - **`PATCH /api/v1/leads/{id}/revenue`** (scope `leads:write`) — Invoice lo llama al emitir factura y registrar pagos. Actualiza absolutos (no delta) para tolerar reenvíos. Cuando `collected_cents >= invoiced_cents > 0` notifica al owner (`lead_fully_paid`).
@@ -209,9 +211,9 @@ Dos bugs de producción corregidos juntos porque son el mismo flujo (suite 77/77
 
 - **El round-robin ya no reparte al owner/admin.** `RoundRobin::ASSIGNABLE_ROLES` es ahora `[ROLE_AGENT]` (antes incluía owner y admin, por eso los leads entrantes caían en el Administrador). Viewer sigue fuera. **Si la cuenta no tiene ningún agente, el lead queda SIN responsable a propósito** — aparece como "sin asignar" para que un admin lo derive a mano; preferimos eso antes que volver a cargárselo al Administrador.
 - **Toda asignación se espeja en la conversación del wacrm.** Antes el sync vivía en un método privado `LeadController@syncAssignmentToWacrm()` que **solo** corría en el cambio manual de la ficha: los leads auto-asignados por round-robin quedaban "Sin asignar" en el Inbox del wacrm. Ahora hay un único `Jobs\SyncLeadAssignmentToWacrmJob` (en cola, `tries=1`, falla silenciosa con Log::warning) invocado desde los **tres** caminos que cambian el responsable:
-  - `Lead::booted()` created → tras el round-robin automático.
-  - `LeadController@update` → cambio manual en la ficha.
-  - `LeadController@bulk` acción `assign` → reasignación masiva (también le faltaba).
+    - `Lead::booted()` created → tras el round-robin automático.
+    - `LeadController@update` → cambio manual en la ficha.
+    - `LeadController@bulk` acción `assign` → reasignación masiva (también le faltaba).
 - **La correlación es por email** y ya no exige provisión previa: si el wacrm responde 422 `user_not_found`, el job da de alta al agente con `POST /team/provision` (rol `admin` si es owner/admin en Komo, si no `agent`) y reintenta el assign una vez. **La API key de la integración necesita el scope `team:write` además de `conversations:write`** — sin él el fallback no puede provisionar y la conversación se queda "Sin asignar".
 - **`handle()` traga y loguea; `sync()` lanza.** El comando de reparación usa `sync()` para poder reportar de verdad qué leads fallaron; la cola usa `handle()` para que un wacrm caído no llene `failed_jobs`.
 - **Red de seguridad**: `php artisan komo:sync-assignments` reenvía todas las asignaciones existentes al wacrm (útil para reparar los leads que quedaron desincronizados antes de este fix). Reusa el job, así que también auto-provisiona.
@@ -226,7 +228,7 @@ Todo sale de `lead_events` (`message_in`/`message_out`) — no consulta al wacrm
 - **La respuesta de la IA NO cierra la espera.** Para el admin lo relevante es si contestó un humano; la IA solo gana tiempo. Por eso un lead con auto-respuesta de IA y sin humano sigue contando como "esperando" y como "sin respuesta humana".
 - **El reloj arranca en el PRIMER mensaje de la ráfaga.** Si el contacto manda cinco seguidos, esperó desde el primero, no desde el último.
 - **Un saliente humano sin espera abierta es seguimiento proactivo, no respuesta** — no entra en los promedios.
-- **"Quién contestó 1º"** distingue `responsable` de `otro_agente`: es lo que deja ver si el dueño del lead lo trabaja o se lo están cubriendo. Requiere saber *qué* usuario mandó cada saliente.
+- **"Quién contestó 1º"** distingue `responsable` de `otro_agente`: es lo que deja ver si el dueño del lead lo trabaja o se lo están cubriendo. Requiere saber _qué_ usuario mandó cada saliente.
 - La ventana recorta los eventos: una conversación anterior al periodo se mide solo por lo que pasó dentro de él.
 
 **Cambio en el wacrm que esto exigió**: `Messenger::dispatchOutbound()` ahora manda `sender_email` en el webhook `message.sent`. `EventProcessor::resolveSender()` lo resuelve a un `User` de la cuenta y lo guarda en `lead_events.user_id` (antes siempre null para salientes). Sin eso no se puede atribuir la respuesta a nadie. Para eventos viejos sin `sender_email` cae a coincidencia exacta de `sender_name` dentro de la cuenta — los que no matcheen quedan como `sin_identificar` (cuentan como respuesta humana para los tiempos, pero no se le adjudican a nadie).
@@ -235,12 +237,12 @@ Todo sale de `lead_events` (`message_in`/`message_out`) — no consulta al wacrm
 
 - **`prompt()` nativo eliminado al completar tareas.** Estaba en tres lugares (calendario y lista en `Tasks/Index.jsx`, ficha en `Leads/Show.jsx`) y se veía como un aviso del navegador. Ahora `Components/CompleteTaskModal.jsx`, montado **una sola vez en el layout** junto a `UndoToast` y disparado con `completeTask(task, { onCompleted })` — mismo patrón de API global (`let openFn`) que `showUndo`. Se hizo así porque los tres botones viven dentro de subcomponentes distintos y pasar el estado por props obligaba a encadenarlo tres niveles. Queda un `prompt()` en `Leads/Index.jsx` (nombre de lista guardada), fuera de este alcance.
 - **`/team-messages`** (admin-only, `TeamMessageController`): notas y recordatorios del admin a uno o varios responsables. Aterrizan en `app_notifications`, así que el destinatario los ve en la campana y en `/notifications` sin tocar nada de la lectura.
-  - **Apartados** (`AppNotification::CATEGORIES`): `seguimiento` | `personal` | `marketing`. Null en las notificaciones automáticas del sistema.
-  - **Los recordatorios NO usan cola ni cron.** La fila se crea al instante con `deliver_at` a futuro y queda oculta hasta ese momento. **Toda lectura de notificaciones DEBE pasar por el scope `AppNotification::delivered()`** — están cubiertos los tres caminos (contador de la campana en `HandleInertiaRequests`, listado en `NotificationController@index`, y acceso directo en `@go`, que devuelve 404 si aún no toca). `markAllRead` también lo filtra: marcar leído un recordatorio futuro lo dejaría invisible para siempre.
-  - **`batch_id`**: un envío masivo son N filas idénticas salvo el destinatario; el batch las reagrupa en el historial del admin ("1 aviso a 4 personas") sin adivinar por título + timestamp.
-  - Migración `2026_07_26_000007`: `category`, `deliver_at`, `sent_by_user_id`, `batch_id`, y `body` pasa de `varchar(255)` a `text` (corto para una nota redactada a mano).
-  - Atajos desde `/supervision`: botón "Enviar aviso" en el header y un ícono por fila que preselecciona a ese responsable (`?to=<userId>`).
-  - Tests en `TeamMessagesTest` (9), con un caso por cada camino de lectura del recordatorio pendiente.
+    - **Apartados** (`AppNotification::CATEGORIES`): `seguimiento` | `personal` | `marketing`. Null en las notificaciones automáticas del sistema.
+    - **Los recordatorios NO usan cola ni cron.** La fila se crea al instante con `deliver_at` a futuro y queda oculta hasta ese momento. **Toda lectura de notificaciones DEBE pasar por el scope `AppNotification::delivered()`** — están cubiertos los tres caminos (contador de la campana en `HandleInertiaRequests`, listado en `NotificationController@index`, y acceso directo en `@go`, que devuelve 404 si aún no toca). `markAllRead` también lo filtra: marcar leído un recordatorio futuro lo dejaría invisible para siempre.
+    - **`batch_id`**: un envío masivo son N filas idénticas salvo el destinatario; el batch las reagrupa en el historial del admin ("1 aviso a 4 personas") sin adivinar por título + timestamp.
+    - Migración `2026_07_26_000007`: `category`, `deliver_at`, `sent_by_user_id`, `batch_id`, y `body` pasa de `varchar(255)` a `text` (corto para una nota redactada a mano).
+    - Atajos desde `/supervision`: botón "Enviar aviso" en el header y un ícono por fila que preselecciona a ese responsable (`?to=<userId>`).
+    - Tests en `TeamMessagesTest` (9), con un caso por cada camino de lectura del recordatorio pendiente.
 - **`/notifications` con pestañas** (`Todas` / `Nuevas` / `Leídas`) + filtro por apartado. **El filtrado va en el servidor**, no en el cliente: con paginación, filtrar la página ya traída deja pestañas vacías aunque haya resultados en la siguiente. Los contadores por apartado se calculan **dentro de la pestaña activa** para que los números cuadren con lo que se ve. Nueva ruta `POST /notifications/{notification}/read` (`notifications.read`) que alterna leída/nueva de a una — antes un aviso sin lead asociado solo se podía marcar con "marcar todas". Layout de una sola columna agrupado por Hoy / Ayer / Esta semana / Anteriores (el grid de 2-3 columnas anterior obligaba a leer en zigzag). Tests en `NotificationTabsTest` (7).
 
 ## IA: sin mensaje de relleno al cliente + indicador en el header (2026-07-26)
@@ -248,7 +250,7 @@ Todo sale de `lead_events` (`message_in`/`message_out`) — no consulta al wacrm
 - **El wacrm ya NO le manda nada al cliente cuando la IA falla.** Antes enviaba "Un asesor te atenderá en breve": delataba que había un bot y dejaba una respuesta de relleno en lugar de una real. Ahora la conversación queda intacta, la IA se apaga en ese chat y **el aviso al responsable es el único canal** — si se pierde, el contacto queda sin respuesta.
 - **Evento `ai.unavailable`** (wacrm → Komo, `EventProcessor@handleAiUnavailable`) con `reason` `failed` | `limit_reached`. Crea una `AppNotification` para el **responsable del lead** (owner si no tiene). Tipos `ai_unavailable` / `ai_limit_reached`. Tests en `AiUnavailableTest`.
 - **Indicador de IA en el header**, al lado de la campana (`AiStatusBadge` en `AuthenticatedLayout`). Sale del prop compartido `aiStatus`, que es **lazy** (`fn () => …`) y está **cacheado 2 min**: es un HTTP al wacrm y no puede colgar el render de cada pantalla. Si el wacrm no responde, muestra "Sin conexión" en vez de tumbar la página. Estados: IA activa / apagada / manual / caída / fuera de horario / sin conexión / sin configurar.
-  - Lo alimenta `GET /api/v1/ai/status` en el wacrm (scope `conversations:read`), que **comprueba de verdad que Ollama responda** (`/api/tags`, cacheado 60s allá). "Disponible" no es solo que el toggle esté encendido: con Ollama caído la IA está configurada pero no contesta.
+    - Lo alimenta `GET /api/v1/ai/status` en el wacrm (scope `conversations:read`), que **comprueba de verdad que Ollama responda** (`/api/tags`, cacheado 60s allá). "Disponible" no es solo que el toggle esté encendido: con Ollama caído la IA está configurada pero no contesta.
 - **Ojo con el tope por conversación**: `InboundProcessor` resetea `ai_reply_count` a 0 en **cada mensaje entrante del cliente**, así que el "Máximo N respuestas por conversación" de Ajustes en la práctica solo limita ráfagas seguidas del bot, no la conversación entera. El aviso `limit_reached` existe y funciona, pero casi nunca se dispara con ese reset puesto. Decidir si el tope debe ser por conversación de verdad (quitar el reset) o si la UI debería decir otra cosa.
 
 ## Ventana de servicio de WhatsApp (2026-07-26) — control de gasto
@@ -278,6 +280,37 @@ Idempotente por email. **No pisa el password** si el usuario ya existe: si el mi
 **Trampa operativa — las contraseñas no viajan hacia atrás.** Los miembros que llegan por `wacrm:sync-team-to-komo` (el backfill de los que ya existían) se crean con clave **aleatoria**: las del wacrm están hasheadas y no se pueden reenviar. Y el correo de producción sigue en driver `log`, así que el "olvidé mi contraseña" no llega. Para eso está `php artisan komo:set-password EMAIL [--password=]` — sin argumentos lista los miembros. **Los creados desde el modal "Crear miembro sin link" del wacrm sí comparten contraseña**, porque ahí se manda en claro en el momento del alta.
 
 Utilidades: `php artisan komo:api-key --list` (cuentas con su UUID) y `komo:api-key "wacrm" --account=UUID --scopes=team:write` para generar la key sin pasar por la UI — la clave en claro se muestra una sola vez.
+
+## Ficha del Agente / Responsable (2026-08-06) — drill-down desde `/supervision`
+
+La ficha individual que quedaba pendiente ya está construida. Objetivo cubierto: entrar a un responsable y ver SU proceso y SUS pendientes. Todo se calcula con datos locales (`lead_events`, `leads`, `tasks`, `ServiceWindow`) — **no se consulta al wacrm para nada de esto**.
+
+Ruta y control de acceso:
+
+- `GET /supervision/agents/{user}` (nombre `supervision.agent`), dentro del grupo `admin.only`. En el controlador además `abort_unless($user->account_id === $viewer->account_id, 403)`.
+- Entrada: cada fila de `Supervision/Index.jsx` ahora es **clicable** hacia la ficha del responsable (el nombre es un `Link`; el chevron sigue expandiendo la fila).
+- Ventana por `?days=` (7/15/30/90, default 30), mismo patrón del index.
+
+Backend — **no se extiende `ResponseMetrics`**: tiene gemelo con sus propios tests y sus definiciones. Se agregaron métodos en `Services\Supervision\ResponseMetrics` que **reusan los mismos recorridos** de `build()`:
+
+- `forResponsible($userId)` → perfil del agente + KPIs (bucket del agregador) + `histogram()` + serie diaria + `leads` (filas de ese responsable).
+- `conversionFor($userId)` → ganados/perdidos/% conversión/ticket promedio, cerrados sobre `closed_at` en el periodo.
+- `operativesFor($userId)` → los **pendientes de AHORA**: leads esperando respuesta (último evento = `message_in`), ventana de servicio cerrada, leads estancados > 7 días en la misma etapa, y el **conteo de tareas vencidas** (`Task::pending()->overdue()`).
+
+Página `Pages/Supervision/Agent.jsx`:
+
+1. KPIs del periodo (proceso): conversaciones @ atendidos %, esperando/SLA, 1ª respuesta, respuesta más lenta.
+2. KPIs de cierre del ciclo: **ganados / perdidos / % conversión / ticket promedio**.
+3. Histograma de primera respuesta humana (baldes <1 m, 1-5, 5-15, 15-30, 30 m-1 h, >1 h) + embudo de sus leads abiertos por etapa (acumulado) + volúmenes diario y respuesta/SLA.
+4. Tabla **Pendientes operativos**: leads unificados con badges de motivo (Esperando respuesta / estancado / Ventana cerrada), ventana de servicio, link a `leads.show`, conteo de tareas vencidas y botón ** "Enviar aviso"** que preselecciona al responsable en `/team-messages?to={id}`.
+
+Tests `Tests/Feature/SupervisionAgentDetailTest` (nuevo):
+- 403 para un agente (no-admin) y para un admin de otra cuenta.
+- La ficha carga con `agent.name`, `kpis`, `histogram`, `leads`, `conversion`, `operatives` y `sla_minutes`.
+
+No requiere migraciones. Suite total de supervisión: **14/14 en verde**.
+
+De la especificación original hay dos extremos que no se implementaron (se documentan como futuro): la **serie semanal** (creados/ganados/perdidos por semana) y la **posición en el ranking** del responsable dentro del periodo. No se to me el wacrm: `lead_events.user_id` ya viene poblado y el webhook `message.sent` manda `sender_email`.
 
 ## Pendiente (futuro, no bloquea)
 

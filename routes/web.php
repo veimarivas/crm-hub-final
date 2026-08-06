@@ -116,6 +116,11 @@ Route::middleware('auth')->group(function () {
         ->middleware('admin.only')
         ->name('supervision.index');
 
+    // Ficha de un responsable (drill-down individual, admin-only)
+    Route::get('/supervision/agents/{user}', [\App\Http\Controllers\SupervisionController::class, 'show'])
+        ->middleware('admin.only')
+        ->name('supervision.agent');
+
     // Asesores: desempeño individual con desglose por pipeline (admin-only)
     Route::get('/asesores', [\App\Http\Controllers\AsesoresController::class, 'index'])
         ->middleware('admin.only')

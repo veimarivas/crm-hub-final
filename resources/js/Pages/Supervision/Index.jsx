@@ -101,13 +101,25 @@ function AgentRow({ agent, slaMinutes, expanded, onToggle }) {
         <>
             <tr className="hover:bg-gray-50 transition-colors">
                 <td className="px-5 py-3">
-                    <button onClick={onToggle} className="flex items-center gap-2 text-left group">
-                        <svg className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                    <div className="flex items-center gap-2 text-left">
+                        <button onClick={onToggle} className="group" title="Expandir">
+                            <svg className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                        </button>
                         <span>
-                            <span className="font-semibold text-gray-900 group-hover:text-emerald-700">{agent.name}</span>
+                            {agent.id ? (
+                                <Link
+                                    href={route('supervision.agent', agent.id)}
+                                    className="font-semibold text-gray-900 hover:text-emerald-700"
+                                    title="Ver ficha del responsable"
+                                >
+                                    {agent.name}
+                                </Link>
+                            ) : (
+                                <span className="font-semibold text-gray-900">{agent.name}</span>
+                            )}
                             {agent.role && <span className="block text-[11px] text-gray-400">{ROLE_LABEL[agent.role] ?? agent.role}</span>}
                         </span>
-                    </button>
+                    </div>
                 </td>
                 <td className="px-5 py-3 text-right tabular-nums text-gray-900 font-semibold">{agent.leads}</td>
                 <td className="px-5 py-3 text-right">
