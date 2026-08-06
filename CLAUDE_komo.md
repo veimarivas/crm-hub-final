@@ -2,6 +2,18 @@
 
 CRM de ventas centrado en **leads** inspirado en Kommo (kommo.com), hermano del **wacrm** (`C:\xampp_82_12\htdocs\laravel_crm_whatsapp`, CRM de WhatsApp). Son **dos proyectos separados integrados por API**: este maneja leads/tareas/pipeline; el wacrm es el motor de WhatsApp.
 
+## Rebranding ESAM HUB + paridad de UI con el wacrm (2026-08-06)
+
+Ronda de cambios de interfaz espejados con el wacrm (Ronda 17 de allá):
+
+- **Logo `HUB.png`** (`public/HUB.png`, trackeado en git): reemplaza a `logo_esam.png`/`esam_pequenio.png` en el Login (`GuestLayout.jsx`) y en el sidebar (`AuthenticatedLayout.jsx`).
+- **Login**: el logo `HUB.png` aparece a `h-28` dentro de la tarjeta ANTES del título, título nuevo **"Bienvenido a ESAM HUB"** (antes "¡Bienvenido al Komo CRM!") y se quitó el subtexto "Inicia sesión para continuar". Se eliminó el logo del banner fuera del formulario en `GuestLayout` (y el `import { Link }` quedó sin uso y se limpió).
+- **Sidebar**: logo `HUB.png` a `h-12`, **centrado** (header del sidebar con `justify-center` fijo en vez del condicional por `sidebarCollapsed`), y el texto al lado ahora dice **"ESAM HUB"** (antes "Komo").
+- **Inbox `/inbox` — ocultar/mostrar panel del lead** (paridad con el wacrm): nuevo estado `showContactPanel` (default `true`) + botón 👤 en el header del chat que alterna la columna derecha (`LeadPanel`). El aside pasa de `{conversation && (<aside …>)}` a `{conversation && showContactPanel && (<aside …>)}`. El botón usa `hidden lg:inline-flex` porque el panel es `hidden lg:block` (solo pantallas grandes).
+- **Inbox `/inbox` — número debajo del nombre** en la lista de conversaciones (`ConversationRow`): `<p className="text-[11px] text-gray-400 font-mono truncate">{item.contact?.phone}</p>` entre el nombre y la preview del último mensaje.
+- **Leads `/leads` — número en cada lead** (`Leads/Index.jsx`): teléfono debajo del nombre/contacto en la tarjeta (`LeadCard`, usa la variable `phone` = `phone_normalized || phone`) y en la vista de fila (`LeadRow`, con `lead.contact?.phone_normalized || lead.contact?.phone`).
+- Ninguna migración, solo JS/CSS. El build de producción va en el servidor (`/public/build` está en `.gitignore`).
+
 ## Estado: fases 1 y 2 completadas (2026-07-12)
 
 Suite: **31 tests / 99 aserciones en verde** (`php artisan test`). Usuario de pruebas: `admin@gmail.com` / `admin123` (owner, con pipeline "Ventas" sembrado).
