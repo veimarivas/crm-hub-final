@@ -55,6 +55,7 @@ function ConversationRow({ item, active, onSelect }) {
                         {relativeTime(item.last_message?.at || item.last_activity_at)}
                     </span>
                 </div>
+                <p className="text-[11px] text-gray-400 font-mono truncate">{item.contact?.phone}</p>
                 <p className={`text-xs truncate mt-0.5 ${isIn ? 'font-semibold text-gray-800' : 'text-gray-500'}`}>
                     {isIn ? '' : '↩ '}
                     {item.last_message?.preview || <span className="italic text-gray-400">Sin mensajes aún</span>}
