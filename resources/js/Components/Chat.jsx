@@ -223,6 +223,7 @@ export function SystemEvent({ event }) {
     if (event.event_type === 'stage_changed') description = <>{p.from} → <span className="font-semibold">{p.to}</span></>;
     else if (event.event_type === 'value_changed') description = <>{p.from} → <span className="font-semibold">{p.to}</span></>;
     else if (['note_added', 'task_created', 'task_completed'].includes(event.event_type) && p.text) description = <span className="italic">"{p.text}"{p.result ? ` — ${p.result}` : ''}</span>;
+    else if (event.event_type === 'booking' && p.scheduled_at) description = <span>{new Date(p.scheduled_at).toLocaleString('es', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>;
 
     return (
         <div className="flex items-center justify-center gap-2 py-1">

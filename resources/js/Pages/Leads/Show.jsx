@@ -114,6 +114,11 @@ function TimelineEvent({ event }) {
                 {event.event_type === 'value_changed' && (
                     <p className="text-xs text-gray-500 mt-0.5">{p.from} → <span className="font-semibold">{p.to}</span></p>
                 )}
+                {event.event_type === 'booking' && p.scheduled_at && (
+                    <p className="text-xs font-medium text-indigo-500 mt-0.5">
+                        {new Date(p.scheduled_at).toLocaleString('es', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                )}
                 {event.actor && <p className="text-[11px] text-gray-300 mt-1">por {event.actor.name}</p>}
             </div>
         </div>
@@ -311,21 +316,75 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                             </div>
 
                             {/* Acciones destacadas */}
-                            {lead.status === 'open' && (
-                                <div className="flex items-center gap-2 flex-wrap shrink-0">
-                                    {wonStage && (
-                                        <button onClick={() => moveTo(wonStage.id)} className="px-3.5 py-2 text-sm font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 rounded-xl hover:opacity-90 transition-all shadow-lg shadow-emerald-500/30 inline-flex items-center gap-1.5">
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.562.562 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" /></svg>
-                                            Ganado
+                            <div className="flex items-center gap-2 flex-wrap shrink-0">
+                                {lead.status === 'open' && wonStage && (
+                                    <button onClick={() => moveTo(wonStage.id)} className="px-3.5 py-2 text-sm font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 rounded-xl hover:opacity-90 transition-all shadow-lg shadow-emerald-500/30 inline-flex items-center gap-1.5">
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.562.562 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" /></svg>
+                                        Ganado
+                                    </button>
+                                )}
+                                {lead.status === 'open' && lostStage && (
+                                    <button onClick={() => moveTo(lostStage.id)} className="px-3.5 py-2 text-sm font-semibold text-red-600 bg-white border border-red-200 rounded-xl hover:bg-red-50 transition-all shadow-sm">
+                                        Perdido
+                                    </button>
+                                )}
+                                {lead.contact?.phone && (
+                                    <a
+                                        href={`https://wa.me/${(lead.contact.phone_normalized ?? lead.contact.phone).replace(/[^\d]/g, '')}`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        title="Llamar/abrir chat en WhatsApp"
+                                        className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all shadow-sm"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" /></svg>
+                                        Llamar
+                                    </a>
+                                )}
+                                {whatsappEnabled && lead.wacrm_conversation_id && (
+                                    (isAdmin || !lead.responsible_user_id || lead.responsible_user_id === auth?.user?.id) ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => router.patch(route('leads.ai-mode', lead.id), { ai_enabled: !lead.ai_enabled }, { preserveScroll: true })}
+                                            title={lead.ai_enabled ? 'Cambiar a Humano (silenciar IA)' : 'Cambiar a IA (auto-respuesta)'}
+                                            className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border transition-all shadow-sm ${
+                                                lead.ai_enabled
+                                                    ? 'border-violet-300 bg-gradient-to-br from-violet-50 to-purple-50 text-violet-700 shadow-violet-500/10'
+                                                    : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                                            }`}
+                                        >
+                                            {lead.ai_enabled ? (
+                                                <>
+                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                                                    </svg>
+                                                    IA activa
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                                    </svg>
+                                                    Humano
+                                                </>
+                                            )}
                                         </button>
-                                    )}
-                                    {lostStage && (
-                                        <button onClick={() => moveTo(lostStage.id)} className="px-3.5 py-2 text-sm font-semibold text-red-600 bg-white border border-red-200 rounded-xl hover:bg-red-50 transition-all shadow-sm">
-                                            Perdido
-                                        </button>
-                                    )}
-                                </div>
-                            )}
+                                    ) : (
+                                        <span
+                                            title="Solo el responsable o el admin pueden cambiar el modo IA"
+                                            className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border ${
+                                                lead.ai_enabled ? 'border-violet-200 bg-violet-50 text-violet-700' : 'border-gray-200 bg-gray-50 text-gray-600'
+                                            }`}
+                                        >
+                                            {lead.ai_enabled ? '✨ IA activa' : '👤 Humano'}
+                                        </span>
+                                    )
+                                )}
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ring-1 bg-emerald-50 text-emerald-700 ring-emerald-200">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                    {lead.status === 'open' ? 'Activo' : lead.status}
+                                </span>
+                            </div>
                         </div>
 
                         {/* Stage stepper visual — reemplaza el dropdown por breadcrumb clickeable */}
@@ -685,68 +744,7 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
 
                         {tab === 'chat' && (
                             <>
-                                {/* Barra de acciones del chat. Sin avatar ni
-                                    nombre: ya están en el encabezado de la
-                                    ficha, justo arriba, y repetirlos le comía
-                                    ~70px al historial. */}
-                                <div className="flex items-center justify-end gap-2 px-4 py-2 border-b border-gray-100 bg-gray-50/60">
-                                    {lead.contact?.phone && (
-                                        <a
-                                            href={`https://wa.me/${(lead.contact.phone_normalized ?? lead.contact.phone).replace(/[^\d]/g, '')}`}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            title="Llamar/abrir chat en WhatsApp"
-                                            className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all shadow-sm"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" /></svg>
-                                            Llamar
-                                        </a>
-                                    )}
-                                    {whatsappEnabled && lead.wacrm_conversation_id && (
-                                        (isAdmin || !lead.responsible_user_id || lead.responsible_user_id === auth?.user?.id) ? (
-                                            <button
-                                                type="button"
-                                                onClick={() => router.patch(route('leads.ai-mode', lead.id), { ai_enabled: !lead.ai_enabled }, { preserveScroll: true })}
-                                                title={lead.ai_enabled ? 'Cambiar a Humano (silenciar IA)' : 'Cambiar a IA (auto-respuesta)'}
-                                                className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border transition-all shadow-sm ${
-                                                    lead.ai_enabled
-                                                        ? 'border-violet-300 bg-gradient-to-br from-violet-50 to-purple-50 text-violet-700 shadow-violet-500/10'
-                                                        : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
-                                                }`}
-                                            >
-                                                {lead.ai_enabled ? (
-                                                    <>
-                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-                                                        </svg>
-                                                        IA activa
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                                        </svg>
-                                                        Humano
-                                                    </>
-                                                )}
-                                            </button>
-                                        ) : (
-                                            <span
-                                                title="Solo el responsable o el admin pueden cambiar el modo IA"
-                                                className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border ${
-                                                    lead.ai_enabled ? 'border-violet-200 bg-violet-50 text-violet-700' : 'border-gray-200 bg-gray-50 text-gray-600'
-                                                }`}
-                                            >
-                                                {lead.ai_enabled ? '✨ IA activa' : '👤 Humano'}
-                                            </span>
-                                        )
-                                    )}
-                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ring-1 bg-emerald-50 text-emerald-700 ring-emerald-200">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                        {lead.status === 'open' ? 'Activo' : lead.status}
-                                    </span>
-                                </div>
+                                
 
                                 {/* Hilo */}
                                 <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-2 bg-gradient-to-b from-gray-50 to-gray-100">
