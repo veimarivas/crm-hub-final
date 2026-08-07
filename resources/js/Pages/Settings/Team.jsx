@@ -22,6 +22,8 @@ export default function Team({ members, invitations, apiKeys = [], apiScopes = [
     const [copiedKey, setCopiedKey] = useState(false);
     const [confirmRemove, setConfirmRemove] = useState(null);
     const [removing, setRemoving] = useState(false);
+    const [confirmRevoke, setConfirmRevoke] = useState(null);
+    const [revoking, setRevoking] = useState(false);
     const inviteForm = useForm({ role: 'agent', label: '' });
     const keyForm = useForm({ name: '', scopes: [...apiScopes] });
 
@@ -40,6 +42,12 @@ export default function Team({ members, invitations, apiKeys = [], apiScopes = [
             ? keyForm.data.scopes.filter((s) => s !== scope)
             : [...keyForm.data.scopes, scope]);
     };
+
+    const scopeIcon = (scope) => scope === 'leads:read'
+        ? <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+        : scope === 'leads:write'
+        ? <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        : <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z" /></svg>;
 
     const copy = () => {
         navigator.clipboard.writeText(newInviteUrl);
@@ -277,9 +285,10 @@ export default function Team({ members, invitations, apiKeys = [], apiScopes = [
                                     </div>
                                     {isAdmin && !key.revoked_at && (
                                         <button
-                                            onClick={() => { if (confirm(`¿Revocar la API key "${key.name}"? Las integraciones que la usen dejarán de funcionar.`)) router.delete(route('team.api-keys.revoke', key.id), { preserveScroll: true }); }}
-                                            className="text-xs text-red-600 hover:text-red-700 font-medium opacity-0 group-hover:opacity-100 transition-opacity"
+                                            onClick={() => setConfirmRevoke(key)}
+                                            className="text-xs text-red-600 hover:text-red-700 font-medium opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1"
                                         >
+                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3h9M9 3v3M8.25 8.25a9 9 0 107.5 0M7.5 15l9-6" /></svg>
                                             Revocar
                                         </button>
                                     )}
@@ -296,13 +305,27 @@ export default function Team({ members, invitations, apiKeys = [], apiScopes = [
                             </div>
                             <div>
                                 <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Permisos</label>
-                                <div className="flex gap-3">
-                                    {apiScopes.map((scope) => (
-                                        <label key={scope} className="flex items-center gap-1.5 text-sm text-gray-700 bg-white border border-gray-200 rounded-xl px-3 py-2.5 cursor-pointer">
-                                            <input type="checkbox" checked={keyForm.data.scopes.includes(scope)} onChange={() => toggleScope(scope)} className="rounded border-gray-300" />
-                                            {SCOPE_LABELS[scope] ?? scope}
-                                        </label>
-                                    ))}
+                                <div className="flex flex-wrap gap-2">
+                                    {apiScopes.map((scope) => {
+                                        const active = keyForm.data.scopes.includes(scope);
+                                        return (
+                                            <label
+                                                key={scope}
+                                                onClick={() => toggleScope(scope)}
+                                                className={`flex items-center gap-2 text-sm font-medium rounded-xl px-3.5 py-2.5 border-2 cursor-pointer select-none transition-all ${
+                                                    active
+                                                        ? 'bg-purple-50 border-purple-500 text-purple-800 shadow-sm'
+                                                        : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                                                }`}
+                                            >
+                                                <span className={`flex items-center justify-center w-5 h-5 rounded-md border transition-colors ${active ? 'bg-purple-600 border-purple-600 text-white' : 'bg-white border-gray-300 text-transparent'}`}>
+                                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                                                </span>
+                                                <span className="text-purple-600">{scopeIcon(scope)}</span>
+                                                {SCOPE_LABELS[scope] ?? scope}
+                                            </label>
+                                        );
+                                    })}
                                 </div>
                             </div>
                             <button type="submit" disabled={keyForm.processing || keyForm.data.scopes.length === 0} className="px-4 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-violet-600 rounded-xl hover:from-purple-500 hover:to-violet-500 disabled:opacity-50 transition-all shadow-lg shadow-purple-500/20">
@@ -347,6 +370,44 @@ export default function Team({ members, invitations, apiKeys = [], apiScopes = [
                                 className="px-5 py-2.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-500 rounded-xl transition-all shadow-lg shadow-red-500/20 disabled:opacity-50"
                             >
                                 {removing ? 'Expulsando…' : 'Sí, expulsar'}
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+
+                <Modal show={!!confirmRevoke} onClose={() => setConfirmRevoke(null)} maxWidth="md">
+                    <div className="p-6">
+                        <div className="flex items-start gap-4">
+                            <div className="w-11 h-11 rounded-full bg-red-50 flex items-center justify-center text-red-600 shrink-0">
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5M21.75 19.5v-15a2.25 2.25 0 00-2.25-2.25H4.5a2.25 2.25 0 00-2.25 2.25v15a2.25 2.25 0 002.25 2.25h15a2.25 2.25 0 002.25-2.25z" />
+                                </svg>
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <h3 className="text-base font-bold text-gray-900">Revocar API key</h3>
+                                <p className="text-sm text-gray-500 mt-1">
+                                    ¿Revocar la API key <strong>{confirmRevoke?.name}</strong> (<span className="text-gray-400 font-mono">{confirmRevoke?.key_prefix}…</span>)?
+                                </p>
+                                <p className="text-xs text-red-600 mt-2">Las integraciones que la usen dejarán de funcionar inmediatamente. Esta acción no se puede deshacer.</p>
+                            </div>
+                        </div>
+                        <div className="mt-6 flex justify-end gap-3">
+                            <button onClick={() => setConfirmRevoke(null)} className="px-4 py-2.5 text-sm font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-all shadow-sm">
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setRevoking(true);
+                                    router.delete(route('team.api-keys.revoke', confirmRevoke.id), {
+                                        preserveScroll: true,
+                                        onSuccess: () => { setConfirmRevoke(null); setRevoking(false); },
+                                        onError: () => setRevoking(false),
+                                    });
+                                }}
+                                disabled={revoking}
+                                className="px-5 py-2.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-500 rounded-xl transition-all shadow-lg shadow-red-500/20 disabled:opacity-50"
+                            >
+                                {revoking ? 'Revocando…' : 'Sí, revocar'}
                             </button>
                         </div>
                     </div>
