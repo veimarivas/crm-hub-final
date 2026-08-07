@@ -52,31 +52,61 @@ class ReportController extends Controller
             ];
         });
 
+        // Columna por etapa abierta para el ranking del equipo: el admin ve, en
+        // una columna por etapa (Nuevo, Contactado, Negociación, …), cuántos
+        // leads abiertos tiene cada agente en cada una.
+        $stageColumns = $pipelines
+            ->flatMap(fn ($p) => $p->stages->where('stage_type', 'open')->values())
+            ->unique('id')
+            ->values()
+            ->map(fn ($s) => ['id' => $s->id, 'name' => $s->name])
+            ->values();
+
         // Ranking del equipo: solo admin lo ve; agent no compara con otros.
         $byUser = $isAdmin
             ? User::where('account_id', $accountId)
                 ->get(['id', 'name'])
-                ->map(fn ($u) => [
-                    'name' => $u->name,
-                    'won' => Lead::forAccount($accountId)->where('status', 'won')
+                ->map(function ($u) use ($accountId, $stageColumns) {
+                    $openByStage = Lead::forAccount($accountId)
+                        ->where('status', 'open')
                         ->where('responsible_user_id', $u->id)
-                        ->where('closed_at', '>=', now()->startOfMonth())->count(),
-                    'wonValue' => (float) Lead::forAccount($accountId)->where('status', 'won')
-                        ->where('responsible_user_id', $u->id)
-                        ->where('closed_at', '>=', now()->startOfMonth())->sum('value'),
-                    'open' => Lead::forAccount($accountId)->where('status', 'open')
-                        ->where('responsible_user_id', $u->id)->count(),
-                ])
+                        ->selectRaw('stage_id, count(*) as total')
+                        ->groupBy('stage_id')
+                        ->pluck('total', 'stage_id');
+
+                    return [
+                        'name' => $u->name,
+                        'won' => Lead::forAccount($accountId)->where('status', 'won')
+                            ->where('responsible_user_id', $u->id)
+                            ->where('closed_at', '>=', now()->startOfMonth())->count(),
+                        'wonValue' => (float) Lead::forAccount($accountId)->where('status', 'won')
+                            ->where('responsible_user_id', $u->id)
+                            ->where('closed_at', '>=', now()->startOfMonth())->sum('value'),
+                        'open' => Lead::forAccount($accountId)->where('status', 'open')
+                            ->where('responsible_user_id', $u->id)->count(),
+                        'stages' => $stageColumns
+                            ->mapWithKeys(fn ($s) => [$s['name'] => (int) ($openByStage[$s['id']] ?? 0)])
+                            ->all(),
+                    ];
+                })
                 ->sortByDesc('wonValue')
                 ->values()
             : collect();
 
+        $stageNames = $stageColumns->pluck('name')->all();
+
         $totalWon = $leadScope(Lead::forAccount($accountId)->where('status', 'won'))->count();
         $totalLost = $leadScope(Lead::forAccount($accountId)->where('status', 'lost'))->count();
 
-        // Conversión por fuente (whatsapp, web_form, lead_ad, manual, api, otros)
+        // Conversión por fuente (whatsapp, booking, web_form, lead_ad, manual, api, otros).
+        // `booking` = leads que entraron por el formulario de reserva SIN
+        // contacto previo. Si el booking reusó un lead con contacto inicial por
+        // otra media (p.ej. whatsapp), la fuente se mantiene la original y el
+        // booking no suma acá — eso es lo que pide "si ya hubo un contacto
+        // inicial por otro medio, debe estar ese".
         $sourceLabels = [
             'whatsapp' => 'WhatsApp',
+            'booking' => 'Formulario de reserva',
             'lead_ad' => 'Meta Lead Ad',
             'web_form' => 'Formulario web',
             'manual' => 'Manual',
@@ -111,7 +141,12 @@ class ReportController extends Controller
         // más leads. Los sin UTM se agrupan bajo "(direct)" para separar
         // el tráfico orgánico/directo del atribuido. El COALESCE se hace en
         // PHP para no chocar con ONLY_FULL_GROUP_BY de MariaDB.
+        //
+        // WhatsApp y el formulario de reserva son canales propios (no llevan
+        // UTM), por eso se muestran aparte arriba y se excluyen de la
+        // agrupación por utm_source donde antes caían bajo "(direct)".
         $utmSourceRows = $leadScope(Lead::forAccount($accountId))
+            ->whereNotIn('source', ['whatsapp', 'booking'])
             ->selectRaw("utm_source, count(*) as total,
                 sum(case when status='won' then 1 else 0 end) as won,
                 sum(case when status='lost' then 1 else 0 end) as lost,
@@ -131,6 +166,34 @@ class ReportController extends Controller
                 'conversion_rate' => ($r->won + $r->lost) > 0
                     ? round(($r->won / ($r->won + $r->lost)) * 100, 1) : 0,
             ])->values();
+
+        // Canales propios "WhatsApp" y "Formulario de reserva" en la tabla de
+        // canales de marketing. Como en "Conversión por fuente", si el booking
+        // reusó un lead con contacto inicial por otro medio, su fuente es la
+        // original y aparece bajo ese canal y no como Formulario de reserva.
+        $propioRows = $leadScope(Lead::forAccount($accountId))
+            ->whereIn('source', ['whatsapp', 'booking'])
+            ->selectRaw("source, count(*) as total,
+                sum(case when status='won' then 1 else 0 end) as won,
+                sum(case when status='lost' then 1 else 0 end) as lost,
+                sum(case when status='open' then 1 else 0 end) as open_count,
+                sum(case when status='won' then value else 0 end) as won_value")
+            ->groupBy('source')
+            ->get()
+            ->map(fn ($r) => [
+                'label' => $r->source === 'booking' ? 'Formulario de reserva' : 'WhatsApp',
+                'total' => (int) $r->total,
+                'won' => (int) $r->won,
+                'lost' => (int) $r->lost,
+                'open' => (int) $r->open_count,
+                'won_value' => (float) $r->won_value,
+                'conversion_rate' => ($r->won + $r->lost) > 0
+                    ? round(($r->won / ($r->won + $r->lost)) * 100, 1) : 0,
+            ])
+            ->filter(fn ($r) => $r['total'] > 0)
+            ->values();
+
+        $marketingRows = $propioRows->concat($utmSourceRows)->values();
 
         // Conversión por campaña (utm_campaign) — top 10. Ideal para ver
         // qué campañas específicas de Google/Meta/TikTok convierten mejor.
@@ -172,8 +235,9 @@ class ReportController extends Controller
             ],
             'isAdmin' => $isAdmin,
             'bySource' => $bySource,
-            'byUtmSource' => $utmSourceRows,
+            'byUtmSource' => $marketingRows,
             'byUtmCampaign' => $utmCampaignRows,
+            'stageNames' => $stageNames,
             'currency' => $user->account->default_currency,
         ]);
     }

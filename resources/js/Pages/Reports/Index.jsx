@@ -53,7 +53,7 @@ function SourceTable({ title, subtitle, rows, currency, showChannel = false, mon
                         {rows.map((s) => {
                             const rate = s.conversion_rate;
                             const tone = rateTone(rate);
-                            const sourceIcon = { whatsapp: '💬', lead_ad: '📣', web_form: '📋', manual: '✍️', api: '⚙️', other: '❓', google: '🔍', google_ads: '🔍', meta: '📣', meta_ads: '📣', facebook: '📣', instagram: '📸', tiktok: '🎵', tiktok_ads: '🎵', linkedin: '💼', email: '📧', bing: '🔎', youtube: '▶️', '(direct)': '🌐' }[(s.source || s.label || '').toLowerCase()] ?? '📊';
+                            const sourceIcon = { whatsapp: '💬', booking: '📅', 'formulario de reserva': '📅', lead_ad: '📣', web_form: '📋', manual: '✍️', api: '⚙️', other: '❓', google: '🔍', google_ads: '🔍', meta: '📣', meta_ads: '📣', facebook: '📣', instagram: '📸', tiktok: '🎵', tiktok_ads: '🎵', linkedin: '💼', email: '📧', bing: '🔎', youtube: '▶️', '(direct)': '🌐' }[(s.source || s.label || '').toLowerCase()] ?? '📊';
                             return (
                                 <tr key={(s.source || s.label) + (s.source ?? '')} className="hover:bg-gray-50 transition-colors">
                                     <td className="px-5 py-3">
@@ -99,7 +99,7 @@ function SourceTable({ title, subtitle, rows, currency, showChannel = false, mon
     );
 }
 
-export default function Index({ pipelines, pipelineId, funnel, monthly, byUser, conversion, bySource = [], byUtmSource = [], byUtmCampaign = [], currency }) {
+export default function Index({ pipelines, pipelineId, funnel, monthly, byUser, conversion, bySource = [], byUtmSource = [], byUtmCampaign = [], stageNames = [], currency }) {
     const maxFunnel = Math.max(1, ...funnel.map((s) => s.count));
     const maxMonthly = Math.max(1, ...monthly.map((m) => m.won + m.lost));
     const totalRevenue = conversion.won > 0 ? conversion.avgTicket * conversion.won : 0;
@@ -244,7 +244,7 @@ export default function Index({ pipelines, pipelineId, funnel, monthly, byUser, 
                 {/* Conversión por canal de marketing (utm_source) */}
                 <SourceTable
                     title="Canales de marketing"
-                    subtitle="Atribución first-touch por utm_source (Google, Meta, TikTok, orgánico, email, …). (direct) = tráfico directo o sin UTM."
+                    subtitle="WhatsApp y Formulario de reserva son canales propios. El resto es atribución first-touch por utm_source (Google, Meta, TikTok, orgánico, email, …). (direct) = sin UTM."
                     rows={byUtmSource}
                     currency={currency}
                 />
@@ -274,6 +274,9 @@ export default function Index({ pipelines, pipelineId, funnel, monthly, byUser, 
                                     <tr>
                                         <th className="text-left px-5 py-3.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Vendedor</th>
                                         <th className="text-right px-5 py-3.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Abiertos</th>
+                                        {stageNames.map((sn) => (
+                                            <th key={sn} className="text-right px-3 py-3.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider min-w-[70px]" title={sn}>{sn}</th>
+                                        ))}
                                         <th className="text-right px-5 py-3.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Ganados</th>
                                         <th className="text-right px-5 py-3.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Ingresos</th>
                                     </tr>
@@ -295,6 +298,11 @@ export default function Index({ pipelines, pipelineId, funnel, monthly, byUser, 
                                                         </div>
                                                     </td>
                                                     <td className="px-5 py-4 text-right tabular-nums text-gray-600">{user.open}</td>
+                                                    {stageNames.map((sn) => (
+                                                        <td key={sn} className="px-3 py-4 text-right tabular-nums text-gray-500">
+                                                            {user.stages?.[sn] || 0}
+                                                        </td>
+                                                    ))}
                                                     <td className="px-5 py-4 text-right tabular-nums font-bold text-emerald-600">{user.won}</td>
                                                     <td className="px-5 py-4 text-right">
                                                         <div className="inline-flex items-center gap-2 justify-end w-full">
