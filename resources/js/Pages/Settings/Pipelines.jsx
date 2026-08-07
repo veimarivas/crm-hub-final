@@ -1,5 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head, router, useForm, usePage } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 
 const PRESET_COLORS = ['#0ea5e9', '#8b5cf6', '#f59e0b', '#ec4899', '#10b981', '#ef4444', '#6366f1', '#14b8a6', '#eab308'];
@@ -173,6 +173,18 @@ function PipelineCard({ pipeline }) {
                             <StageRow key={s.id} stage={s} isFirst isLast onSave={updateStage} onDelete={deleteStage} onMove={() => {}} />
                         ))}
                     </ul>
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                    <Link
+                        href={route('pipelines.automations', pipeline.id)}
+                        className="w-full inline-flex items-center justify-center gap-2 py-2.5 text-xs font-bold text-violet-700 bg-violet-50 border border-violet-200 rounded-xl hover:bg-violet-100 transition-colors"
+                    >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                        </svg>
+                        Automatizaciones por etapa
+                    </Link>
                 </div>
             </div>
         </div>
