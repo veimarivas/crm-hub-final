@@ -221,6 +221,18 @@ class InboxController extends Controller
             ->sortBy('created_at')
             ->values();
 
+        // Próxima reunión reservada (solo si la fecha todavía no pasó).
+        $nextBooking = $lead->events()
+            ->where('event_type', 'booking')
+            ->limit(50)
+            ->get(['id', 'payload'])
+            ->pluck('payload')
+            ->map(fn ($p) => $p['scheduled_at'] ?? null)
+            ->filter()
+            ->filter(fn ($iso) => now()->lt($iso))
+            ->sort()
+            ->first();
+
         return [
             'lead' => [
                 'id' => $lead->id,
@@ -231,6 +243,7 @@ class InboxController extends Controller
                 'ai_enabled' => (bool) $lead->ai_enabled,
                 'ai_pending' => (bool) $lead->ai_pending,
                 'ai_paused_until' => $lead->ai_paused_until,
+                'next_booking' => $nextBooking ? ['scheduled_at' => $nextBooking] : null,
                 'stage' => $lead->stage ? ['id' => $lead->stage->id, 'name' => $lead->stage->name, 'color' => $lead->stage->color] : null,
                 'responsible' => $lead->responsible ? ['id' => $lead->responsible->id, 'name' => $lead->responsible->name] : null,
                 'tags' => $lead->tags->map(fn ($t) => ['id' => $t->id, 'name' => $t->name, 'color' => $t->color])->all(),

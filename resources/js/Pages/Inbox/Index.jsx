@@ -32,7 +32,7 @@ const money = (v) => 'Bs. ' + new Intl.NumberFormat('es', { maximumFractionDigit
 
 /** Fila de la lista de conversaciones. */
 function ConversationRow({ item, active, onSelect }) {
-    const contactName = item.contact?.name || item.contact?.phone || 'Sin contacto';
+    const contactName = item.title || item.contact?.name || item.contact?.phone || 'Sin contacto';
     const isIn = item.last_message?.direction === 'in';
 
     return (
@@ -84,12 +84,13 @@ function ConversationRow({ item, active, onSelect }) {
 function LeadPanel({ conv, isAdmin }) {
     const lead = conv.lead;
     const phone = lead.contact?.phone_normalized || lead.contact?.phone;
+    const leadName = lead.title || lead.contact?.name || 'Sin nombre';
 
     return (
         <div className="h-full overflow-y-auto p-4 space-y-4">
             <div className="text-center">
-                <div className="flex justify-center mb-2"><Avatar name={lead.contact?.name || phone} size="lg" /></div>
-                <p className="font-bold text-gray-900">{lead.contact?.name || 'Sin nombre'}</p>
+                <div className="flex justify-center mb-2"><Avatar name={leadName} size="lg" /></div>
+                <p className="font-bold text-gray-900">{leadName}</p>
                 <p className="text-xs text-gray-500 font-mono">{lead.contact?.phone || '—'}</p>
                 {lead.contact?.email && <p className="text-[11px] text-gray-400 truncate">{lead.contact.email}</p>}
             </div>
@@ -101,6 +102,15 @@ function LeadPanel({ conv, isAdmin }) {
             </div>
 
             <ServiceWindowCard window={conv.service_window} />
+
+            {lead.next_booking && (
+                <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 text-xs">
+                    <p className="text-[10px] font-bold text-indigo-600 mb-1">📅 Reunión reservada</p>
+                    <p className="font-semibold text-indigo-800 capitalize">
+                        {new Date(lead.next_booking.scheduled_at).toLocaleString('es', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                </div>
+            )}
 
             <dl className="bg-white rounded-xl border border-gray-100 p-3 space-y-2 text-xs">
                 <div className="flex justify-between gap-2">
@@ -262,7 +272,7 @@ export default function InboxIndex({ items, counts, filter, q, isAdmin, slaMinut
         ...(isAdmin ? [{ key: 'all', label: 'Todo el equipo', icon: '🌐', tone: 'slate' }] : []),
     ];
 
-    const contactName = conversation?.lead?.contact?.name || conversation?.lead?.contact?.phone || 'Sin contacto';
+    const contactName = conversation?.lead?.title || conversation?.lead?.contact?.name || conversation?.lead?.contact?.phone || 'Sin contacto';
     const ventanaCerrada = conversation && !conversation.service_window?.is_open;
 
     // Pausa vigente de la IA (null si ya venció: en ese caso retoma sola).
