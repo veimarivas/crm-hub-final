@@ -10,6 +10,8 @@ use App\Models\Pipeline;
 use App\Models\Task;
 use App\Models\User;
 use App\Services\Booking\SlotCalculator;
+use App\Services\Wacrm\Client;
+use App\Services\WhatsApp\ServiceWindow;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -133,6 +135,52 @@ class BookingController extends Controller
                 null,
                 ['source' => 'booking', 'scheduled_at' => $scheduledAt->toIso8601String()],
             );
+
+            // Confirmación por WhatsApp. Solo se envía si la ventana de
+            // servicio está abierta (24 h, o 72 h si vino de un anuncio):
+            // fuera de ella Meta cobra el texto libre, así que NO se corre el
+            // riesgo. En ese caso se deja una tarea en el lead (o se crea el
+            // lead con esa tarea si el contacto aún no tenía conversación).
+            $tzLocal = $host->account->business_hours_timezone ?: 'America/La_Paz';
+            $scheduledLocal = $scheduledAt->timezone($tzLocal);
+            $fechaLegible = $scheduledLocal->translatedFormat('d/m/Y');
+            $horaLegible = $scheduledLocal->format('H:i');
+
+            $window = app(ServiceWindow::class)->forLead($lead);
+            $integration = $host->account->integration;
+
+            $confirmNeeded = $window['is_open'] ?? false;
+
+            if ($confirmNeeded && $integration?->is_active && $lead->contact?->phone) {
+                try {
+                    Client::for($integration)->sendMessage(
+                        $lead->contact->phone_normalized ?? $lead->contact->phone,
+                        'Se registró la reunión agendada para el '.$fechaLegible.' a las '.$horaLegible.'.',
+                    );
+                } catch (\RuntimeException $e) {
+                    Task::create([
+                        'account_id' => $host->account_id,
+                        'lead_id' => $lead->id,
+                        'contact_id' => $contact->id,
+                        'assigned_to' => $host->id,
+                        'created_by' => $host->id,
+                        'task_type' => 'call',
+                        'text' => 'No se envió la confirmación de la reserva por WhatsApp (error de envío). Reunión agendada para el '.$fechaLegible.' a las '.$horaLegible.'.',
+                        'due_at' => $scheduledAt,
+                    ]);
+                }
+            } elseif (! $confirmNeeded) {
+                Task::create([
+                    'account_id' => $host->account_id,
+                    'lead_id' => $lead->id,
+                    'contact_id' => $contact->id,
+                    'assigned_to' => $host->id,
+                    'created_by' => $host->id,
+                    'task_type' => 'call',
+                    'text' => 'No se envió la confirmación de la reserva: fuera de la ventana de servicio (24/72 h). Reunión agendada para el '.$fechaLegible.' a las '.$horaLegible.'.',
+                    'due_at' => $scheduledAt,
+                ]);
+            }
 
             AppNotification::notify(
                 $host->account_id,
