@@ -29,7 +29,7 @@ export default function WebForms({ forms, pipelines }) {
         <AuthenticatedLayout>
             <Head title="Formularios web" />
 
-            <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
                 <div>
                     <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Formularios web</h1>
                     <p className="text-sm text-gray-400 mt-1">Captura leads desde tu sitio — cada envío crea un contacto y un lead</p>
@@ -42,7 +42,7 @@ export default function WebForms({ forms, pipelines }) {
                 {/* Crear */}
                 <form onSubmit={submit} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6 space-y-4">
                     <h3 className="text-base font-bold text-gray-900">Nuevo formulario</h3>
-                    <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="grid lg:grid-cols-3 gap-4">
                         <div>
                             <label className="block text-sm font-semibold text-gray-700 mb-1.5">Nombre interno</label>
                             <input value={data.name} onChange={(e) => setData('name', e.target.value)} required placeholder="ej. Landing promoción" className={inputClass} />
@@ -54,10 +54,10 @@ export default function WebForms({ forms, pipelines }) {
                                 {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                             </select>
                         </div>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">Título visible <span className="text-gray-400 font-normal">(opcional)</span></label>
-                        <input value={data.headline} onChange={(e) => setData('headline', e.target.value)} placeholder="ej. Solicita tu cotización" className={inputClass} />
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Título visible <span className="text-gray-400 font-normal">(opcional)</span></label>
+                            <input value={data.headline} onChange={(e) => setData('headline', e.target.value)} placeholder="ej. Solicita tu cotización" className={inputClass} />
+                        </div>
                     </div>
                     <button type="submit" disabled={processing} className="px-4 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-emerald-600 to-teal-600 rounded-xl hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 transition-all shadow-lg shadow-emerald-500/20">
                         Crear formulario
@@ -65,7 +65,7 @@ export default function WebForms({ forms, pipelines }) {
                 </form>
 
                 {/* Lista */}
-                <div className="space-y-3">
+                <div className="grid gap-4 lg:grid-cols-2 items-start">
                     {forms.map((form) => (
                         <div key={form.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
                             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -112,7 +112,7 @@ export default function WebForms({ forms, pipelines }) {
                                         </button>
                                     </div>
                                     <a href={form.public_url} target="_blank" rel="noreferrer" className="block px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl font-mono text-xs text-emerald-700 hover:bg-gray-100 transition-colors break-all">
-                                        {form.public_url}
+                                        {new URL(form.public_url).pathname}
                                     </a>
                                 </div>
                                 <div>
