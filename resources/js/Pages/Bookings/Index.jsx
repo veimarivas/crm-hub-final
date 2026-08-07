@@ -26,7 +26,7 @@ export default function BookingsIndex({ bookings, showAll, isAdmin, bookingUrl, 
     return (
         <AuthenticatedLayout>
             <Head title="Reservas" />
-            <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-5">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-5">
                 <div className="flex items-end justify-between gap-4 flex-wrap">
                     <div>
                         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Reservas</h1>
@@ -100,46 +100,51 @@ export default function BookingsIndex({ bookings, showAll, isAdmin, bookingUrl, 
                             <p className="text-xs text-gray-400 mt-1">Cuando alguien reserve por tu link va a aparecer acá</p>
                         </div>
                     ) : (
-                        <ul className="divide-y divide-gray-50">
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-5">
                             {bookings.map((b) => {
                                 const when = new Date(b.scheduled_at);
                                 const past = when < new Date();
                                 return (
-                                    <li key={b.id} className={`flex items-center gap-4 px-5 py-4 ${past ? 'opacity-60' : ''}`}>
-                                        <div className={`w-14 shrink-0 text-center rounded-xl p-2 ${b.status === 'cancelled' ? 'bg-gray-100' : 'bg-emerald-50'}`}>
-                                            <div className="text-[10px] font-bold uppercase text-gray-500">{when.toLocaleDateString('es', { month: 'short' })}</div>
-                                            <div className={`text-xl font-extrabold tabular-nums ${b.status === 'cancelled' ? 'text-gray-500' : 'text-emerald-700'}`}>{when.getDate()}</div>
-                                            <div className="text-[10px] font-bold text-gray-500 tabular-nums">{when.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}</div>
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <div className="flex items-center gap-2 mb-0.5">
-                                                <p className="text-sm font-bold text-gray-900 truncate">{b.guest_name}</p>
-                                                <StatusBadge status={b.status} />
+                                    <div key={b.id} className={`rounded-2xl border border-gray-100 bg-white p-4 flex flex-col transition-shadow hover:shadow-md ${past ? 'opacity-60' : ''}`}>
+                                        <div className="flex items-center gap-3 mb-3">
+                                            <div className={`w-14 shrink-0 text-center rounded-xl p-2 ${b.status === 'cancelled' ? 'bg-gray-100' : 'bg-emerald-50'}`}>
+                                                <div className="text-[10px] font-bold uppercase text-gray-500">{when.toLocaleDateString('es', { month: 'short' })}</div>
+                                                <div className={`text-xl font-extrabold tabular-nums ${b.status === 'cancelled' ? 'text-gray-500' : 'text-emerald-700'}`}>{when.getDate()}</div>
+                                                <div className="text-[10px] font-bold text-gray-500 tabular-nums">{when.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}</div>
                                             </div>
-                                            <p className="text-xs text-gray-500 truncate">
-                                                <span className="font-mono">{b.guest_phone}</span>
-                                                {b.guest_email && <span> · {b.guest_email}</span>}
-                                                <span> · {b.duration_min} min</span>
-                                            </p>
-                                            {b.notes && <p className="text-[11px] text-gray-500 italic mt-1 truncate">"{b.notes}"</p>}
-                                            <div className="flex items-center gap-3 mt-1 text-[10px] text-gray-400">
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex items-center gap-2 mb-0.5">
+                                                    <p className="text-sm font-bold text-gray-900 truncate">{b.guest_name}</p>
+                                                </div>
+                                                <p className="text-xs text-gray-500 truncate">
+                                                    <span className="font-mono">{b.guest_phone}</span>
+                                                    {b.guest_email && <span> · {b.guest_email}</span>}
+                                                    <span> · {b.duration_min} min</span>
+                                                </p>
+                                            </div>
+                                            <StatusBadge status={b.status} />
+                                        </div>
+                                        {b.notes && <p className="text-[11px] text-gray-500 italic mb-2 line-clamp-2">"{b.notes}"</p>}
+                                        <div className="flex items-center justify-between gap-2 mt-auto pt-3 border-t border-gray-50 text-[10px] text-gray-400">
+                                            <div>
                                                 {showAll && b.host && <span>👤 {b.host.name}</span>}
-                                                {b.lead && <Link href={route('leads.show', b.lead.id)} className="text-emerald-600 hover:underline font-semibold">→ Ver lead</Link>}
+                                                {showAll && !b.host && <span>sin host</span>}
                                             </div>
+                                            {b.lead && <Link href={route('leads.show', b.lead.id)} className="text-emerald-600 hover:underline font-semibold">→ Ver lead</Link>}
+                                            {b.status === 'confirmed' && !past && (
+                                                <button
+                                                    onClick={() => { if (confirm('¿Cancelar esta reserva?')) router.post(route('bookings.cancel', b.id), {}, { preserveScroll: true }); }}
+                                                    className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                                                    title="Cancelar"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                                </button>
+                                            )}
                                         </div>
-                                        {b.status === 'confirmed' && !past && (
-                                            <button
-                                                onClick={() => { if (confirm('¿Cancelar esta reserva?')) router.post(route('bookings.cancel', b.id), {}, { preserveScroll: true }); }}
-                                                className="p-2 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg shrink-0"
-                                                title="Cancelar"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                                            </button>
-                                        )}
-                                    </li>
+                                    </div>
                                 );
                             })}
-                        </ul>
+                        </div>
                     )}
                 </div>
             </div>
