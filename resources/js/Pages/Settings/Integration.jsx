@@ -30,7 +30,7 @@ export default function Integration({ integration, webhookUrl, testResult }) {
         <AuthenticatedLayout>
             <Head title="Integración" />
 
-            <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
                 <div>
                     <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Integración con WhatsApp CRM</h1>
                     <p className="text-sm text-gray-400 mt-1">Conecta tu instancia del wacrm para que los mensajes se vuelvan leads</p>
@@ -61,6 +61,8 @@ export default function Integration({ integration, webhookUrl, testResult }) {
                         )}
                     </div>
                 )}
+
+                <div className="grid gap-6 lg:grid-cols-2 items-start">
 
                 {/* Paso 1 */}
                 <form onSubmit={submit} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -136,6 +138,7 @@ export default function Integration({ integration, webhookUrl, testResult }) {
                             <p>3. Guarda y activa la integración. Cada WhatsApp nuevo se volverá un lead aquí.</p>
                         </div>
                     </div>
+                </div>
                 </div>
             </div>
         </AuthenticatedLayout>
