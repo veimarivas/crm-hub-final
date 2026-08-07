@@ -205,7 +205,7 @@ export default function Pipelines({ pipelines }) {
     return (
         <AuthenticatedLayout>
             <Head title="Pipelines" />
-            <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-5">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-5">
                 <div className="flex items-end justify-between gap-4 flex-wrap">
                     <div>
                         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Pipelines</h1>
@@ -233,7 +233,9 @@ export default function Pipelines({ pipelines }) {
                     </form>
                 )}
 
-                {pipelines.map((p) => <PipelineCard key={p.id} pipeline={p} />)}
+                <div className="grid gap-5 sm:grid-cols-2 items-start">
+                    {pipelines.map((p) => <PipelineCard key={p.id} pipeline={p} />)}
+                </div>
 
                 {pipelines.length === 0 && (
                     <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-sm text-gray-400">
