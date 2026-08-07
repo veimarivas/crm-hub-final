@@ -70,20 +70,36 @@ class BookingController extends Controller
                 ['name' => $validated['guest_name'], 'phone' => $validated['guest_phone'], 'email' => $validated['guest_email'] ?? null]
             );
 
-            // Lead nuevo con source=booking en la primera etapa open del pipeline default
-            $pipeline = Pipeline::forAccount($host->account_id)->where('is_default', true)->first()
-                ?? Pipeline::forAccount($host->account_id)->first();
-            $stage = $pipeline?->stages()->where('stage_type', 'open')->orderBy('position')->first();
+            // Si el contacto YA tiene un lead con una conversación WhatsApp
+            // activa (wacrm_conversation_id), reusamos ESE lead: así el historial
+            // del chat aparece en el lead que se abre desde /leads y no se duplica
+            // con el de /inbox. Solo se crea lead nuevo si el contacto no tiene uno.
+            $existing = Lead::forAccount($host->account_id)
+                ->where('contact_id', $contact->id)
+                ->whereNotNull('wacrm_conversation_id')
+                ->orderByDesc('id')
+                ->first();
 
-            $lead = Lead::create([
-                'account_id' => $host->account_id,
-                'pipeline_id' => $pipeline->id,
-                'stage_id' => $stage->id,
-                'contact_id' => $contact->id,
-                'responsible_user_id' => $host->id,
-                'title' => 'Reunión: '.$validated['guest_name'],
-                'source' => 'booking',
-            ]);
+            if ($existing) {
+                $lead = $existing;
+                $reused = true;
+            } else {
+                // Lead nuevo con source=booking en la primera etapa open del pipeline default
+                $pipeline = Pipeline::forAccount($host->account_id)->where('is_default', true)->first()
+                    ?? Pipeline::forAccount($host->account_id)->first();
+                $stage = $pipeline?->stages()->where('stage_type', 'open')->orderBy('position')->first();
+
+                $lead = Lead::create([
+                    'account_id' => $host->account_id,
+                    'pipeline_id' => $pipeline->id,
+                    'stage_id' => $stage->id,
+                    'contact_id' => $contact->id,
+                    'responsible_user_id' => $host->id,
+                    'title' => 'Reunión: '.$validated['guest_name'],
+                    'source' => 'booking',
+                ]);
+                $reused = false;
+            }
 
             // Tarea "meet" con due_at = scheduled_at
             $task = Task::create([
@@ -93,7 +109,7 @@ class BookingController extends Controller
                 'assigned_to' => $host->id,
                 'created_by' => $host->id,
                 'task_type' => 'meet',
-                'text' => 'Reunión agendada con '.$validated['guest_name'].($validated['notes'] ? ' — '.$validated['notes'] : ''),
+                'text' => 'Reunión agendada con '.$validated['guest_name'].(($validated['notes'] ?? '') ? ' — '.$validated['notes'] : ''),
                 'due_at' => $scheduledAt,
             ]);
 
@@ -112,7 +128,11 @@ class BookingController extends Controller
                 'status' => 'confirmed',
             ]);
 
-            $lead->recordEvent('created', null, ['source' => 'booking', 'scheduled_at' => $scheduledAt->toIso8601String()]);
+            $lead->recordEvent(
+                $reused ? 'booking' : 'created',
+                null,
+                ['source' => 'booking', 'scheduled_at' => $scheduledAt->toIso8601String()],
+            );
 
             AppNotification::notify(
                 $host->account_id,

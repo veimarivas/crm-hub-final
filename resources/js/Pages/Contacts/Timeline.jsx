@@ -14,6 +14,7 @@ const EVENT_META = {
     task_completed: { icon: '✅', color: 'bg-emerald-100 text-emerald-700 border-emerald-200', label: 'Tarea completada', group: 'task' },
     message_in: { icon: '💬', color: 'bg-teal-100 text-teal-700 border-teal-200', label: 'WhatsApp recibido', group: 'message' },
     message_out: { icon: '📤', color: 'bg-[#e6f0f4] text-[#045474] border-[#c7dde5]', label: 'WhatsApp enviado', group: 'message' },
+    booking: { icon: '📅', color: 'bg-indigo-100 text-indigo-700 border-indigo-200', label: 'Reunión reservada', group: 'lead' },
 };
 
 const FILTERS = [

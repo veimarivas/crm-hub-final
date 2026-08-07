@@ -2,6 +2,15 @@
 
 CRM de ventas centrado en **leads** inspirado en Kommo (kommo.com), hermano del **wacrm** (`C:\xampp_82_12\htdocs\laravel_crm_whatsapp`, CRM de WhatsApp). Son **dos proyectos separados integrados por API**: este maneja leads/tareas/pipeline; el wacrm es el motor de WhatsApp.
 
+## Fix — Bookings reutilizan el lead con conversación (2026-08-06)
+
+**Bug:** al reservar una reunión (`POST /book/{slug}` → `BookingController@publicStore`) se creaba SIEMPRE un lead nuevo con `source='booking'` y sin `wacrm_conversation_id`, aunque el contacto ya tuviera un lead con el chat de WhatsApp activo. Resultado: desde `/leads` se abría un lead vacío (sin historial) y desde `/inbox` el lead original (con historial) — dos leads para el mismo contacto.
+
+**Fix:** si el contacto ya tiene un lead de la cuenta con `wacrm_conversation_id` no nulo, `publicStore` lo **reusa**: le anexa la tarea `meet`, la reserva y un evento `booking`. Solo crea lead nuevo si el contacto no tiene ninguno con conversación. La tarea y el `host_user_id` de la reserva siguen siendo del host; el `responsible_user_id` del lead reutilizado NO se toca (conserva al dueño del chat).
+- Nuevo tipo de evento `booking` en los `EVENT_META` de `Components/Chat.jsx` y `Pages/Contacts/Timeline.jsx` (📅 "Reunión reservada", grupo `lead`).
+- Bonus: se corrigió un error 500 latente cuando viene la reserva sin `notes` (ahora `$validated['notes'] ?? ''` al construir la tarea).
+- Tests: `Tests/Feature/BookingReuseLeadTest` (reuso no crea lead nuevo; sin lead de conversación sí crea el lead booking). Sin migraciones.
+
 ## Rebranding ESAM HUB + paridad de UI con el wacrm (2026-08-06)
 
 Ronda de cambios de interfaz espejados con el wacrm (Ronda 17 de allá):

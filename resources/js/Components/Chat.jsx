@@ -99,6 +99,7 @@ export const EVENT_META = {
     message_out: { label: 'WhatsApp enviado', icon: '📤', color: 'bg-[#e6f0f4] text-[#045474]' },
     value_changed: { label: 'Valor actualizado', icon: '💰', color: 'bg-amber-100 text-amber-700' },
     quote_created: { label: 'Cotización', icon: '🧾', color: 'bg-indigo-100 text-indigo-700' },
+    booking: { label: 'Reunión reservada', icon: '📅', color: 'bg-indigo-100 text-indigo-700' },
 };
 
 export function outboundAuthor(p) {
