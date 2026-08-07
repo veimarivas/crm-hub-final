@@ -102,6 +102,9 @@ Route::middleware('auth')->group(function () {
     // Digital Pipeline (automatizaciones por etapa)
     Route::get('/pipelines/{pipeline}/automations', [\App\Http\Controllers\StageAutomationController::class, 'index'])->name('pipelines.automations');
     Route::post('/pipelines/{pipeline}/automations', [\App\Http\Controllers\StageAutomationController::class, 'store'])->name('pipelines.automations.store');
+    Route::post('/pipelines/{pipeline}/automations/recipe', [\App\Http\Controllers\StageAutomationController::class, 'applyRecipe'])->name('pipelines.automations.recipe');
+    Route::post('/pipelines/{pipeline}/automations/simulate', [\App\Http\Controllers\StageAutomationController::class, 'simulate'])->name('pipelines.automations.simulate');
+    Route::patch('/automations/{automation}', [\App\Http\Controllers\StageAutomationController::class, 'update'])->name('automations.update');
     Route::post('/automations/{automation}/toggle', [\App\Http\Controllers\StageAutomationController::class, 'toggle'])->name('automations.toggle');
     Route::delete('/automations/{automation}', [\App\Http\Controllers\StageAutomationController::class, 'destroy'])->name('automations.destroy');
 

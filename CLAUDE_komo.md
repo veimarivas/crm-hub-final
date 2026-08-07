@@ -2,6 +2,20 @@
 
 CRM de ventas centrado en **leads** inspirado en Kommo (kommo.com), hermano del **wacrm** (`C:\xampp_82_12\htdocs\laravel_crm_whatsapp`, CRM de WhatsApp). Son **dos proyectos separados integrados por API**: este maneja leads/tareas/pipeline; el wacrm es el motor de WhatsApp.
 
+## Digital Pipeline: plantillas, edición y vista previa (2026-08-07)
+
+`/pipelines/{pipeline}/automations`. Mismo tratamiento que se aplicó a `/automations` y `/flows` en el wacrm. Sin migraciones.
+
+**Los fallos eran invisibles.** `DigitalPipeline\Runner::leadEnteredStage()` atrapa las excepciones de cada acción y deja solo un `Log::warning`: con la integración de WhatsApp apagada o un lead sin teléfono, la automatización figuraba «Activa» en pantalla y no hacía nada. Eso ya no pasa.
+
+- **`Services\DigitalPipeline\Simulator.php` + `POST /pipelines/{pipeline}/automations/simulate`**: vista previa de qué pasaría si un lead entrara a la etapa. Interpola con un lead real, calcula el vencimiento y el responsable de la tarea, y **dice los mismos motivos por los que el Runner lanzaría** (integración inactiva, lead sin teléfono, texto vacío) antes de que ocurra. No manda WhatsApp, no crea tareas ni notas, no registra eventos.
+- **`Services\DigitalPipeline\Recipes.php`**: 6 plantillas **filtradas por `stage_type`** — lo que sirve al ganar un lead no sirve al perderlo, y mostrarlo todo junto obliga a leer seis opciones para descartar cuatro. `POST …/automations/recipe` crea todas las acciones de la plantilla en una transacción.
+- **`PATCH /automations/{automation}`** — antes solo había crear y borrar: corregir una palabra de un mensaje obligaba a rehacer la acción, y de paso se perdía el `execution_count`. Hay test de regresión sobre eso.
+- **La vista se lee como el recorrido del lead**: una etapa debajo de la otra con flecha, en vez del grid de dos columnas (que en zig-zag no dejaba ver el orden del pipeline). Cada etapa muestra cuántos leads tiene **ahora** — dimensiona a cuántos alcanzaría lo que se configure.
+- Cada acción muestra su resumen legible (tipo de tarea, vencimiento en lenguaje natural, a quién se asigna) y **qué le falta** para funcionar. Banner arriba si la integración de WhatsApp está inactiva.
+- **Trampa**: `assigned_to: ''` no debe guardarse — pisa el fallback al responsable del lead en `Runner::createTask()`. Lo limpia `cleanConfig()`, cubierto por test.
+- Tests en `StageAutomationBuilderTest` (12); suite total **217/217 (742)**.
+
 ## Ronda reserva-de-reunión + Inbox + Reportes (2026-08-06/07)
 
 Baté de mejoras sobre el flujo de **reserva de reunión** (`/book/{slug}`), la ficha e Inbox del lead y los Reportes. Sin migraciones.
