@@ -158,7 +158,7 @@ export default function Create({ segments, tags = [], members = [], pricing, isA
     return (
         <AuthenticatedLayout>
             <Head title="Nuevo broadcast" />
-            <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-5">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-5">
                 <div>
                     <Link href={route('broadcasts.index')} className="text-sm text-emerald-600 hover:text-emerald-700 font-medium inline-flex items-center gap-1">← Volver</Link>
                     <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mt-2">Nuevo envío masivo</h1>
@@ -365,42 +365,47 @@ export default function Create({ segments, tags = [], members = [], pricing, isA
                             {form.errors.name && <p className="mt-1 text-xs text-red-500 font-medium">{form.errors.name}</p>}
                         </div>
 
-                        <div>
-                            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Imagen adjunta (opcional)</label>
-                            {imagePreview ? (
-                                <div className="flex items-center gap-3 rounded-xl border border-gray-200 p-3">
-                                    <img src={imagePreview} alt="Vista previa" className="w-16 h-16 rounded-lg object-cover border border-gray-200 shadow-sm" />
-                                    <div className="min-w-0 flex-1">
-                                        <p className="text-sm font-medium text-gray-800 truncate">{form.data.image?.name}</p>
-                                        <p className="text-[11px] text-gray-400">Se enviará junto al texto del mensaje.</p>
+                        <div className="grid lg:grid-cols-5 gap-4 items-start">
+                            <div className="lg:col-span-2">
+                                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Imagen adjunta (opcional)</label>
+                                {imagePreview ? (
+                                    <div className="flex flex-col gap-3 rounded-xl border border-gray-200 p-3">
+                                        <img src={imagePreview} alt="Vista previa" className="w-full max-h-44 rounded-lg object-cover border border-gray-200 shadow-sm" />
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-sm font-medium text-gray-800 truncate">{form.data.image?.name}</p>
+                                            <p className="text-[11px] text-gray-400">Se enviará junto al texto del mensaje.</p>
+                                        </div>
+                                        <button type="button" onClick={() => { form.setData('image', null); setImagePreview(null); }} className="px-3 py-1.5 text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 self-start">Quitar</button>
                                     </div>
-                                    <button type="button" onClick={() => { form.setData('image', null); setImagePreview(null); }} className="px-3 py-1.5 text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100">Quitar</button>
-                                </div>
-                            ) : (
-                                <label className="block cursor-pointer rounded-xl border-2 border-dashed border-gray-300 p-5 text-center hover:border-emerald-400 hover:bg-emerald-50/30 transition-all">
-                                    <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={handleImage} className="hidden" />
-                                    <span className="text-sm text-gray-500">
-                                        <span className="font-semibold text-emerald-600">📷 Adjuntar imagen</span>
-                                        <span className="block text-[11px] text-gray-400 mt-0.5">JPG, PNG, WEBP o GIF · máx 10 MB</span>
-                                    </span>
-                                </label>
-                            )}
-                            {form.errors.image && <p className="mt-1 text-xs text-red-500 font-medium">{form.errors.image}</p>}
-                        </div>
+                                ) : (
+                                    <label className="block cursor-pointer rounded-xl border-2 border-dashed border-gray-300 p-5 text-center hover:border-emerald-400 hover:bg-emerald-50/30 transition-all h-40 flex flex-col items-center justify-center">
+                                        <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={handleImage} className="hidden" />
+                                        <span className="text-sm text-gray-500">
+                                            <span className="font-semibold text-emerald-600 text-lg">📷</span>
+                                            <span className="block font-semibold text-emerald-600 mt-1">Adjuntar imagen</span>
+                                            <span className="block text-[11px] text-gray-400 mt-0.5">JPG, PNG, WEBP o GIF · máx 10 MB</span>
+                                        </span>
+                                    </label>
+                                )}
+                                {form.errors.image && <p className="mt-1 text-xs text-red-500 font-medium">{form.errors.image}</p>}
+                            </div>
 
-                        <div>
-                            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Mensaje</label>
-                            <textarea
-                                value={form.data.message}
-                                onChange={(e) => form.setData('message', e.target.value)}
-                                rows={5}
-                                maxLength={4000}
-                                required
-                                placeholder="¡Hola! Te contactamos para…"
-                                className={inputClass}
-                            />
-                            <p className="text-[11px] text-gray-400 mt-1 text-right tabular-nums">{form.data.message.length} / 4000</p>
-                            {form.errors.message && <p className="mt-1 text-xs text-red-500 font-medium">{form.errors.message}</p>}
+                            <div className="lg:col-span-3">
+                                <div className="flex items-center justify-between mb-1.5">
+                                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500">Mensaje</label>
+                                    <span className="text-[11px] text-gray-400 tabular-nums">{form.data.message.length} / 4000</span>
+                                </div>
+                                <textarea
+                                    value={form.data.message}
+                                    onChange={(e) => form.setData('message', e.target.value)}
+                                    rows={8}
+                                    maxLength={4000}
+                                    required
+                                    placeholder="¡Hola! Te contactamos para…"
+                                    className={inputClass}
+                                />
+                                {form.errors.message && <p className="mt-1 text-xs text-red-500 font-medium">{form.errors.message}</p>}
+                            </div>
                         </div>
                     </div>
 
