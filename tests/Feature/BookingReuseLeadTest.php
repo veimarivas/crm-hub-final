@@ -89,6 +89,6 @@ $contact = $this->contact();
             'scheduled_at' => now()->addHour()->setTime(10, 0)->toISOString(),
         ])->assertRedirect();
 
-        $this->assertDatabaseHas('leads', ['title' => 'Reunión: Ana', 'source' => 'booking']);
+        $this->assertDatabaseHas('leads', ['title' => 'Ana', 'source' => 'booking']);
     }
 }
