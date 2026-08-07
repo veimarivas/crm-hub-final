@@ -72,7 +72,7 @@ export default function BusinessHoursPage({ settings, isOpenNow, timezones }) {
         <AuthenticatedLayout>
             <Head title="Horario de atención" />
 
-            <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
                     <div>
                         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Horario de atención</h1>
@@ -107,7 +107,8 @@ export default function BusinessHoursPage({ settings, isOpenNow, timezones }) {
                     </div>
 
                     {/* Card: schedule semanal */}
-                    <div className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6 transition-opacity ${!form.data.business_hours_enabled ? 'opacity-50' : ''}`}>
+                    <div className={`grid gap-5 lg:grid-cols-2 items-start ${!form.data.business_hours_enabled ? 'opacity-50' : ''}`}>
+                    <div className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6`}>
                         <h3 className="text-base font-bold text-gray-900 mb-1">Horario semanal</h3>
                         <p className="text-xs text-gray-500 mb-4">Los mensajes que entren fuera de estas franjas se consideran fuera de hora.</p>
 
@@ -202,6 +203,7 @@ export default function BusinessHoursPage({ settings, isOpenNow, timezones }) {
                             className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
                         />
                         <p className="text-[11px] text-gray-400 mt-1 text-right tabular-nums">{form.data.out_of_hours_message?.length || 0} / 1000</p>
+                    </div>
                     </div>
 
                     <div className="flex justify-end gap-3">
