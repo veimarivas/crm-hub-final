@@ -2,6 +2,38 @@
 
 CRM de ventas centrado en **leads** inspirado en Kommo (kommo.com), hermano del **wacrm** (`C:\xampp_82_12\htdocs\laravel_crm_whatsapp`, CRM de WhatsApp). Son **dos proyectos separados integrados por API**: este maneja leads/tareas/pipeline; el wacrm es el motor de WhatsApp.
 
+## Ronda reserva-de-reunión + Inbox + Reportes (2026-08-06/07)
+
+Baté de mejoras sobre el flujo de **reserva de reunión** (`/book/{slug}`), la ficha e Inbox del lead y los Reportes. Sin migraciones.
+
+### Reserva → mensaje de confirmación al lead (BookingController@publicStore)
+- **Ventana de servicio abierta (24 h / 72 h, integración activa y teléfono):** se envía por WhatsApp al lead *"Se registró la reunión agendada para el {día} a las {hora}."* vía `Wacrm\Client::sendMessage` (`.message_out` lo registra el webhook del wacrm, sin duplicar).
+- **Fuera de ventana NO se envía** (evita el pago a Meta por texto libre): en su lugar se crea una **tarea** en el lead: *"No se envió la confirmación de la reserva: fuera de la ventana de servicio (24/72 h)…"*.
+- **Error de envío dentro de ventana:** también queda la tarea de "no se envió la confirmación" (error de envío).
+- Usa `Services\WhatsApp\ServiceWindow::forLead` para decidir `is_open`. Como el booking siempre crea/reusa el lead, la tarea siempre queda ligada a un lead.
+- El **título del lead** ahora guarda **solo el nombre del formulario** (p. ej. `Ana`), sin el prefijo "Reunión:" — la reunión sigue en la tarea `meet` ("Reunión agendada con {nombre}"). Se aplica también al **reusar** un lead con conversación (antes conservaba el título previo, p. ej. "WhatsApp: Ana").
+- Tests actualizados en `BookingReuseLeadTest` (título `Ana`, no `Reunión: Ana`).
+
+### Ficha del lead — cabecera de acciones + reunión (Leads/Show.jsx)
+- Los botones **Llamar**, **IA activa/Humano** y el badge **Activo** se **movieron a la cabecera**, junto a **Ganado/Perdido** (bloque `Acciones destacadas`). Se **eliminó la barra duplicada** que vivía sobre el composer del chat (gana ~50px al hilo).
+- **Badge de próxima reunión reservada** al lado de Ganado/Perdido: "📅 Reunión · {día mes, hora}" (solo si `scheduled_at` es **futuro**; si ya pasó, desaparece). Se calcula con `nextBooking` (filtra eventos `booking` futuros).
+- **Fecha/hora de la reunión en el detalle**:
+  - Timeline (`TimelineEvent`): bajo "Reunión reservada" se muestra `{weekday, día, mes, hora}` en violeta.
+  - Chat (`SystemEvent`): "📅 Reunión reservada · {weekday, día, mes, hora}" con `scheduled_at` del payload.
+- payload del evento `booking` = `{source: 'booking', scheduled_at: ISO8601]`.
+
+### Inbox `/inbox` (`InboxController@conversation` + `Inbox/Index.jsx`)
+- **El título del lead es el nombre**: en la fila (`ConversationRow`), en el header del hilo y en el panel del lead (`LeadPanel`) se muestra `lead.title` con prioridad sobre `contact.name`.
+- **Card "📅 Reunión reservada"** en el panel cuando existe `next_booking` (solo futuras). El controller calcula `next_booking` en el payload de `conversation.lead` (filtra eventos `booking` con `scheduled_at` futuro).
+
+### Reportes `/reports` (`ReportController` + `Reports/Index.jsx`)
+- **Conversión por fuente**: nueva fuente **Formulario de reserva** (`source=booking`). Si un booking reusó un lead con contacto inicial por otro medio, la fuente queda la original y no suma acá (esa es la paridad "si ya hubo contacto inicial por otro medio").
+- **Canales de marketing**: ahora muestra **WhatsApp** y **Formulario de reserva** como canales propios arriba (iconos 💬/📅); esos leads se **excluyen** de la agrupación por `utm_source` donde antes caían bajo "(direct)".
+- **Equipo este mes**: cada agente ahora tiene una **columna por etapa abierta** (Nuevo, Contactado, Negociación…) con sus leads abiertos en cada una (`byUser[].stages` + nuevo prop `stageNames`). Columnas generadas dinámicamente desde las etapas open del pipeline.
+
+### Acceso a Digital Pipeline desde el pipeline (Settings/Pipelines.jsx)
+- La ruta que existía (`/pipelines/{id}/automations`) no tenía **entrada en la UI**. Se agregó un botón visible **"⚡ Automatizaciones por etapa"** en cada tarjeta de pipeline (`Settings/Pipelines.jsx`), que enlaza a `route('pipelines.automations')`.
+
 ## Fix — Bookings reutilizan el lead con conversación (2026-08-06)
 
 **Bug:** al reservar una reunión (`POST /book/{slug}` → `BookingController@publicStore`) se creaba SIEMPRE un lead nuevo con `source='booking'` y sin `wacrm_conversation_id`, aunque el contacto ya tuviera un lead con el chat de WhatsApp activo. Resultado: desde `/leads` se abría un lead vacío (sin historial) y desde `/inbox` el lead original (con historial) — dos leads para el mismo contacto.
