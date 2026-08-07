@@ -29,7 +29,7 @@ function ContactModal({ open, onClose, contact, companies, allTags, customFields
     };
 
     return (
-        <Modal show={open} onClose={close}>
+        <Modal show={open} onClose={close} maxWidth="3xl">
             <form onSubmit={submit}>
                 <div className="px-6 pt-6 pb-4 border-b border-gray-100 flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#045474] to-[#1c486c] flex items-center justify-center text-white shadow-lg shadow-[#045474]/20">
@@ -39,14 +39,28 @@ function ContactModal({ open, onClose, contact, companies, allTags, customFields
                     </div>
                     <h2 className="text-base font-bold text-gray-900">{isEdit ? 'Editar contacto' : 'Nuevo contacto'}</h2>
                 </div>
-                <div className="px-6 py-5 space-y-4">
-                    {[['name', 'Nombre *', true], ['position', 'Cargo', false], ['phone', 'Teléfono', false], ['email', 'Email', false]].map(([field, label, required]) => (
-                        <div key={field}>
-                            <label className="block text-sm font-semibold text-gray-700 mb-1.5">{label}</label>
-                            <input value={data[field]} onChange={(e) => setData(field, e.target.value)} required={required} className={inputClass} />
-                            {errors[field] && <p className="mt-1 text-xs text-red-500 font-medium">{errors[field]}</p>}
+                <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+                    <div className="grid sm:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Nombre <span className="text-red-500">*</span></label>
+                            <input value={data.name} onChange={(e) => setData('name', e.target.value)} required className={inputClass} />
+                            {errors.name && <p className="mt-1 text-xs text-red-500 font-medium">{errors.name}</p>}
                         </div>
-                    ))}
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Cargo</label>
+                            <input value={data.position} onChange={(e) => setData('position', e.target.value)} placeholder="ej. Gerente de compras" className={inputClass} />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Teléfono (WhatsApp)</label>
+                            <input value={data.phone} onChange={(e) => setData('phone', e.target.value)} placeholder="+591 …" type="tel" className={`${inputClass} font-mono`} />
+                            {errors.phone && <p className="mt-1 text-xs text-red-500 font-medium">{errors.phone}</p>}
+                        </div>
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Email</label>
+                            <input value={data.email} onChange={(e) => setData('email', e.target.value)} type="email" className={inputClass} />
+                            {errors.email && <p className="mt-1 text-xs text-red-500 font-medium">{errors.email}</p>}
+                        </div>
+                    </div>
                     <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-1.5">Empresa</label>
                         <select value={data.company_id} onChange={(e) => setData('company_id', e.target.value)} className={inputClass}>
@@ -114,6 +128,7 @@ function ContactModal({ open, onClose, contact, companies, allTags, customFields
 export default function Index({ contacts, companies, allTags, customFields, filters }) {
     const { flash, errors: pageErrors } = usePage().props;
     const [modal, setModal] = useState(null);
+    const [deleting, setDeleting] = useState(null);
     const [search, setSearch] = useState(filters.q ?? '');
 
     const applySearch = () => router.get(route('contacts.index'), { q: search || undefined }, { preserveState: true, replace: true });
@@ -122,7 +137,7 @@ export default function Index({ contacts, companies, allTags, customFields, filt
         <AuthenticatedLayout>
             <Head title="Contactos" />
 
-            <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                     <div>
                         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Contactos</h1>
@@ -175,7 +190,8 @@ export default function Index({ contacts, companies, allTags, customFields, filt
                                     <th className="text-left px-5 py-3.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Nombre</th>
                                     <th className="text-left px-5 py-3.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Teléfono</th>
                                     <th className="text-left px-5 py-3.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider hidden md:table-cell">Email</th>
-                                    <th className="text-left px-5 py-3.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider hidden md:table-cell">Empresa</th>
+                                    <th className="text-left px-5 py-3.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider hidden lg:table-cell">Empresa</th>
+                                    <th className="text-left px-5 py-3.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider hidden xl:table-cell">Etiquetas</th>
                                     <th className="text-right px-5 py-3.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Leads abiertos</th>
                                     <th className="text-right px-5 py-3.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Acción</th>
                                 </tr>
@@ -199,6 +215,16 @@ export default function Index({ contacts, companies, allTags, customFields, filt
                                         <td className="px-5 py-4 text-gray-600 font-medium tabular-nums">{contact.phone || <span className="italic text-gray-300">—</span>}</td>
                                         <td className="px-5 py-4 text-gray-500 hidden md:table-cell">{contact.email || <span className="italic text-gray-300">—</span>}</td>
                                         <td className="px-5 py-4 text-gray-500 hidden md:table-cell">{contact.company?.name || <span className="italic text-gray-300">—</span>}</td>
+                                        <td className="px-5 py-4 hidden xl:table-cell">
+                                            {contact.tags?.length ? (
+                                                <div className="flex flex-wrap gap-1 max-w-[220px]">
+                                                    {contact.tags.slice(0, 3).map((tag) => (
+                                                        <span key={tag.id} className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-white" style={{ backgroundColor: tag.color }}>{tag.name}</span>
+                                                    ))}
+                                                    {contact.tags.length > 3 && <span className="text-[10px] text-gray-400">+{contact.tags.length - 3}</span>}
+                                                </div>
+                                            ) : <span className="italic text-gray-300">—</span>}
+                                        </td>
                                         <td className="px-5 py-4 text-right font-bold tabular-nums text-gray-700">{contact.open_leads_count}</td>
                                         <td className="px-5 py-4 text-right">
                                             <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -206,7 +232,7 @@ export default function Index({ contacts, companies, allTags, customFields, filt
                                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
                                                 </button>
                                                 <button
-                                                    onClick={() => { if (confirm('¿Eliminar este contacto?')) router.delete(route('contacts.destroy', contact.id), { preserveScroll: true }); }}
+                                                    onClick={() => setDeleting(contact)}
                                                     className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar"
                                                 >
                                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166" /></svg>
@@ -216,7 +242,7 @@ export default function Index({ contacts, companies, allTags, customFields, filt
                                     </tr>
                                 ))}
                                 {contacts.data.length === 0 && (
-                                    <tr><td colSpan={6} className="px-5 py-14 text-center text-sm text-gray-400">Sin contactos todavía</td></tr>
+                                    <tr><td colSpan={7} className="px-5 py-14 text-center text-sm text-gray-400">Sin contactos todavía</td></tr>
                                 )}
                             </tbody>
                         </table>
@@ -239,6 +265,45 @@ export default function Index({ contacts, companies, allTags, customFields, filt
                 allTags={allTags}
                 customFields={customFields}
             />
+
+            <Modal show={!!deleting} onClose={() => setDeleting(null)} maxWidth="md">
+                <div className="p-6">
+                    <div className="flex items-start gap-4">
+                        <div className="w-11 h-11 rounded-full bg-red-50 flex items-center justify-center text-red-600 shrink-0">
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                            </svg>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <h3 className="text-base font-bold text-gray-900">Eliminar contacto</h3>
+                            <p className="text-sm text-gray-500 mt-1">
+                                ¿Estás seguro de que querés eliminar a{' '}
+                                <span className="font-semibold text-gray-800">{deleting?.name}</span>?
+                                Esta acción no se puede deshacer.
+                            </p>
+                            {deleting?.open_leads_count > 0 && (
+                                <p className="text-xs text-amber-600 mt-2">
+                                    Este contacto tiene <strong>{deleting.open_leads_count}</strong> lead(s) abierto(s). Verificá antes de continuar.
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                    <div className="mt-6 flex justify-end gap-3">
+                        <button
+                            onClick={() => setDeleting(null)}
+                            className="px-4 py-2.5 text-sm font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-all shadow-sm"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            onClick={() => { router.delete(route('contacts.destroy', deleting.id), { preserveScroll: true, onSuccess: () => setDeleting(null) }); }}
+                            className="px-5 py-2.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-500 rounded-xl transition-all shadow-lg shadow-red-500/20"
+                        >
+                            Sí, eliminar
+                        </button>
+                    </div>
+                </div>
+            </Modal>
         </AuthenticatedLayout>
     );
 }
