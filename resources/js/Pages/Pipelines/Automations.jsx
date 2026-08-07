@@ -103,7 +103,7 @@ export default function Automations({ pipeline, stages, members, whatsappEnabled
         <AuthenticatedLayout>
             <Head title="Digital Pipeline" />
 
-            <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
                 <div>
                     <Link href={route('leads.index')} className="text-sm text-emerald-600 hover:text-emerald-700 font-medium inline-flex items-center gap-1">
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -121,7 +121,7 @@ export default function Automations({ pipeline, stages, members, whatsappEnabled
                     <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700 shadow-sm">{flash.success}</div>
                 )}
 
-                <div className="space-y-4">
+                <div className="grid gap-5 lg:grid-cols-2 items-start">
                     {stages.map((stage) => (
                         <div key={stage.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                             <div className="px-5 py-3.5 flex items-center justify-between text-white" style={{ background: `linear-gradient(135deg, ${stage.color} 0%, ${stage.color}dd 100%)` }}>
