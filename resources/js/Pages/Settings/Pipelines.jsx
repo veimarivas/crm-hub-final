@@ -129,21 +129,22 @@ function PipelineCard({ pipeline }) {
                 )}
             </div>
 
-            <div className="p-5 space-y-2">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Etapas activas</p>
-                <ul className="space-y-2">
-                    {openStages.map((s, i) => (
-                        <StageRow
-                            key={s.id}
-                            stage={s}
-                            isFirst={i === 0}
-                            isLast={i === openStages.length - 1}
-                            onSave={updateStage}
-                            onDelete={deleteStage}
-                            onMove={moveStage}
-                        />
-                    ))}
-                </ul>
+            <div className="p-5 grid gap-6 lg:grid-cols-2">
+                <div className="space-y-2">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Etapas activas</p>
+                    <ul className="space-y-2">
+                        {openStages.map((s, i) => (
+                            <StageRow
+                                key={s.id}
+                                stage={s}
+                                isFirst={i === 0}
+                                isLast={i === openStages.length - 1}
+                                onSave={updateStage}
+                                onDelete={deleteStage}
+                                onMove={moveStage}
+                            />
+                        ))}
+                    </ul>
 
                 {addingStage ? (
                     <form onSubmit={addStage} className="mt-3 flex items-center gap-2 p-3 rounded-xl border-2 border-dashed border-emerald-200 bg-emerald-50/30">
@@ -165,8 +166,9 @@ function PipelineCard({ pipeline }) {
                         + Agregar etapa
                     </button>
                 )}
+                </div>
 
-                <div className="mt-4 pt-4 border-t border-gray-100">
+                <div className="space-y-2">
                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Etapas terminales (requeridas)</p>
                     <ul className="space-y-2">
                         {terminalStages.map((s) => (
@@ -175,7 +177,7 @@ function PipelineCard({ pipeline }) {
                     </ul>
                 </div>
 
-                <div className="mt-4 pt-4 border-t border-gray-100">
+                <div className="border-t border-gray-100 pt-4 lg:col-span-2">
                     <Link
                         href={route('pipelines.automations', pipeline.id)}
                         className="w-full inline-flex items-center justify-center gap-2 py-2.5 text-xs font-bold text-violet-700 bg-violet-50 border border-violet-200 rounded-xl hover:bg-violet-100 transition-colors"
