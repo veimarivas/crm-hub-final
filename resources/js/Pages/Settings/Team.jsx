@@ -54,7 +54,7 @@ export default function Team({ members, invitations, apiKeys = [], apiScopes = [
         <AuthenticatedLayout>
             <Head title="Equipo" />
 
-            <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
                 <div>
                     <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Equipo</h1>
                     <p className="text-sm text-gray-400 mt-1">Invita a tu equipo de ventas con un link</p>
@@ -109,6 +109,9 @@ export default function Team({ members, invitations, apiKeys = [], apiScopes = [
                     </div>
                 )}
 
+                <div className="grid gap-6 xl:grid-cols-2 items-start">
+
+                {/* Miembros */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                     <div className="p-5 sm:p-6 border-b border-gray-100">
                         <h3 className="text-base font-bold text-gray-900">Miembros</h3>
@@ -304,6 +307,8 @@ export default function Team({ members, invitations, apiKeys = [], apiScopes = [
                             </button>
                         </form>
                     )}
+                </div>
+
                 </div>
             </div>
         </AuthenticatedLayout>
