@@ -84,6 +84,7 @@ class BookingController extends Controller
 
             if ($existing) {
                 $lead = $existing;
+                $lead->update(['title' => 'Reunión: '.$validated['guest_name']]);
                 $reused = true;
             } else {
                 // Lead nuevo con source=booking en la primera etapa open del pipeline default
