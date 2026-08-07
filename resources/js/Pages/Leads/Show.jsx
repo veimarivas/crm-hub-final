@@ -202,6 +202,14 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
     const pendingTasks = tasks.filter((t) => !t.completed_at);
     const contactName = lead.contact?.name || lead.contact?.phone || 'Contacto';
 
+    // Próxima reunión reservada (solo si la fecha todavía no pasó)
+    const nextBooking = useMemo(() =>
+        [...events]
+            .filter((e) => e.event_type === 'booking' && e.payload?.scheduled_at)
+            .sort((a, b) => new Date(a.payload.scheduled_at) - new Date(b.payload.scheduled_at))
+            .find((e) => new Date(e.payload.scheduled_at) > new Date()) ?? null,
+    [events]);
+
     // Cronología del chat: eventos en orden ascendente para leer como conversación
     const chatItems = useMemo(() => {
         const arr = [...events].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
@@ -327,6 +335,15 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                                     <button onClick={() => moveTo(lostStage.id)} className="px-3.5 py-2 text-sm font-semibold text-red-600 bg-white border border-red-200 rounded-xl hover:bg-red-50 transition-all shadow-sm">
                                         Perdido
                                     </button>
+                                )}
+                                {nextBooking && (
+                                    <span
+                                        title={`Reunión reservada: ${new Date(nextBooking.payload.scheduled_at).toLocaleString('es', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}`}
+                                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-indigo-300 bg-indigo-50 text-indigo-700 shadow-sm"
+                                    >
+                                        📅 Reunión ·{' '}
+                                        {new Date(nextBooking.payload.scheduled_at).toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                    </span>
                                 )}
                                 {lead.contact?.phone && (
                                     <a
