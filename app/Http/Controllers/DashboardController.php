@@ -30,6 +30,10 @@ class DashboardController extends Controller
         // Leads urgentes: ultimo evento es message_in hace > SLA_MINUTES
         $urgent = $this->computeUrgentLeads($accountId, $user, $isAdmin);
 
+        // Leads abiertos sin tarea pendiente: la regla Kommo de "lead olvidado".
+        $withoutTask = $leadScope(Lead::forAccount($accountId)->where('status', 'open')
+            ->whereDoesntHave('tasks', fn ($q) => $q->whereNull('completed_at')));
+
         return Inertia::render('Dashboard', [
             'stats' => [
                 'openLeads' => $leadScope(Lead::forAccount($accountId)->where('status', 'open'))->count(),
@@ -42,10 +46,26 @@ class DashboardController extends Controller
                 'tasksToday' => $taskScope(Task::forAccount($accountId)->pending()
                     ->whereBetween('due_at', [now()->startOfDay(), now()->endOfDay()]))->count(),
                 // Regla Kommo: leads abiertos SIN tarea pendiente = leads olvidados.
-                'leadsWithoutTask' => $leadScope(Lead::forAccount($accountId)->where('status', 'open')
-                    ->whereDoesntHave('tasks', fn ($q) => $q->whereNull('completed_at')))->count(),
+                'leadsWithoutTask' => (clone $withoutTask)->count(),
                 'urgentLeads' => $urgent['count'],
             ],
+            'deltas' => $this->deltas($accountId, $leadScope, $taskScope),
+            // Los 5 peores olvidados: los que llevan más tiempo abiertos sin
+            // una sola tarea agendada. Un número no se acciona; una lista sí.
+            'forgottenLeads' => (clone $withoutTask)
+                ->with(['contact:id,name', 'stage:id,name,color'])
+                ->orderBy('created_at')
+                ->limit(5)
+                ->get(['id', 'title', 'value', 'currency', 'contact_id', 'stage_id', 'created_at'])
+                ->map(fn (Lead $lead) => [
+                    'id' => $lead->id,
+                    'title' => $lead->title,
+                    'contact' => $lead->contact?->name,
+                    'value' => (float) $lead->value,
+                    'currency' => $lead->currency,
+                    'stage' => $lead->stage ? ['name' => $lead->stage->name, 'color' => $lead->stage->color] : null,
+                    'days_open' => (int) $lead->created_at->diffInDays(now(), true),
+                ]),
             'urgentLeads' => $urgent['items'],
             'slaMinutes' => self::SLA_MINUTES,
             // `source_ref` viaja porque la ventana de servicio lo usa como
@@ -66,6 +86,57 @@ class DashboardController extends Controller
                 ->get(),
             'currency' => $user->account->default_currency,
         ]);
+    }
+
+    /**
+     * Variación de cada KPI contra el periodo anterior comparable.
+     *
+     * Cada métrica se compara con su equivalente honesto, no con "hace 30
+     * días" a secas:
+     *  - abiertos: los que estaban abiertos hace un mes (creados antes y aún
+     *    sin cerrar en esa fecha), reconstruido desde `closed_at`;
+     *  - ganados del mes: el mismo tramo del mes pasado (mes a la fecha), para
+     *    no comparar 7 días contra 30;
+     *  - tareas de hoy: las que vencían ayer.
+     *
+     * `leadsWithoutTask` no lleva delta: no hay histórico del que sacar cuántos
+     * estaban sin tarea ayer, y un número inventado se leería como real.
+     *
+     * @return array<string, float|null>
+     */
+    private function deltas(string $accountId, callable $leadScope, callable $taskScope): array
+    {
+        $monthAgo = now()->subMonth();
+
+        $openThen = $leadScope(Lead::forAccount($accountId)
+            ->where('created_at', '<=', $monthAgo)
+            ->where(fn ($q) => $q->whereNull('closed_at')->orWhere('closed_at', '>', $monthAgo)))
+            ->count();
+
+        $wonPrevMonth = $leadScope(Lead::forAccount($accountId)->where('status', 'won')
+            ->whereBetween('closed_at', [$monthAgo->copy()->startOfMonth(), $monthAgo]))
+            ->count();
+
+        $tasksYesterday = $taskScope(Task::forAccount($accountId)
+            ->whereBetween('due_at', [now()->subDay()->startOfDay(), now()->subDay()->endOfDay()]))
+            ->count();
+
+        return [
+            'openLeads' => $this->pctChange(
+                $leadScope(Lead::forAccount($accountId)->where('status', 'open'))->count(), $openThen),
+            'wonThisMonth' => $this->pctChange(
+                $leadScope(Lead::forAccount($accountId)->where('status', 'won')
+                    ->where('closed_at', '>=', now()->startOfMonth()))->count(), $wonPrevMonth),
+            'tasksToday' => $this->pctChange(
+                $taskScope(Task::forAccount($accountId)->pending()
+                    ->whereBetween('due_at', [now()->startOfDay(), now()->endOfDay()]))->count(), $tasksYesterday),
+        ];
+    }
+
+    /** Variación porcentual; null cuando no hay base con la que comparar. */
+    private function pctChange(int $current, int $previous): ?float
+    {
+        return $previous === 0 ? null : round(($current - $previous) / $previous * 100, 1);
     }
 
     /**
