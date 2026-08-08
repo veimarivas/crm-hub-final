@@ -113,6 +113,7 @@ Route::middleware('auth')->group(function () {
 
     // Reportes
     Route::get('/reports', [\App\Http\Controllers\ReportController::class, 'index'])->name('reports.index');
+    Route::get('/reports/export', [\App\Http\Controllers\ReportController::class, 'export'])->name('reports.export');
 
     // Seguimiento de la atencion por responsable (admin-only)
     Route::get('/supervision', [\App\Http\Controllers\SupervisionController::class, 'index'])

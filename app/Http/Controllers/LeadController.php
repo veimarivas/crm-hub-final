@@ -51,6 +51,7 @@ class LeadController extends Controller
             'responsible' => $isAdmin ? $request->query('responsible') : null,
             'tag' => $request->query('tag'),
             'source' => $request->query('source'),
+            'stage_id' => $request->query('stage_id'),
             'no_task' => (bool) $request->query('no_task'),
             'q' => trim((string) $request->query('q', '')),
         ];
@@ -61,6 +62,7 @@ class LeadController extends Controller
             ->when(! $isAdmin, fn ($q) => $q->where('responsible_user_id', $user->id))
             ->when($filters['responsible'], fn ($q, $v) => $v === 'none' ? $q->whereNull('responsible_user_id') : $q->where('responsible_user_id', $v))
             ->when($filters['source'], fn ($q, $v) => $q->where('source', $v))
+            ->when($filters['stage_id'], fn ($q, $v) => $q->where('stage_id', $v))
             ->when($filters['no_task'], fn ($q) => $q->whereDoesntHave('tasks', fn ($t) => $t->whereNull('completed_at')))
             ->when($filters['tag'], fn ($q, $tagId) => $q->whereHas('tags', fn ($tq) => $tq->where('tags.id', $tagId)))
             ->when($filters['q'] !== '', function ($q) use ($filters) {
@@ -208,6 +210,7 @@ class LeadController extends Controller
             'responsible' => $request->query('responsible'),
             'tag' => $request->query('tag'),
             'source' => $request->query('source'),
+            'stage_id' => $request->query('stage_id'),
             'no_task' => (bool) $request->query('no_task'),
             'q' => trim((string) $request->query('q', '')),
         ];
@@ -231,6 +234,7 @@ class LeadController extends Controller
                 ->when(! $isAdmin, fn ($q) => $q->where('responsible_user_id', $user->id))
                 ->when($filters['responsible'], fn ($q, $v) => $v === 'none' ? $q->whereNull('responsible_user_id') : $q->where('responsible_user_id', $v))
                 ->when($filters['source'], fn ($q, $v) => $q->where('source', $v))
+                ->when($filters['stage_id'], fn ($q, $v) => $q->where('stage_id', $v))
                 ->when($filters['no_task'], fn ($q) => $q->whereDoesntHave('tasks', fn ($t) => $t->whereNull('completed_at')))
                 ->when($filters['tag'], fn ($q, $tagId) => $q->whereHas('tags', fn ($tq) => $tq->where('tags.id', $tagId)))
                 ->when($filters['q'] !== '', function ($q) use ($filters) {
