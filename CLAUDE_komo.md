@@ -2,6 +2,43 @@
 
 CRM de ventas centrado en **leads** inspirado en Kommo (kommo.com), hermano del **wacrm** (`C:\xampp_82_12\htdocs\laravel_crm_whatsapp`, CRM de WhatsApp). Son **dos proyectos separados integrados por API**: este maneja leads/tareas/pipeline; el wacrm es el motor de WhatsApp.
 
+## Ronda de analítica — reportes legibles y analizables (2026-08-07/08)
+
+Ejecución de `mejoras.md` (raíz del repo). Objetivo: que `/reports` deje de ser tablas y barras sueltas y pase a ser un dashboard analítico. **Ronda gemela**: el wacrm hizo la suya en paralelo con su propio `mejoras.md` (ver `CLAUDE_crm_whatsapp.md`, sección equivalente). Sin migraciones; todo sale de `leads`, `lead_events`, `tasks`. Suite **236/236 (800 aserciones)**.
+
+**Paso 0 — capa de gráficos** (`resources/js/Components/Charts/`, recharts): `chartTheme.js`, `format.js` (`fmtNumber`/`fmtMoney`/`fmtDuration`/`fmtPct`, es-BO), `ChartCard.jsx` + `EmptyChart`, `ChartTip.jsx`, `TrendArea`, `CompareBars` (con `ReferenceLine`, soporta apiladas), `FunnelSteps`, `DonutChart`, `HeatmapGrid`, `WindowPicker`. Importar siempre desde `@/Components/Charts`, no desde los archivos sueltos.
+
+### `/reports` — dashboard analítico (`ReportController` + `Reports/Index.jsx`)
+- **KPI cards con delta vs periodo anterior** (`periodStats()` corre dos veces: ventana actual y la inmediatamente anterior) + `WindowPicker` `?days=` 7/15/30/90 que aplica a todo.
+- **`weeklySeries()`** — 26 semanas (≈6 meses) de creados / ganados / perdidos en `TrendArea`. Es el gráfico que antes no existía y el que más informa: dice si el negocio acelera o se enfría.
+- **⚠️ Trampa cara**: la clave de agrupación semanal debe ser `DATE_FORMAT(campo, '%x-%v')` (ISO, semana que arranca el **lunes**) para coincidir con `Carbon::startOfWeek()`/`isoWeek()`. Con `'%X-%V'` (domingo, que es lo que se escribió primero) las claves **nunca** coinciden y las tres series salen en **cero** sin ningún error visible. El padding también importa: `isoWeek()` devuelve `5`, MySQL devuelve `05` — por eso `sprintf('%02d', …)`.
+- **Embudo con % de paso entre etapas** (`FunnelSteps`): el embudo anterior eran barras sin porcentaje; el dato accionable es *dónde se cae el lead*. Clic en etapa → `/leads?stage_id=X`.
+- **Fuentes con revenue**: donut de ingresos por fuente (`won_value`) sobre la tabla de conversión que ya existía. Clic en porción → `/leads?source=X`.
+- **`teamStages`**: `CompareBars` apiladas por etapa con los colores de etapa del pipeline. **Solo admin** — un agent recibe `byUser` y `teamStages` vacíos desde el servidor, no ocultos en el cliente.
+- **Revenue real**: facturado vs cobrado del periodo (`invoiced_cents`/`collected_cents`) + serie mensual de ganados.
+- **`closeTimeHistogram()`**: días entre `created_at` y `closed_at` en baldes (‹1 d / 1-3 / 3-7 / 7-14 / 14-30 / ›30). Responde "cuánto tarda en cerrar un lead".
+- **`GET /reports/export`** — CSV del periodo con la misma ventana y el mismo scope de rol que `index()` (stream chunked 500, BOM UTF-8, separador `;`, patrón de `ContactController@exportCsv` del wacrm).
+- **`LeadController` acepta `stage_id`** server-side (en `index` y en `export`), respetando el scope de rol. Era el requisito del drill-down del embudo.
+- Clic en fila del ranking de equipo → `/supervision/agents/{user}`.
+
+### `/supervision` — comparativas de equipo (`Services\Supervision\TeamComparison`)
+**Clase nueva a propósito.** `ResponseMetrics` es el **GEMELO** del wacrm y sus definiciones están fijadas por `SupervisionMetricsTest`; `TeamComparison` solo las *consume* (el reloj arranca en el primer mensaje de la ráfaga, la IA no cierra la espera, un saliente sin espera abierta es seguimiento proactivo). No se tocó una línea del gemelo.
+
+- **Mediana** de 1ª respuesta por responsable con `ReferenceLine` de SLA. Mediana y no promedio: un solo caso olvidado de 10 h le arruina el promedio a quien contesta bien el resto del tiempo.
+- **Cumplimiento diario del SLA** (% dentro del objetivo). Los días sin respuestas van en **`null`, no en `0`**: si no, un fin de semana sin tráfico se lee como un desplome.
+- **Heatmap hora × día** de `message_in` — cuándo escriben los clientes vs. cuándo se atiende.
+- **Antigüedad del backlog** en baldes (‹1 h / 1-4 / 4-12 / 12-24 / 1-3 d / ›3 d). Es el **AHORA**: no se recorta a la ventana `?days=`.
+- `Supervision/Agent.jsx`: línea punteada del **promedio del equipo** superpuesta a la serie del agente (`teamDailyAverage()`), para que su número tenga contexto.
+
+### Dashboard ejecutivo (`DashboardController` + `Dashboard.jsx`)
+- KPIs con delta contra el **equivalente honesto**, no contra "hace 30 días" a secas: abiertos vs. los que estaban abiertos hace un mes (reconstruido desde `closed_at`), ganados vs. **el mismo tramo** del mes pasado (mes a la fecha, para no comparar 7 días contra 30), tareas de hoy vs. las que vencían ayer. Sin base de comparación el delta va en `null` y **no se pinta**: un `0%` mentiría.
+- **"Leads sin tarea" no lleva delta**: no hay histórico del que sacar cuántos estaban sin tarea ayer. En su lugar lleva `forgottenLeads`, la mini-lista clicable de los **5 que llevan más tiempo abiertos sin una sola tarea** — el KPI dice cuántos, la lista dice cuáles.
+
+### Sidebar
+No hizo falta tocarlo: **Reportes** (visible para todos) y **Seguimiento** (`adminOnly`) ya tenían entrada en `AuthenticatedLayout.jsx`, y toda la ronda cae dentro de `/reports`, `/supervision` y `/dashboard`. *(En el wacrm sí hubo que crear un grupo «Reportes» en el sidebar, porque allá los paneles de analítica sí eran pantallas sin enlace.)*
+
+**Tests:** `ReportMeasuresTest` (7), `TeamComparisonTest` (8), `DashboardExecutiveTest` (4).
+
 ## Ronda de UI — pantallas a ancho completo y modales (2026-08-07)
 
 Ronda de mejoras de layout y UX, solo frontend (`resources/js`). Sin migraciones y sin tocar lógica de negocio; el build de producción va en el servidor.
