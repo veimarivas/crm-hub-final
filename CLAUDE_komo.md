@@ -34,8 +34,12 @@ Ejecución de `mejoras.md` (raíz del repo). Objetivo: que `/reports` deje de se
 - KPIs con delta contra el **equivalente honesto**, no contra "hace 30 días" a secas: abiertos vs. los que estaban abiertos hace un mes (reconstruido desde `closed_at`), ganados vs. **el mismo tramo** del mes pasado (mes a la fecha, para no comparar 7 días contra 30), tareas de hoy vs. las que vencían ayer. Sin base de comparación el delta va en `null` y **no se pinta**: un `0%` mentiría.
 - **"Leads sin tarea" no lleva delta**: no hay histórico del que sacar cuántos estaban sin tarea ayer. En su lugar lleva `forgottenLeads`, la mini-lista clicable de los **5 que llevan más tiempo abiertos sin una sola tarea** — el KPI dice cuántos, la lista dice cuáles.
 
-### Sidebar
-No hizo falta tocarlo: **Reportes** (visible para todos) y **Seguimiento** (`adminOnly`) ya tenían entrada en `AuthenticatedLayout.jsx`, y toda la ronda cae dentro de `/reports`, `/supervision` y `/dashboard`. *(En el wacrm sí hubo que crear un grupo «Reportes» en el sidebar, porque allá los paneles de analítica sí eran pantallas sin enlace.)*
+### Sidebar — grupo «Reportes» (2026-08-08)
+Ningún enlace faltaba (a diferencia del wacrm, donde los paneles de analítica eran pantallas sin entrada), pero estaban **dispersos**: *Reportes* suelto entre Contactos y Etiquetas, y *Seguimiento* / *Asesores* / *Avisos* bajo un encabezado «Supervisión». Se unificaron en un grupo **«Reportes»** con el mismo patrón del wacrm: flag `analytics: true` en el item + bloque propio entre la navegación de trabajo y la de configuración.
+
+- **Trampa del agrupado**: el grupo anterior se armaba desde `adminNav` y todo el bloque estaba gateado por `adminNav.length > 0`. Meter *Reportes* ahí tal cual habría dejado al **agent sin acceso a `/reports`**, que es justo lo que la ronda le habilitó (ve la pantalla con sus propios números). Por eso el criterio de agrupación es `analytics` y el corte por rol lo sigue haciendo `visibleNav`/`adminOnly`: un agent ve el grupo con un solo item.
+- Igual que el resto de los grupos (y que el wacrm), el bloque **no se renderiza con la sidebar colapsada**; en ese modo solo quedan los iconos de la navegación principal.
+- *Avisos* (`team-messages`) quedó dentro del grupo: es el brazo ejecutor de la supervisión — desde `/supervision` se sale a mandar el aviso.
 
 **Tests:** `ReportMeasuresTest` (7), `TeamComparisonTest` (8), `DashboardExecutiveTest` (4).
 

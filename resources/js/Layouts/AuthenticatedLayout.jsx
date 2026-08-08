@@ -99,9 +99,14 @@ const navigation = [
         ),
     },
     {
+        // Grupo REPORTES: las pantallas de control y seguimiento van juntas,
+        // igual que en el wacrm. `analytics` las saca de la navegación de
+        // trabajo sin sacarlas de `visibleNav` (el corte por rol lo sigue
+        // haciendo `adminOnly`: un agent solo ve Reportes, con sus números).
         name: 'Reportes',
         pattern: 'reports.*',
         routeName: 'reports.index',
+        analytics: true,
         icon: (
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
@@ -113,6 +118,7 @@ const navigation = [
         pattern: 'asesores.*',
         routeName: 'asesores.index',
         adminOnly: true,
+        analytics: true,
         icon: (
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
@@ -124,6 +130,7 @@ const navigation = [
         pattern: 'supervision.*',
         routeName: 'supervision.index',
         adminOnly: true,
+        analytics: true,
         icon: (
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
@@ -132,10 +139,13 @@ const navigation = [
         ),
     },
     {
+        // Vive en el grupo de Reportes porque es el brazo ejecutor de la
+        // supervisión: desde `/supervision` se sale a mandar el aviso.
         name: 'Avisos',
         pattern: 'team-messages.*',
         routeName: 'team-messages.index',
         adminOnly: true,
+        analytics: true,
         icon: (
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
@@ -288,13 +298,15 @@ export default function AuthenticatedLayout({ header, children }) {
     };
 
 const visibleNav = navigation.filter((item) => !item.adminOnly || isAdmin);
-const mainNav = visibleNav.filter((item) => !item.adminOnly);
-const adminNav = visibleNav.filter((item) => item.adminOnly);
 
-// Separar items de supervision (admin-only en el area principal)
-const supervisionItems = ['Asesores', 'Seguimiento', 'Avisos'];
-const supervisionNav = adminNav.filter((item) => supervisionItems.includes(item.name));
-const configNav = adminNav.filter((item) => !supervisionItems.includes(item.name));
+// Tres bloques: trabajo diario, REPORTES (control y seguimiento) y
+// configuración. El grupo de reportes no se arma con `adminOnly` como antes:
+// «Reportes» lo ve también el agent (con sus propios números), así que el
+// criterio de agrupación es `analytics` y el corte por rol lo sigue haciendo
+// `visibleNav`.
+const analyticsNav = visibleNav.filter((item) => item.analytics);
+const mainNav = visibleNav.filter((item) => !item.adminOnly && !item.analytics);
+const configNav = visibleNav.filter((item) => item.adminOnly && !item.analytics);
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -359,17 +371,17 @@ const configNav = adminNav.filter((item) => !supervisionItems.includes(item.name
                                 })}
                             </div>
 
-                            {!sidebarCollapsed && adminNav.length > 0 && (
+                            {!sidebarCollapsed && (
     <>
-        {supervisionNav.length > 0 && (
+        {analyticsNav.length > 0 && (
             <div className="mt-6 pt-4 border-t border-white/10">
                 <div className="px-3 mb-1.5">
                     <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
-                        Supervisión
+                        Reportes
                     </span>
                 </div>
                 <div className="space-y-0.5">
-                    {supervisionNav.map((item) => {
+                    {analyticsNav.map((item) => {
                         const active = isActive(item.pattern);
                         return (
                             <Link
@@ -400,7 +412,7 @@ const configNav = adminNav.filter((item) => !supervisionItems.includes(item.name
             </div>
         )}
         {configNav.length > 0 && (
-            <div className={supervisionNav.length > 0 ? 'mt-4 pt-4 border-t border-white/10' : 'mt-6 pt-4 border-t border-white/10'}>
+            <div className={analyticsNav.length > 0 ? 'mt-4 pt-4 border-t border-white/10' : 'mt-6 pt-4 border-t border-white/10'}>
                 <div className="px-3 mb-1.5">
                     <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
                         Configuración
