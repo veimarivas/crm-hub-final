@@ -2,6 +2,19 @@
 
 CRM de ventas centrado en **leads** inspirado en Kommo (kommo.com), hermano del **wacrm** (`C:\xampp_82_12\htdocs\laravel_crm_whatsapp`, CRM de WhatsApp). Son **dos proyectos separados integrados por API**: este maneja leads/tareas/pipeline; el wacrm es el motor de WhatsApp.
 
+## Ronda de UI — pantallas a ancho completo y modales (2026-08-07)
+
+Ronda de mejoras de layout y UX, solo frontend (`resources/js`). Sin migraciones y sin tocar lógica de negocio; el build de producción va en el servidor.
+
+- **`/bookings`** (`Bookings/Index.jsx`): el campo de link público ahora muestra **solo la ruta** (`/book/{slug}`, derivado con `new URL(bookingUrl).pathname`) mientras **Copiar** y **Abrir** siguen usando la URL completa (`bookingUrl`).
+- **`/settings/web-forms`** (`Settings/WebForms.jsx`): ancho completo (`max-w-4xl` → `max-w-7xl`), form de creación en 3 columnas (nombre / pipeline / título visible) y lista en grid de 2. La URL pública muestra solo el path (`/web-forms/{token}`) pero Copiar y abrir usan la URL completa; el snippet del iframe embebe la URL completa (la requiere el navegador).
+- **`/settings/business-hours`** (`Settings/BusinessHours.jsx`): ancho completo; las cards de "Horario semanal" y "Auto-respuesta fuera de hora" ahora van en 2 columnas (`lg:grid-cols-2`) aprovechando el ancho.
+- **`/settings/team`** (`Settings/Team.jsx`): ancho completo (`max-w-3xl` → `max-w-7xl`), "Miembros" y "API keys" en 2 columnas; **expulsar** y **revocar API key** pasaron de `confirm()` nativo a **modal de confirmación** (`Components/Modal.jsx`), y los **permisos (scopes)** de las API keys se rediseñaron como *pills* seleccionables con cuadro de check, icono por scope y estado activo en violeta.
+- **`/settings/integration`** (`Settings/Integration.jsx`): ancho completo (`max-w-3xl` → `max-w-7xl`); paso 1 (credenciales) y paso 2 (webhook) en 2 columnas.
+- **`/settings/pipelines`** (`Settings/Pipelines.jsx`): ancho completo (`max-w-4xl` → `max-w-7xl`) y las tarjetas de pipeline en grid de 2 columnas. *(Un intento intermedio de partir cada tarjeta en dos columnas internas —etapas activas izq / terminales der— se probó y se revirtió por pedido del usuario.)*
+- **`/pipelines/{id}/automations`** (`Pipelines/Automations.jsx`): ancho completo y las etapas en grid de 2 columnas (antes stack vertical).
+- **`/broadcasts`** — Index, Create y Show rediseñados (diseño a ancho completo con grid de tarjetas; Create con imagen+mensaje en `lg:grid-cols-5`; Show con resumen + tabla de destinatarios en 2 columnas).
+
 ## Digital Pipeline: plantillas, edición y vista previa (2026-08-07)
 
 `/pipelines/{pipeline}/automations`. Mismo tratamiento que se aplicó a `/automations` y `/flows` en el wacrm. Sin migraciones.
