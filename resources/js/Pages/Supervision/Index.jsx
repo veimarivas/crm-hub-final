@@ -11,6 +11,7 @@ import {
     StageChart,
     TONE,
 } from './Charts';
+import { CompareBars, HeatmapGrid, TrendArea, TONE as CHART_TONE, fmtInteger } from '@/Components/Charts';
 
 /** Segundos → "45s" / "12m" / "3h 20m" / "2d 4h". Null se muestra como guion. */
 function duration(seconds) {
@@ -189,7 +190,7 @@ function AgentRow({ agent, slaMinutes, expanded, onToggle }) {
     );
 }
 
-export default function SupervisionIndex({ agents, leads, totals, daily, stages, days, ranges, members }) {
+export default function SupervisionIndex({ agents, leads, totals, daily, stages, days, ranges, members, comparison }) {
     const [responsible, setResponsible] = useState('all');
     const [onlyWaiting, setOnlyWaiting] = useState(false);
     const [expanded, setExpanded] = useState(null);
@@ -202,6 +203,16 @@ export default function SupervisionIndex({ agents, leads, totals, daily, stages,
     }), [leads, responsible, onlyWaiting]);
 
     const iaFirstPct = totals.leads > 0 ? Math.round((totals.ia_first / totals.leads) * 100) : 0;
+
+    // Comparativas de equipo (TeamComparison). El SLA sale del servidor: el
+    // umbral está fijado en ResponseMetrics y no se repite en el cliente.
+    const {
+        responseByAgent = [],
+        slaDaily = [],
+        heatmap = [],
+        backlog = [],
+        slaMinutes = totals.sla_minutes,
+    } = comparison ?? {};
 
     const responderSlices = useMemo(() => [
         { key: 'responsable', label: 'El responsable', value: agents.reduce((a, x) => a + x.responsible_first, 0), color: TONE.responsable },
@@ -318,6 +329,55 @@ export default function SupervisionIndex({ agents, leads, totals, daily, stages,
                             <StageChart stages={stages} />
                         </ChartCard>
                     </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <ChartCard
+                        title="Mediana de 1ª respuesta por responsable"
+                        subtitle={`Mediana, no promedio: un caso olvidado no arrastra al resto. Objetivo ${slaMinutes} min.`}
+                    >
+                        <CompareBars
+                            data={responseByAgent}
+                            layout="horizontal"
+                            target={slaMinutes}
+                            targetLabel={`SLA ${slaMinutes} min`}
+                            valueFormatter={(v) => `${fmtInteger(v)} min`}
+                            height={Math.max(160, responseByAgent.length * 34 + 40)}
+                            emptyMessage="Nadie respondió mensajes en este periodo."
+                        />
+                    </ChartCard>
+
+                    <ChartCard
+                        title="Cumplimiento del SLA por día"
+                        subtitle="% de respuestas dentro del objetivo"
+                    >
+                        <TrendArea
+                            data={slaDaily}
+                            series={[{ key: 'pct', name: 'Dentro del SLA', color: CHART_TONE.positive }]}
+                            reference={{ value: 90, label: 'Meta 90%', color: CHART_TONE.warning }}
+                            valueFormatter={(v) => `${String(v).replace('.', ',')}%`}
+                            emptyMessage="Sin respuestas medidas en este periodo."
+                        />
+                    </ChartCard>
+
+                    <ChartCard
+                        title="Cuándo escriben los clientes"
+                        subtitle="Mensajes recibidos por hora y día de la semana"
+                    >
+                        <HeatmapGrid data={heatmap} emptyMessage="Sin mensajes recibidos en este periodo." />
+                    </ChartCard>
+
+                    <ChartCard
+                        title="Antigüedad del backlog"
+                        subtitle="Hace cuánto esperan los que hoy siguen sin respuesta humana"
+                    >
+                        <CompareBars
+                            data={backlog}
+                            layout="vertical"
+                            valueFormatter={fmtInteger}
+                            emptyMessage="Nadie está esperando respuesta ahora mismo."
+                        />
+                    </ChartCard>
                 </div>
 
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">

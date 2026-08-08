@@ -105,14 +105,21 @@ export function DailyVolumeChart({ daily }) {
  * Tiempo medio de respuesta por día, en área, con la banda del SLA de fondo.
  * Lo que importa no es el valor exacto sino cuándo se sale de la banda verde.
  */
-export function ResponseTimeChart({ daily, slaMinutes, formatDuration }) {
+export function ResponseTimeChart({ daily, slaMinutes, formatDuration, teamDaily }) {
     const points = daily.map((d, i) => ({ ...d, i }));
     const withData = points.filter((p) => p.avg_response_seconds !== null);
 
     if (withData.length === 0) return <EmptyChart message="Todavía no hay respuestas medidas en este periodo." />;
 
+    // Referencia del equipo (solo en la ficha de un agente): el número propio
+    // no dice si es lento, dice si es más lento que el resto.
+    const teamByDate = new Map((teamDaily ?? []).map((t) => [t.date, t.team_avg_response_seconds]));
+    const teamPoints = points
+        .map((p) => ({ ...p, team: teamByDate.get(p.date) ?? null }))
+        .filter((p) => p.team !== null);
+
     const sla = slaMinutes * 60;
-    const max = Math.max(sla * 1.5, ...withData.map((p) => p.avg_response_seconds));
+    const max = Math.max(sla * 1.5, ...withData.map((p) => p.avg_response_seconds), ...teamPoints.map((p) => p.team));
     const w = 100;
     const h = 100;
     const x = (i) => (points.length === 1 ? w / 2 : (i / (points.length - 1)) * w);
@@ -122,6 +129,9 @@ export function ResponseTimeChart({ daily, slaMinutes, formatDuration }) {
     // días sin respuestas inventaría un dato que no existe.
     const line = withData.map((p, n) => `${n === 0 ? 'M' : 'L'} ${x(p.i).toFixed(2)} ${y(p.avg_response_seconds).toFixed(2)}`).join(' ');
     const area = `${line} L ${x(withData[withData.length - 1].i).toFixed(2)} ${h} L ${x(withData[0].i).toFixed(2)} ${h} Z`;
+    const teamLine = teamPoints.length > 1
+        ? teamPoints.map((p, n) => `${n === 0 ? 'M' : 'L'} ${x(p.i).toFixed(2)} ${y(p.team).toFixed(2)}`).join(' ')
+        : null;
 
     return (
         <div>
@@ -137,6 +147,9 @@ export function ResponseTimeChart({ daily, slaMinutes, formatDuration }) {
                     <rect x="0" y={y(sla)} width={w} height={h - y(sla)} fill={TONE.responsable} opacity="0.07" />
                     <line x1="0" y1={y(sla)} x2={w} y2={y(sla)} stroke={TONE.vencido} strokeWidth="0.4" strokeDasharray="2 2" vectorEffect="non-scaling-stroke" />
                     <path d={area} fill="url(#respFill)" />
+                    {teamLine && (
+                        <path d={teamLine} fill="none" stroke="#64748b" strokeWidth="1.5" strokeDasharray="4 3" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+                    )}
                     <path d={line} fill="none" stroke={TONE.responsable} strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
                     {withData.map((p) => (
                         <circle key={p.date} cx={x(p.i)} cy={y(p.avg_response_seconds)} r="2.5" fill="#fff" stroke={TONE.responsable} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
@@ -153,6 +166,12 @@ export function ResponseTimeChart({ daily, slaMinutes, formatDuration }) {
                 </span>
                 <span>{points[points.length - 1]?.label}</span>
             </div>
+            {teamLine && (
+                <p className="flex items-center gap-1.5 text-[10px] text-gray-400 mt-1">
+                    <span className="w-4 border-t border-dashed border-slate-500" />
+                    Promedio del equipo
+                </p>
+            )}
         </div>
     );
 }

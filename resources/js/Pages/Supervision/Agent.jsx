@@ -117,7 +117,7 @@ function FunnelChart({ byStage }) {
     );
 }
 
-export default function SupervisionAgent({ agent, kpis, conversion, histogram, daily, leads, operatives, days, ranges, slaMinutes }) {
+export default function SupervisionAgent({ agent, kpis, conversion, histogram, daily, leads, operatives, days, ranges, slaMinutes, teamDaily }) {
     const attentionRate = kpis.leads > 0 ? Math.round((kpis.answered / kpis.leads) * 100) : 0;
     const pending = (operatives?.pending) || [];
     const overdueTasks = operatives?.tasks || 0;
@@ -235,8 +235,8 @@ export default function SupervisionAgent({ agent, kpis, conversion, histogram, d
                         <DailyVolumeChart daily={daily} />
                     </ChartCard>
 
-                    <ChartCard title="Tiempo de respuesta por día" subtitle={`Promedio contra el SLA de ${slaMinutes} minutos`}>
-                        <ResponseTimeChart daily={daily} slaMinutes={slaMinutes} formatDuration={duration} />
+                    <ChartCard title="Tiempo de respuesta por día" subtitle={`Contra el SLA de ${slaMinutes} minutos y el promedio del equipo`}>
+                        <ResponseTimeChart daily={daily} slaMinutes={slaMinutes} formatDuration={duration} teamDaily={teamDaily} />
                     </ChartCard>
                 </div>
 

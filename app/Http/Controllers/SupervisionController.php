@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Services\Supervision\ResponseMetrics;
+use App\Services\Supervision\TeamComparison;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -31,13 +32,16 @@ class SupervisionController extends Controller
             $days = 30;
         }
 
-        $metrics = (new ResponseMetrics(
-            $request->user()->account_id,
-            now()->subDays($days)->startOfDay(),
-        ))->build();
+        $since = now()->subDays($days)->startOfDay();
+
+        $metrics = (new ResponseMetrics($request->user()->account_id, $since))->build();
+
+        // Comparativas de equipo: en clase aparte para no tocar el GEMELO.
+        $comparison = (new TeamComparison($request->user()->account_id, $since))->build();
 
         return Inertia::render('Supervision/Index', [
             ...$metrics,
+            'comparison' => $comparison,
             'days' => $days,
             'ranges' => self::RANGES,
             'members' => User::where('account_id', $request->user()->account_id)
@@ -61,13 +65,15 @@ class SupervisionController extends Controller
             $days = 30;
         }
 
-        $data = (new ResponseMetrics(
-            $request->user()->account_id,
-            now()->subDays($days)->startOfDay(),
-        ))->forResponsible($user->id);
+        $since = now()->subDays($days)->startOfDay();
+
+        $data = (new ResponseMetrics($request->user()->account_id, $since))->forResponsible($user->id);
 
         return Inertia::render('Supervision/Agent', [
             ...$data,
+            // Promedio del equipo para superponerlo a las series del agente:
+            // un número solo no dice si es lento, dice si es más lento.
+            'teamDaily' => (new TeamComparison($request->user()->account_id, $since))->teamDailyAverage(),
             'days' => $days,
             'ranges' => self::RANGES,
             'sla_minutes' => ResponseMetrics::SLA_MINUTES,
