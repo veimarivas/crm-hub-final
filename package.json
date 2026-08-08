@@ -22,6 +22,8 @@
         "vite": "^8.0.0"
     },
     "dependencies": {
-        "opus-recorder": "^8.0.5"
+        "opus-recorder": "^8.0.5",
+        "react-is": "^19.2.8",
+        "recharts": "^3.10.1"
     }
 }
