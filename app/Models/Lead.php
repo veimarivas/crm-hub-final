@@ -46,6 +46,7 @@ class Lead extends Model
             'first_touch_at' => 'datetime',
             'score_factors' => 'array',
             'scored_at' => 'datetime',
+            'score_band_changed_at' => 'datetime',
         ];
     }
 

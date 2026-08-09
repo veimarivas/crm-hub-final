@@ -1,6 +1,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { completeTask } from '@/Components/CompleteTaskModal';
 import ServiceWindowBadge, { ServiceWindowCard } from '@/Components/ServiceWindowBadge';
+import CopilotPanel from '@/Components/CopilotPanel';
 import ImageModal from '@/Components/ImageModal';
 import Modal from '@/Components/Modal';
 import TagPicker from '@/Components/TagPicker';
@@ -125,7 +126,7 @@ function TimelineEvent({ event }) {
     );
 }
 
-export default function Show({ lead, stages, events, tasks, notes, members, contacts, companies, allTags, customFields, customValues, whatsappEnabled, serviceWindow }) {
+export default function Show({ lead, stages, events, tasks, notes, members, contacts, companies, allTags, customFields, customValues, whatsappEnabled, serviceWindow, copilot }) {
     const { flash, auth } = usePage().props;
     const isAdmin = auth?.user?.account_role === 'owner' || auth?.user?.account_role === 'admin';
     const [tab, setTab] = useState('chat');
@@ -156,6 +157,29 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
         fetch(route('leads.quick-replies'), { credentials: 'same-origin', headers: { Accept: 'application/json' } })
             .then((r) => r.json()).then(setQuickReplies).catch(() => {});
     }, []);
+
+    // Cada sugerencia del copiloto aterriza donde se ejecuta: responder abre el
+    // chat con el cursor puesto, agendar abre tareas, mover lleva al selector de
+    // etapa del encabezado. Una sugerencia que solo informa se ignora.
+    const stageSelectRef = useRef(null);
+
+    const runCopilotAction = (action) => {
+        if (action.action?.type === 'task') {
+            setTab('tasks');
+
+            return;
+        }
+
+        if (action.action?.type === 'stage') {
+            stageSelectRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            stageSelectRef.current?.focus();
+
+            return;
+        }
+
+        setTab('chat');
+        requestAnimationFrame(() => waInputRef.current?.focus());
+    };
 
     const renderTemplate = (content) => content
         .replaceAll('{name}', lead.contact?.name ?? '')
@@ -405,7 +429,7 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                         </div>
 
                         {/* Stage stepper visual — reemplaza el dropdown por breadcrumb clickeable */}
-                        <div className="mt-2 pt-2 border-t border-gray-100">
+                        <div ref={stageSelectRef} tabIndex={-1} className="mt-2 pt-2 border-t border-gray-100 scroll-mt-24 focus:outline-none">
                             <div
                                 className="flex items-center gap-1 overflow-x-auto pb-0.5"
                                 title={lead.status === 'open'
@@ -588,6 +612,10 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                                 </div>
                             );
                         })()}
+
+                        {/* Qué hacer con este lead ahora. Va primero: es lo
+                            único de la columna que cambia un resultado. */}
+                        <CopilotPanel copilot={copilot} onAction={runCopilotAction} />
 
                         {/* Cuánto queda para escribirle sin que Meta cobre. Va
                             arriba del todo: condiciona si conviene responder

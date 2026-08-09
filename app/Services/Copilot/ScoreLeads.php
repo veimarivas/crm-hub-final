@@ -24,9 +24,13 @@ class ScoreLeads
      */
     public function forAccount(string $accountId): array
     {
+        // `score_band` viaja en el select aunque no se use para puntuar: sin
+        // ella `bandChange()` compara contra null, cree que la banda cambió en
+        // cada pasada y pisa `score_band_previous` con null — con lo cual «este
+        // lead se enfrió» no se detectaría nunca.
         $leads = Lead::forAccount($accountId)
             ->where('status', 'open')
-            ->get(['id', 'stage_id', 'source', 'value', 'created_at']);
+            ->get(['id', 'stage_id', 'source', 'value', 'created_at', 'score_band']);
 
         if ($leads->isEmpty()) {
             return ['scored' => 0, 'mode' => 'absoluto'];
@@ -53,9 +57,9 @@ class ScoreLeads
             foreach ($scored as $row) {
                 $row['lead']->forceFill([
                     'score' => $row['score'],
-                    'score_band' => $this->scorer->bandFor($row['score'], $bands),
                     'score_factors' => $row['factors'],
                     'scored_at' => $now,
+                    ...$this->bandChange($row['lead'], $this->scorer->bandFor($row['score'], $bands)),
                 ])->save();
             }
         });
@@ -87,9 +91,35 @@ class ScoreLeads
 
         $lead->forceFill([
             'score' => $result['score'],
-            'score_band' => $this->scorer->bandFor($result['score'], $bands),
             'score_factors' => $result['factors'],
             'scored_at' => now(),
+            ...$this->bandChange($lead, $this->scorer->bandFor($result['score'], $bands)),
         ])->save();
+    }
+
+    /**
+     * Atributos de banda a persistir, recordando la anterior **solo cuando
+     * cambia**.
+     *
+     * Si `score_band_previous` se pisara en cada pasada, a las 24 horas diría
+     * siempre lo mismo que la actual y «este lead se enfrió» no se detectaría
+     * nunca. La banda anterior tiene que sobrevivir hasta el próximo cambio
+     * real, no hasta la próxima corrida.
+     *
+     * @return array<string, mixed>
+     */
+    private function bandChange(Lead $lead, string $band): array
+    {
+        if ($lead->score_band === $band) {
+            return ['score_band' => $band];
+        }
+
+        return [
+            'score_band' => $band,
+            // En el primer puntaje no hay banda anterior: `null` significa
+            // «nunca tuvo otra», no «bajó desde ninguna parte».
+            'score_band_previous' => $lead->score_band,
+            'score_band_changed_at' => now(),
+        ];
     }
 }

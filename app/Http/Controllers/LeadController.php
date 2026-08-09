@@ -374,7 +374,38 @@ class LeadController extends Controller
             'customValues' => $lead->customFieldValues(),
             'whatsappEnabled' => (bool) ($integration?->is_active && $lead->contact?->phone),
             'serviceWindow' => app(ServiceWindow::class)->forLead($lead),
+            'copilot' => $this->copilotFor($lead),
         ]);
+    }
+
+    /**
+     * Panel del copiloto para la ficha: score con su desglose, qué hacer ahora
+     * y qué tan confiable es la banda.
+     *
+     * La calibración viaja con el panel a propósito: mostrar «caliente» sin
+     * decir qué cerró históricamente esa banda es pedirle al asesor que confíe
+     * en un adjetivo. Si la cuenta todavía no tiene historia suficiente, la
+     * propia respuesta lo dice y la UI lo muestra como «sin calibrar».
+     *
+     * @return array<string, mixed>
+     */
+    private function copilotFor(Lead $lead): array
+    {
+        $calibration = (new \App\Services\Copilot\LeadScorer)->calibration($lead->account_id);
+
+        return [
+            'score' => $lead->score,
+            'band' => $lead->score_band,
+            'bandPrevious' => $lead->score_band_previous,
+            'factors' => $lead->score_factors ?? [],
+            'scoredAt' => $lead->scored_at?->toIso8601String(),
+            'actions' => app(\App\Services\Copilot\NextActions::class)->forLead($lead),
+            'calibration' => [
+                'calibrated' => $calibration['calibrated'],
+                'closed' => $calibration['closed'],
+                'rate' => $calibration['bands'][$lead->score_band]['rate'] ?? null,
+            ],
+        ];
     }
 
     public function update(Request $request, Lead $lead): RedirectResponse

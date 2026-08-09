@@ -27,7 +27,27 @@ Segunda tarea de `mejoras2.md`. Backend del scoring; la capa prescriptiva y la U
 - **`score_factors` se guarda por modelo y no con `update()` de query builder**: el query builder no aplica el cast `array` y el JSON queda doblemente codificado.
 - La distinción humano/IA sale de `payload.sender` agregado **en SQL** (`JSON_UNQUOTE(JSON_EXTRACT(...))`), no iterando en PHP como `ResponseMetrics`: acá se puntúa la cuenta entera, no una ficha.
 
-Tests: `CopilotScoringTest` (14). Suite **261/261 (872 aserciones)**.
+Tests: `CopilotScoringTest` (14).
+
+### T1.c — Capa prescriptiva y panel en la ficha (2026-08-08)
+
+**`Services\Copilot\NextActions`** — «¿qué hago ahora con este lead?». Cinco reglas sobre hechos, sin IA: cuesta cero, no alucina y se puede explicar.
+
+- `reply` — el cliente escribió y **nadie humano** contestó. Misma definición que `/supervision` (la IA no cierra la espera): si acá significara otra cosa, el mismo lead aparecería atendido en una pantalla y desatendido en la otra.
+- `window` — la ventana sin costo se cierra en menos de 6 h. **Lleva el costo estimado** porque la decisión de apurarse es económica, no de gusto.
+- `task` — la regla Kommo. La prioridad **sube con la antigüedad**: un lead de hoy sin tarea es normal, uno de tres semanas está abandonado.
+- `cooled` — cayó de banda. Es la señal que justifica guardar la banda anterior: un lead que estaba caliente y se enfrió es algo que se estaba por cerrar y se está perdiendo, muy distinto de uno que siempre estuvo frío.
+- `stagnant` — 7+ días en la misma etapa.
+
+**Tres reglas de diseño, todas aprendidas de que el equipo ignore los avisos:** cada sugerencia dice su motivo (*«llamalo»* no se acciona, *«escribió hace 3 h»* sí), trae la acción a un clic, y **se cortan en 4 ordenadas por urgencia** — si todo urge, nada urge. Un lead cerrado no recibe ninguna: sugerirle algo empuja a reabrir lo que el equipo ya decidió.
+
+**Migración `score_band_previous` + `score_band_changed_at`.** Solo se pisan cuando la banda **cambia**: si se sobreescribieran en cada pasada nocturna, a las 24 h dirían siempre lo mismo que la actual y el enfriamiento no se detectaría nunca.
+
+**⚠️ Bug que encontró el test, no la lectura:** `ScoreLeads::forAccount()` traía los leads con un `select` acotado que **no incluía `score_band`**. `bandChange()` comparaba contra `null`, creía que la banda cambiaba en cada corrida y pisaba `score_band_previous` con `null` — «este lead se enfrió» no se habría detectado jamás, en silencio y con los tests del score en verde.
+
+**Panel** (`Components/CopilotPanel.jsx`, columna izquierda de `Leads/Show.jsx`, arriba de la ventana de servicio): qué hacer → score → por qué. El desglose va colapsado pero presente: el día que el número no cuadre con la intuición del asesor, tenerlo a mano es la diferencia entre corregir el criterio y dejar de creerle al módulo. La **calibración se muestra siempre**: o «de los caliente ya cerrados ganó el X%», o «sin calibrar — N cerrados, hacen falta 200». Cada sugerencia aterriza donde se ejecuta (chat con el cursor puesto / pestaña de tareas / stepper de etapa).
+
+Tests: `CopilotNextActionsTest` (12). Suite **273/273 (897 aserciones)**.
 
 ## T0 — Un solo traductor de filtros de leads (2026-08-08)
 
