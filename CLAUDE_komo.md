@@ -2,6 +2,33 @@
 
 CRM de ventas centrado en **leads** inspirado en Kommo (kommo.com), hermano del **wacrm** (`C:\xampp_82_12\htdocs\laravel_crm_whatsapp`, CRM de WhatsApp). Son **dos proyectos separados integrados por API**: este maneja leads/tareas/pipeline; el wacrm es el motor de WhatsApp.
 
+## T1.a/b — Copiloto: motor de señales y score explicable (2026-08-08)
+
+Segunda tarea de `mejoras2.md`. Backend del scoring; la capa prescriptiva y la UI van aparte.
+
+**La decisión de fondo: no hay ML, y se dice.** No hay infraestructura de entrenamiento ni volumen garantizado por cuenta. Un «87% de probabilidad de cierre» con pesos inventados se lee como ciencia y es decoración — la primera vez que ese 87% no cierra, el equipo deja de mirar el módulo entero. En su lugar:
+
+- **`Services\Copilot\LeadSignals`** — mide los hechos, sin opinar. Todo en **lote**: una consulta agregada por familia de señal. Puntuar una cuenta de noche con N+1 sería impracticable.
+- **`Services\Copilot\LeadScorer`** — pondera. Seis factores con peso declarado y justificado: `engagement` 25, `recency` 25, `stage_progress` 15, `source_quality` 15, `attention` 10, `momentum` 10.
+- **`Services\Copilot\ScoreLeads`** — persiste. `copilot:score-leads` agendado a las 03:30.
+
+**Separación deliberada señales/pesos:** cuando haya volumen para entrenar un modelo de verdad, se reemplaza `LeadScorer` y `LeadSignals` no se toca — ya devuelve la matriz lista.
+
+### Las promesas que fijan los tests (no los números)
+- **El score es la suma de su desglose.** Sin ese test el desglose sería decorativo y podría contradecir al número.
+- **`score_factors` se guarda junto al score**, no se recalcula al mostrarlo: recalcular el motivo aparte abre la puerta a que número y explicación se contradigan.
+- **Calibración = medición, no predicción.** Se mide qué % de los cerrados de cada banda terminó ganado. Con menos de 200 cerrados se declara **`calibrated: false`** y la UI dirá «sin calibrar». El dato crudo se devuelve igual; lo que no se hace es presentarlo como representativo.
+- **Los leads cerrados conservan su banda.** Repuntuarlos al cerrar destruiría la calibración: se perdería en qué banda estaban *cuando todavía se podía hacer algo*.
+- **Muestras chicas se ignoran**: una fuente con menos de 10 cerrados no aporta tasa (con 3 casos, «100% de conversión» es ruido).
+- **Bandas por tercil** de la cartera —la pregunta real es «¿a quién llamo primero?», que es un ranking relativo— con caída a umbrales absolutos bajo 12 leads, porque un tercil sobre 5 leads no significa nada.
+
+### Trampas encontradas
+- **`created_at` no es fillable en `LeadEvent`**: pasarlo en el `create()` se ignora **en silencio** y todos los eventos quedan con la hora del test, con lo cual cualquier test de recencia mide cero y pasa por casualidad. Hay que pisarlo con `forceFill()->save()` después de crear.
+- **`score_factors` se guarda por modelo y no con `update()` de query builder**: el query builder no aplica el cast `array` y el JSON queda doblemente codificado.
+- La distinción humano/IA sale de `payload.sender` agregado **en SQL** (`JSON_UNQUOTE(JSON_EXTRACT(...))`), no iterando en PHP como `ResponseMetrics`: acá se puntúa la cuenta entera, no una ficha.
+
+Tests: `CopilotScoringTest` (14). Suite **261/261 (872 aserciones)**.
+
 ## T0 — Un solo traductor de filtros de leads (2026-08-08)
 
 Primera tarea de `mejoras2.md`. Prerequisito de la segmentación dinámica, pero **arregla un bug que ya estaba en producción**.

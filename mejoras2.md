@@ -118,44 +118,90 @@ Llamada al LLM del wacrm para redactar 2 líneas de contexto del lead. **Fuera d
 
 ---
 
-## 4. P1 · T3 — Workflows: automatización de procesos complejos
+## 4. P1 · T3 — Workflows estilo HubSpot (inscripción dinámica)
 
 **Hoy** `StageAutomation` es plano: un disparador (entrar a etapa), 3 acciones (`send_whatsapp`, `create_task`, `add_note`), sin esperas, sin condiciones, sin ramas, ejecución inmediata.
 
 **El wacrm ya resolvió esto** (`Automation` + `AutomationStep` con árbol + `AutomationPendingExecution` para los `wait` + `Conditions::evaluate()` + `Simulator`). **Reusar la forma, no el archivo**: el dominio es distinto (leads vs. conversaciones) y copiar el código crearía un **tercer gemelo** que habría que mantener sincronizado a mano. Se documenta como paralelo deliberado.
 
+### El modelo mental de HubSpot (y en qué se diferencia de lo que hay hoy)
+
+`StageAutomation` es **reactivo a un evento puntual**: pasó algo → se dispara. HubSpot es **declarativo sobre un estado**: se define *quién debe estar* en el workflow y el motor se encarga de meter y sacar registros a medida que la realidad cambia. Esa es la diferencia que hace falta implementar; las ramas y las esperas son secundarias.
+
+Cuatro conceptos que hay que traer completos, no a medias:
+
+**1. Inscripción por criterios (*enrollment*), no solo por evento.**
+El disparador principal es un **filtro** — el mismo `LeadFilter` de T0 y los segmentos de T4. «Todos los leads en Negociación, sin tarea, de fuente WhatsApp» se evalúa periódicamente y **el que empieza a cumplir, entra solo**. Un lead que se creó hace tres meses y hoy cumple, entra hoy. Eso es lo dinámico.
+- Se sigue soportando la inscripción por evento (`lead_created`, `stage_changed`, `form_submitted`, `booking_created`, `task_overdue`) para lo que necesita reaccionar al instante.
+- Job barredor (`EnrollLeadsInWorkflowsJob`) cada N minutos: evalúa filtros de inscripción de los workflows activos y **inscribe la diferencia**. Con huella para no recalcular lo que no cambió.
+
+**2. Re-inscripción explícita (*re-enrollment*).**
+Por defecto un lead entra **una sola vez, para siempre**. Es la protección más importante del sistema: sin ella, el barredor reinscribe en cada pasada y el cliente recibe el mismo WhatsApp cada 10 minutos. La re-inscripción se habilita por workflow y exige elegir **qué evento la permite** (p. ej. «volvió a entrar a Negociación») y un **enfriamiento mínimo**.
+
+**3. Criterio de meta (*goal*) y desinscripción.**
+- **Meta**: un filtro que, al cumplirse, **saca al lead del workflow y marca la corrida como convertida**. «El lead pasó a Ganado» → dejá de mandarle la secuencia de seguimiento. Sin esto, un cliente que ya compró sigue recibiendo «¿seguís interesado?».
+- **Desinscripción automática**: si el lead deja de cumplir el filtro de inscripción, sale (configurable: salir o continuar).
+- **Lista de supresión**: leads/etiquetas que nunca entran a ningún workflow (el «no me escriban más»).
+
+**4. Esperas de calendario, no solo de reloj.**
+- `wait` por duración (N horas/días).
+- **`wait_until`**: hasta una hora del día, hasta un día de la semana, o hasta la próxima hora hábil. Reusa `Services\BusinessHours\Schedule`, que ya existe. Un seguimiento automático que sale 3:40 AM es peor que no mandarlo.
+- **Ventana de ejecución por workflow**: «solo lunes a viernes de 9 a 19». Lo que caiga afuera se encola hasta la próxima ventana.
+
 ### Esquema
 
-- `workflows`: `account_id`, `name`, `trigger_type`, `trigger_config` (json), `is_active`, `execution_count`.
-- `workflow_steps`: árbol con `parent_id` + `branch` (`yes|no|null`), `position`, `step_type`, `config`.
-- `workflow_runs`: `workflow_id`, `lead_id`, `status`, `started_at`, `finished_at`.
-- `workflow_run_events`: traza paso a paso (**imprescindible para depurar**: hoy un fallo de automatización solo deja un `Log::warning` que nadie lee).
-- `workflow_pending_executions`: los `wait` pendientes, barridos por el scheduler.
-
-### Disparadores (dominio de leads)
-
-`lead_created`, `stage_changed`, `tag_added`, `value_changed`, `status_changed` (ganado/perdido), `task_overdue`, `no_activity_for` (N días), `form_submitted`, `booking_created`, `segment_entered` (une con T4), `score_band_changed` (une con T1).
+- `workflows`: `account_id`, `name`, `description`, `enrollment_type` (`filter|event`), `enrollment_filters` (json, contrato de `LeadFilter`), `trigger_type` + `trigger_config` (json, para el modo evento), `allow_reenrollment` (bool), `reenrollment_triggers` (json), `reenrollment_cooldown_minutes`, `goal_filters` (json, nullable), `unenroll_when_criteria_lost` (bool), `execution_window` (json), `is_active`, `stats` (json cacheado).
+- `workflow_steps`: árbol con `parent_id` + `branch_key`, `position`, `step_type`, `config`. `branch_key` es **string, no booleano**: HubSpot ramifica por valor (etapa = A / B / C / resto), no solo sí/no. Un booleano acá obliga a rehacer la tabla después.
+- `workflow_enrollments`: `workflow_id`, `lead_id`, `status` (`active|completed|goal_met|unenrolled|failed`), `current_step_id`, `enrolled_at`, `finished_at`, `enroll_reason`. **Índice único `(workflow_id, lead_id)` cuando no hay re-inscripción** — la garantía en la base, no solo en el código.
+- `workflow_step_runs`: traza paso a paso con resultado y error. **Imprescindible**: hoy un fallo de automatización solo deja un `Log::warning` que nadie lee.
+- `workflow_pending_executions`: esperas pendientes con `run_at`, barridas por el scheduler.
 
 ### Pasos
 
-`send_whatsapp`, `create_task`, `add_note`, `add_tag`, `remove_tag`, `change_stage`, `assign_responsible`, `notify_user`, `webhook`, `wait`, `condition` (rama sí/no).
+Acciones: `send_whatsapp`, `create_task`, `add_note`, `add_tag`, `remove_tag`, `change_stage`, `assign_responsible`, `rotate_responsible` (round-robin — `Services\LeadAssignment\RoundRobin` ya existe), `set_field` (campo personalizado), `notify_user`, `webhook`.
+Control de flujo: `wait`, `wait_until`, `branch` (por valor, N salidas + «resto»), `goto` (con detección de ciclo), `end`.
+
+### Constructor visual
+
+Lienzo vertical con conectores y `+` entre pasos, **igual que el de `/pipelines/{id}/automations`** (que ya se rehizo así) y que el de `/automations` y `/flows` del wacrm. No inventar un tercer lenguaje visual. Encima:
+- Panel de inscripción arriba del todo: quién entra, si se re-inscribe, cuál es la meta.
+- **Conteo en vivo**: cuántos leads cumplen el filtro de inscripción *ahora mismo*, antes de activar. Es la única defensa real contra «activé y le escribió a 800 personas».
+- Cada rama muestra cuántos leads tomaron ese camino.
+
+### Analítica por workflow (reusa la capa de `@/Components/Charts`)
+
+Inscritos, activos, completados, **meta cumplida (conversión)**, y **caída por paso** — un embudo con el `FunnelSteps` que ya existe. Un workflow sin números es un workflow que nadie sabe si sirve.
+
+### Simulador
+
+Recorre el árbol **que está en pantalla** contra un lead real elegido: no manda WhatsApp, no crea tareas, no etiqueta. Mismo criterio que el simulador del Digital Pipeline que ya está hecho. **Activar sin simular queda prohibido por la UI.**
 
 ### ⚠️ Guardarraíles — la parte que hay que hacer *primero*, no al final
 
-Un motor con `change_stage` + disparador `stage_changed` **se llama a sí mismo**. Con `send_whatsapp` adentro, eso es una tormenta de mensajes a clientes reales y una factura de Meta. Antes de habilitar el primer workflow:
+Dos formas de que esto le escriba de más a clientes reales, y la inscripción dinámica agrega la segunda:
+
+- **El bucle**: `change_stage` + disparador `stage_changed` **se llama a sí mismo**.
+- **El barredor**: un filtro de inscripción sin re-inscripción bien configurada reinscribe al mismo lead en cada pasada. Con `send_whatsapp` adentro, es el mismo mensaje cada 10 minutos.
+
+Antes de habilitar el primer workflow:
 
 1. **Tope de pasos por corrida** (p. ej. 50) → la corrida se marca `failed` con motivo.
-2. **Detección de reentrada**: un lead no puede entrar dos veces al mismo workflow en N minutos.
-3. **Tope de corridas por lead y por día**.
-4. **Idempotencia** de los pasos que mandan mensajes (clave por `run_id` + `step_id`).
-5. **Modo borrador obligatorio**: un workflow nace inactivo y **no se puede activar sin pasar por el simulador**.
-6. **Kill switch por cuenta**: un botón que para todo, sin deploy.
+2. **Una inscripción por lead salvo re-inscripción explícita**, garantizado por **índice único en la base**, no solo por código.
+3. **Enfriamiento obligatorio** si se habilita re-inscripción: sin un mínimo, no se puede activar.
+4. **Tope de acciones salientes por lead y por día**, transversal a todos los workflows.
+5. **Idempotencia** de los pasos que mandan mensajes (clave por `enrollment_id` + `step_id`).
+6. **Tope de inscripciones por pasada del barredor**: si un filtro nuevo matchea 4.000 leads, la primera pasada no puede dispararlos todos. Se inscribe por lotes y se avisa en pantalla.
+7. **Modo borrador obligatorio**: un workflow nace inactivo y **no se puede activar sin pasar por el simulador** ni sin ver el conteo de a cuántos alcanzaría.
+8. **Kill switch por cuenta**: un botón que para todo, sin deploy.
+9. **Respeto de la ventana de servicio de WhatsApp y del costo**: `ServiceWindow` y `MessagingCost` ya existen; un paso `send_whatsapp` fuera de ventana debe decidir explícitamente (no mandar / crear tarea), nunca mandar callado.
 
 ### Migración de lo existente
 
 `stage_automations` sigue vivo y en uso. Plan: convertirlas a workflows de un solo paso con disparador `stage_changed` mediante migración de datos, y que la pantalla actual de Digital Pipeline lea del motor nuevo. **La pantalla vieja no se rompe.** Test que compara el comportamiento antes/después con las mismas automatizaciones.
 
-**Criterio de aceptación:** el simulador recorre el árbol en pantalla sin escribir nada (mismo criterio que el del wacrm); los guardarraíles tienen test propio **antes** de que el motor mande el primer WhatsApp. Tamaño: **XL** — es la tarea más grande y la más peligrosa; va sola en su ronda.
+**Criterio de aceptación:** el simulador recorre el árbol en pantalla sin escribir nada; los guardarraíles tienen test propio **antes** de que el motor mande el primer WhatsApp; un lead que cumple la meta sale del workflow y no recibe el resto de la secuencia. Tamaño: **XL** — la más grande y la más peligrosa; va sola en su ronda.
+
+> **Dependencia dura:** la inscripción por criterios es `LeadFilter` (T0, ya hecho) evaluado periódicamente, y los segmentos de T4 son la UI natural para definirlo. **T3 después de T4**, no antes: construir el motor con un lenguaje de filtros propio y migrarlo después es hacer el trabajo dos veces.
 
 ---
 

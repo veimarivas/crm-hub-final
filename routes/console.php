@@ -37,6 +37,25 @@ Artisan::command('tasks:notify-overdue', function () {
 
 Schedule::command('tasks:notify-overdue')->everyTenMinutes();
 
+// Copiloto: repuntúa los leads abiertos de todas las cuentas.
+//
+// De noche y no cada hora porque las señales que mueven el score se miden en
+// días (recencia, estancamiento), no en minutos: recalcular seguido gastaría
+// base para mover el número en decimales. Lo urgente ya se repuntúa solo
+// cuando entra un mensaje o cambia la etapa (ScoreLeads::forLead).
+Artisan::command('copilot:score-leads', function () {
+    $total = 0;
+
+    foreach (\App\Models\Account::pluck('id') as $accountId) {
+        $result = app(\App\Services\Copilot\ScoreLeads::class)->forAccount($accountId);
+        $total += $result['scored'];
+    }
+
+    $this->info("Leads puntuados: {$total}");
+})->purpose('Recalcula el score del copiloto para los leads abiertos');
+
+Schedule::command('copilot:score-leads')->dailyAt('03:30');
+
 // El envío de recordatorios por WhatsApp `komo:remind-daily-tasks` se dejó
 // en el código pero NO se agenda: Meta cobra por conversaciones iniciadas
 // desde el negocio fuera de la ventana de 24h (~$0.01-0.03 USD por agente

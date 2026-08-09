@@ -44,6 +44,8 @@ class Lead extends Model
             'ai_pending' => 'boolean',
             'ai_paused_until' => 'datetime',
             'first_touch_at' => 'datetime',
+            'score_factors' => 'array',
+            'scored_at' => 'datetime',
         ];
     }
 
