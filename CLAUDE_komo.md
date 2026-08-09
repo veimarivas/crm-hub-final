@@ -2,6 +2,36 @@
 
 CRM de ventas centrado en **leads** inspirado en Kommo (kommo.com), hermano del **wacrm** (`C:\xampp_82_12\htdocs\laravel_crm_whatsapp`, CRM de WhatsApp). Son **dos proyectos separados integrados por API**: este maneja leads/tareas/pipeline; el wacrm es el motor de WhatsApp.
 
+## T6 — Correo corporativo de Google Workspace (2026-08-08)
+
+Dos decisiones del usuario, ambas tomadas contra mi recomendación de «lo reversible» y ambas correctas para el caso: la institución tiene correos corporativos en Google, así que **OAuth con Workspace** (no contraseña de aplicación) y **el correo es un `message_in`/`message_out` más** (no un tipo de evento propio).
+
+### Gmail API sobre HTTP, no IMAP
+El servidor **no tiene `ext-imap`** (solo curl/openssl) — y con Workspace + OAuth la API es mejor igual: `history.list` da **sincronización incremental** («qué cambió desde este punto») en vez de recorrer la casilla entera en cada pasada. Sin dependencias nuevas de Composer: son llamadas HTTP con el `Http` facade.
+
+### La consecuencia de tratar el correo como mensaje
+Los eventos son `message_in`/`message_out` con `payload.channel = 'email'`, y el lead nace con `source = 'email'`.
+
+- **A favor:** supervisión, copiloto y segmentos funcionan sobre el correo **sin tocar una línea**. «Esperando respuesta hace 3 h» pasa a ser cierto también para un mail.
+- **El costo, dicho explícito:** `ResponseMetrics` —el **GEMELO** del wacrm— empieza a medir también el correo. **No se modificó ni una línea de esa clase**: cambia el dato que entra, no la definición, así que el gemelo sigue idéntico y sus tests intactos. Pero los tiempos de respuesta a partir de ahora **no son comparables con los de antes**, porque el correo se contesta en horas y el WhatsApp en minutos. `payload.channel` permite separarlos el día que haga falta.
+
+### Decisiones que evitan fallas silenciosas
+- **`access_type=offline` + `prompt=consent`**: sin ambos, Google no manda refresh token la segunda vez que se autoriza la misma casilla y la sincronización muere en una hora.
+- **Al renovar, Google NO reenvía el refresh token**: solo se pisa el de acceso. Sobrescribirlo con `null` desconectaría la casilla en la primera renovación. Hay test.
+- **La primera pasada no importa correo viejo**, solo fija el punto de partida: traer meses de historia llenaría el timeline de golpe.
+- **Un `historyId` caducado se rearma** en vez de quedar en un bucle de error silencioso.
+- **Idempotencia por `gmail_id`**: una pasada que falla a la mitad y se reintenta no duplica el hilo.
+- **Los tokens van cifrados en reposo** (cast `encrypted`): un refresh token de Workspace da acceso al correo de la institución.
+- **Un saliente escrito desde Gmail se graba con `sender: 'agent'`**: sin eso el sistema lo trataría como respuesta de la IA y supervisión diría que nadie atendió.
+- **Solo el dueño administra su casilla.** Un admin ve que existe, pero sincronizarla o desconectarla sería operar correspondencia ajena.
+- El cuerpo se extrae recorriendo el árbol MIME **en profundidad**: quedarse en el primer nivel devuelve vacío justo en los correos con adjuntos.
+
+**Falta para cerrar T6:** responder por correo **desde la ficha del lead** (`GmailClient::send()` ya está y maneja `In-Reply-To`/`References` para no partir el hilo, pero no hay UI ni endpoint), y adjuntos.
+
+**Configuración:** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GOOGLE_WORKSPACE_DOMAIN` en `.env`; scopes `gmail.modify` + `gmail.send` + `openid email` en la consola de Google Cloud.
+
+Tests: `EmailSyncTest` (14). Suite **382/382 (1149 aserciones)**.
+
 ## T7 — Calendario de tareas: arrastrar, filtrar y zona horaria (2026-08-08)
 
 Primera de la ronda `7.b` de `mejoras2.md`. **El calendario mensual ya existía** (`/tasks?view=calendar`); lo que faltaba era poder *usarlo*: reprogramar, filtrar y que los días fueran los correctos.

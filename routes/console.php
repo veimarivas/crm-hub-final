@@ -94,6 +94,23 @@ Artisan::command('workflows:tick', function () {
 
 Schedule::command('workflows:tick')->everyMinute()->withoutOverlapping();
 
+// Correo corporativo: trae lo nuevo de cada casilla conectada.
+//
+// Cada 5 min. La sincronización es incremental (`historyId`), así que una
+// pasada sin correo nuevo cuesta una sola llamada a Gmail; el límite real es
+// cuánto se tolera que tarde en aparecer un mail en el CRM.
+Artisan::command('email:sync', function () {
+    $mailboxes = \App\Models\EmailAccount::where('is_active', true)->pluck('id');
+
+    foreach ($mailboxes as $id) {
+        \App\Jobs\SyncEmailAccountJob::dispatch($id);
+    }
+
+    $this->info("Casillas encoladas: {$mailboxes->count()}");
+})->purpose('Sincroniza las casillas de correo conectadas');
+
+Schedule::command('email:sync')->everyFiveMinutes()->withoutOverlapping();
+
 // El envío de recordatorios por WhatsApp `komo:remind-daily-tasks` se dejó
 // en el código pero NO se agenda: Meta cobra por conversaciones iniciadas
 // desde el negocio fuera de la ventana de 24h (~$0.01-0.03 USD por agente

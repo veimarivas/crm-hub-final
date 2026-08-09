@@ -187,7 +187,7 @@ class SavedSegmentController extends Controller
             'source' => collect([
                 'whatsapp' => 'WhatsApp', 'booking' => 'Formulario de reserva',
                 'lead_ad' => 'Meta Lead Ad', 'web_form' => 'Formulario web',
-                'manual' => 'Manual', 'api' => 'API externa',
+                'manual' => 'Manual', 'api' => 'API externa', 'email' => 'Correo',
             ])->map(fn ($label, $value) => ['value' => $value, 'label' => $label])->values(),
             'band' => [
                 ['value' => 'caliente', 'label' => 'Caliente'],

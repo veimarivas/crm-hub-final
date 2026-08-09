@@ -163,6 +163,7 @@ class ReportController extends Controller
             'web_form' => 'Formulario web',
             'manual' => 'Manual',
             'api' => 'API externa',
+            'email' => 'Correo',
         ];
 
         $bySource = collect(array_keys($sourceLabels))->push(null)->map(function ($source) use ($accountId, $leadScope, $sourceLabels) {

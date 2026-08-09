@@ -152,6 +152,14 @@ Route::middleware('auth')->group(function () {
         Route::post('/team-messages', [\App\Http\Controllers\TeamMessageController::class, 'store'])->name('team-messages.store');
     });
 
+    // Correo corporativo (Google Workspace por OAuth). No es admin-only: cada
+    // quien conecta SU casilla, y el controlador impide administrar la ajena.
+    Route::get('/settings/email', [\App\Http\Controllers\EmailAccountController::class, 'index'])->name('settings.email');
+    Route::get('/settings/email/connect', [\App\Http\Controllers\EmailAccountController::class, 'connect'])->name('settings.email.connect');
+    Route::get('/settings/email/callback', [\App\Http\Controllers\EmailAccountController::class, 'callback'])->name('settings.email.callback');
+    Route::post('/settings/email/{emailAccount}/sync', [\App\Http\Controllers\EmailAccountController::class, 'sync'])->name('settings.email.sync');
+    Route::delete('/settings/email/{emailAccount}', [\App\Http\Controllers\EmailAccountController::class, 'destroy'])->name('settings.email.destroy');
+
     // Workflows con inscripción dinámica (admin-only: configurar algo que le
     // escribe a clientes no es trabajo diario del asesor).
     Route::middleware('admin.only')->group(function () {
