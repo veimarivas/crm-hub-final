@@ -2,6 +2,27 @@
 
 CRM de ventas centrado en **leads** inspirado en Kommo (kommo.com), hermano del **wacrm** (`C:\xampp_82_12\htdocs\laravel_crm_whatsapp`, CRM de WhatsApp). Son **dos proyectos separados integrados por API**: este maneja leads/tareas/pipeline; el wacrm es el motor de WhatsApp.
 
+## T2 — Dashboard por widgets (2026-08-08)
+
+Tercera tarea de `mejoras2.md`. **No es solo personalización.** Hasta acá `DashboardController` calculaba **todo para todos en cada carga** —ocho agregados más el recorrido de los eventos de mensaje de la cuenta entera— aunque el usuario mirara dos tarjetas. Ahora el catálogo vive en `WidgetRegistry`, cada widget trae su `resolver`, y el controlador **solo ejecuta el de los visibles**: personalizar es, de paso, dejar de calcular lo que nadie mira.
+
+- **`Services\Dashboard\WidgetRegistry`** — 8 widgets: `kpis`, `urgent_leads`, `copilot_priorities`, `forgotten_leads`, `recent_leads`, `my_tasks`, `pipeline_funnel`, `team_ranking` (admin). Cada uno con label, descripción, tamaño y `adminOnly`.
+- **`WidgetContext`** — los scopes de rol viajan como closures ya construidos, no como un booleano que cada resolver interpreta: si cada widget decidiera por su cuenta cómo recortar por responsable, tarde o temprano uno se olvidaría y un agente vería números del equipo.
+- **`dashboard_widgets`** — layout **por usuario**, no por cuenta: si un admin acomoda su tablero no le mueve el de nadie. Sin filas = default por rol, así que un widget nuevo en el registro aparece solo para quien nunca tocó su tablero, **sin migración de datos**.
+- **`PATCH /dashboard/layout`** reemplaza el layout completo (el cliente manda el estado final; reconciliar altas/bajas/reordenes campo por campo sería más código para el mismo resultado). **`DELETE`** restaura: borrar las filas alcanza. Un tablero que el usuario rompió y no sabe restaurar es peor que uno fijo.
+
+**El test que da sentido a la tarea** es `test_no_se_calcula_el_widget_apagado`: cuenta las queries con `DB::listen` y verifica que la agregación del ranking de equipo no se ejecute si el widget está apagado. Sin ese test, cualquiera podría «simplificar» resolviendo todo de nuevo y nadie lo notaría.
+
+**Cortes de rol, los dos en el servidor:** `layoutFor()` filtra los `adminOnly` (aunque quedara una fila vieja de cuando el usuario era admin) y `saveLayout()` los rechaza al guardar — sin eso, un agente se activaba el widget del equipo mandando el key a mano. `resolve()` además lanza si el rol no alcanza, por si alguien llama al resolver directo.
+
+**Frontend:** dos modos separados —**ver** y **acomodar**— porque dejar los controles de edición siempre visibles llena de ruido la pantalla que más se mira. `@dnd-kit` (`core` + `sortable` + `utilities`, instalado con `--legacy-peer-deps`), grilla de 6 columnas con tamaños `sm|md|lg|full`. Un widget recién agregado muestra su silueta y se llena al guardar: **su payload no existe en el cliente porque el servidor no lo calculó**, que es exactamente el punto de la tarea.
+
+**Cambio de forma de props (rompe lo que dependía del dashboard):** lo que vivía suelto en la raíz (`stats`, `deltas`, `forgottenLeads`, `urgentLeads`, `recentLeads`, `myTasks`) ahora llega dentro de `widgets.<key>`. `DashboardExecutiveTest` se actualizó a la nueva forma; **las definiciones de cada métrica no cambiaron**, solo dónde viaja el dato.
+
+Widget nuevo que estrena el copiloto: **`copilot_priorities`** cruza puntaje alto **con** acción pendiente. Un ranking de score a secas es una tabla de honor —los primeros puestos son casi siempre los mismos y no piden nada—; lo accionable es el cruce.
+
+Tests: `DashboardWidgetsTest` (11). Suite **284/284 (929 aserciones)**.
+
 ## T1.a/b — Copiloto: motor de señales y score explicable (2026-08-08)
 
 Segunda tarea de `mejoras2.md`. Backend del scoring; la capa prescriptiva y la UI van aparte.

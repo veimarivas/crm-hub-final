@@ -35,6 +35,12 @@ Route::get('/track.js', [\App\Http\Controllers\TrackController::class, 'snippet'
 Route::get('/dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])
     ->middleware(['auth', 'verified'])->name('dashboard');
 
+// Layout del tablero: por usuario, no por cuenta.
+Route::patch('/dashboard/layout', [\App\Http\Controllers\DashboardController::class, 'saveLayout'])
+    ->middleware(['auth', 'verified'])->name('dashboard.layout');
+Route::delete('/dashboard/layout', [\App\Http\Controllers\DashboardController::class, 'resetLayout'])
+    ->middleware(['auth', 'verified'])->name('dashboard.layout.reset');
+
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

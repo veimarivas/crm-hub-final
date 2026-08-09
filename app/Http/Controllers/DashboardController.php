@@ -2,217 +2,109 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Lead;
-use App\Models\LeadEvent;
-use App\Models\Task;
-use App\Models\User;
-use App\Services\WhatsApp\ServiceWindow;
+use App\Models\DashboardWidget;
+use App\Services\Dashboard\WidgetContext;
+use App\Services\Dashboard\WidgetRegistry;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
+/**
+ * Dashboard por widgets (T2 de mejoras2.md).
+ *
+ * Hasta esta tarea el controlador calculaba **todo para todos en cada carga**,
+ * aunque el usuario mirara dos tarjetas. Ahora el catálogo vive en
+ * `WidgetRegistry` y acá solo se resuelve **lo que el usuario tiene visible**:
+ * personalizar es, de paso, dejar de calcular lo que nadie mira. Hay un test
+ * que lo verifica contando queries.
+ */
 class DashboardController extends Controller
 {
-    // Mismo umbral que InboxController: >30 min sin respuesta = urgente
+    /** Mismo umbral que InboxController: >30 min sin respuesta = urgente. */
     private const SLA_MINUTES = 30;
 
-    public function index(Request $request): Response
+    public function index(Request $request, WidgetRegistry $registry): Response
     {
         $user = $request->user();
-        $accountId = $user->account_id;
-        $isAdmin = $user->hasRoleAtLeast(User::ROLE_ADMIN);
+        $context = WidgetContext::for($user, self::SLA_MINUTES);
 
-        // Scope Lead: admin ve todo, agent solo lo asignado.
-        $leadScope = fn ($q) => $isAdmin ? $q : $q->where('responsible_user_id', $user->id);
-        $taskScope = fn ($q) => $isAdmin ? $q : $q->where('assigned_to', $user->id);
+        $layout = $registry->layoutFor($user, $context->isAdmin);
 
-        // Leads urgentes: ultimo evento es message_in hace > SLA_MINUTES
-        $urgent = $this->computeUrgentLeads($accountId, $user, $isAdmin);
-
-        // Leads abiertos sin tarea pendiente: la regla Kommo de "lead olvidado".
-        $withoutTask = $leadScope(Lead::forAccount($accountId)->where('status', 'open')
-            ->whereDoesntHave('tasks', fn ($q) => $q->whereNull('completed_at')));
+        // El payload solo trae los visibles. Los ocultos viajan en el layout
+        // (para poder reactivarlos desde el panel) pero sin datos: resolver un
+        // widget apagado es exactamente lo que esta tarea vino a eliminar.
+        $data = collect($layout)
+            ->filter(fn ($w) => $w['is_visible'])
+            ->mapWithKeys(fn ($w) => [$w['widget_key'] => $registry->resolve($w['widget_key'], $context)])
+            ->all();
 
         return Inertia::render('Dashboard', [
-            'stats' => [
-                'openLeads' => $leadScope(Lead::forAccount($accountId)->where('status', 'open'))->count(),
-                'openValue' => (float) $leadScope(Lead::forAccount($accountId)->where('status', 'open'))->sum('value'),
-                'wonThisMonth' => $leadScope(Lead::forAccount($accountId)->where('status', 'won')
-                    ->where('closed_at', '>=', now()->startOfMonth()))->count(),
-                'wonValueThisMonth' => (float) $leadScope(Lead::forAccount($accountId)->where('status', 'won')
-                    ->where('closed_at', '>=', now()->startOfMonth()))->sum('value'),
-                'overdueTasks' => $taskScope(Task::forAccount($accountId)->overdue())->count(),
-                'tasksToday' => $taskScope(Task::forAccount($accountId)->pending()
-                    ->whereBetween('due_at', [now()->startOfDay(), now()->endOfDay()]))->count(),
-                // Regla Kommo: leads abiertos SIN tarea pendiente = leads olvidados.
-                'leadsWithoutTask' => (clone $withoutTask)->count(),
-                'urgentLeads' => $urgent['count'],
-            ],
-            'deltas' => $this->deltas($accountId, $leadScope, $taskScope),
-            // Los 5 peores olvidados: los que llevan más tiempo abiertos sin
-            // una sola tarea agendada. Un número no se acciona; una lista sí.
-            'forgottenLeads' => (clone $withoutTask)
-                ->with(['contact:id,name', 'stage:id,name,color'])
-                ->orderBy('created_at')
-                ->limit(5)
-                ->get(['id', 'title', 'value', 'currency', 'contact_id', 'stage_id', 'created_at'])
-                ->map(fn (Lead $lead) => [
-                    'id' => $lead->id,
-                    'title' => $lead->title,
-                    'contact' => $lead->contact?->name,
-                    'value' => (float) $lead->value,
-                    'currency' => $lead->currency,
-                    'stage' => $lead->stage ? ['name' => $lead->stage->name, 'color' => $lead->stage->color] : null,
-                    'days_open' => (int) $lead->created_at->diffInDays(now(), true),
-                ]),
-            'urgentLeads' => $urgent['items'],
-            'slaMinutes' => self::SLA_MINUTES,
-            // `source_ref` viaja porque la ventana de servicio lo usa como
-            // fallback para los leads que vinieron de un anuncio.
-            'recentLeads' => $this->withServiceWindow(
-                $leadScope(Lead::forAccount($accountId)
-                    ->with(['contact:id,name,phone', 'stage:id,name,color'])
-                    ->latest())
-                    ->limit(6)
-                    ->get(['id', 'title', 'value', 'currency', 'status', 'contact_id', 'stage_id', 'responsible_user_id', 'source_ref', 'created_at'])
-            ),
-            'myTasks' => Task::forAccount($accountId)
-                ->pending()
-                ->where('assigned_to', $user->id)
-                ->with('lead:id,title')
-                ->orderBy('due_at')
-                ->limit(6)
-                ->get(),
-            'currency' => $user->account->default_currency,
+            'layout' => $layout,
+            'widgets' => $data,
+            'catalog' => $registry->catalogFor($context->isAdmin),
+            'currency' => $context->currency,
+            'isAdmin' => $context->isAdmin,
         ]);
     }
 
     /**
-     * Variación de cada KPI contra el periodo anterior comparable.
+     * Guarda el layout del usuario (orden, tamaño y visibilidad).
      *
-     * Cada métrica se compara con su equivalente honesto, no con "hace 30
-     * días" a secas:
-     *  - abiertos: los que estaban abiertos hace un mes (creados antes y aún
-     *    sin cerrar en esa fecha), reconstruido desde `closed_at`;
-     *  - ganados del mes: el mismo tramo del mes pasado (mes a la fecha), para
-     *    no comparar 7 días contra 30;
-     *  - tareas de hoy: las que vencían ayer.
-     *
-     * `leadsWithoutTask` no lleva delta: no hay histórico del que sacar cuántos
-     * estaban sin tarea ayer, y un número inventado se leería como real.
-     *
-     * @return array<string, float|null>
+     * Reemplaza el layout completo en vez de aplicar diferencias: el cliente
+     * manda el estado final de la grilla, y reconciliar altas/bajas/reordenes
+     * campo por campo sería más código para el mismo resultado.
      */
-    private function deltas(string $accountId, callable $leadScope, callable $taskScope): array
+    public function saveLayout(Request $request, WidgetRegistry $registry): RedirectResponse
     {
-        $monthAgo = now()->subMonth();
+        $allowed = array_keys($registry->definitions());
 
-        $openThen = $leadScope(Lead::forAccount($accountId)
-            ->where('created_at', '<=', $monthAgo)
-            ->where(fn ($q) => $q->whereNull('closed_at')->orWhere('closed_at', '>', $monthAgo)))
-            ->count();
+        $validated = $request->validate([
+            'widgets' => 'required|array|max:50',
+            'widgets.*.widget_key' => ['required', 'string', Rule::in($allowed)],
+            'widgets.*.size' => ['required', 'string', Rule::in(WidgetRegistry::SIZES)],
+            'widgets.*.is_visible' => 'required|boolean',
+        ]);
 
-        $wonPrevMonth = $leadScope(Lead::forAccount($accountId)->where('status', 'won')
-            ->whereBetween('closed_at', [$monthAgo->copy()->startOfMonth(), $monthAgo]))
-            ->count();
+        $user = $request->user();
+        $isAdmin = $user->hasRoleAtLeast(\App\Models\User::ROLE_ADMIN);
+        $definitions = $registry->definitions();
 
-        $tasksYesterday = $taskScope(Task::forAccount($accountId)
-            ->whereBetween('due_at', [now()->subDay()->startOfDay(), now()->subDay()->endOfDay()]))
-            ->count();
+        // El corte de rol también acá: sin esto, un agente podría activarse el
+        // widget del equipo mandando el key a mano.
+        $rows = collect($validated['widgets'])
+            ->reject(fn ($w) => $definitions[$w['widget_key']]['adminOnly'] && ! $isAdmin)
+            ->unique('widget_key')
+            ->values();
 
-        return [
-            'openLeads' => $this->pctChange(
-                $leadScope(Lead::forAccount($accountId)->where('status', 'open'))->count(), $openThen),
-            'wonThisMonth' => $this->pctChange(
-                $leadScope(Lead::forAccount($accountId)->where('status', 'won')
-                    ->where('closed_at', '>=', now()->startOfMonth()))->count(), $wonPrevMonth),
-            'tasksToday' => $this->pctChange(
-                $taskScope(Task::forAccount($accountId)->pending()
-                    ->whereBetween('due_at', [now()->startOfDay(), now()->endOfDay()]))->count(), $tasksYesterday),
-        ];
-    }
+        DB::transaction(function () use ($rows, $user) {
+            DashboardWidget::where('user_id', $user->id)->delete();
 
-    /** Variación porcentual; null cuando no hay base con la que comparar. */
-    private function pctChange(int $current, int $previous): ?float
-    {
-        return $previous === 0 ? null : round(($current - $previous) / $previous * 100, 1);
+            $rows->each(fn ($w, $i) => DashboardWidget::create([
+                'account_id' => $user->account_id,
+                'user_id' => $user->id,
+                'widget_key' => $w['widget_key'],
+                'position' => $i,
+                'size' => $w['size'],
+                'is_visible' => $w['is_visible'],
+            ]));
+        });
+
+        return back()->with('success', 'Tablero guardado.');
     }
 
     /**
-     * Calcula los leads urgentes: abiertos, con chat de WhatsApp, cuyo ultimo evento
-     * es un mensaje entrante hace mas de SLA_MINUTES minutos.
-     */
-    private function computeUrgentLeads(string $accountId, User $user, bool $isAdmin): array
-    {
-        $leadsQ = Lead::forAccount($accountId)
-            ->where('status', 'open')
-            ->whereNotNull('wacrm_conversation_id');
-
-        if (! $isAdmin) {
-            $leadsQ->where('responsible_user_id', $user->id);
-        }
-
-        $leadIds = $leadsQ->pluck('id');
-        if ($leadIds->isEmpty()) {
-            return ['count' => 0, 'items' => []];
-        }
-
-        // Ultimo evento de mensaje por lead
-        $lastEvents = LeadEvent::whereIn('lead_id', $leadIds)
-            ->whereIn('event_type', ['message_in', 'message_out'])
-            ->select('lead_id', 'event_type', 'created_at')
-            ->orderByDesc('created_at')
-            ->get()
-            ->groupBy('lead_id')
-            ->map(fn ($g) => $g->first());
-
-        $threshold = now()->subMinutes(self::SLA_MINUTES);
-        $urgentIds = $lastEvents
-            ->filter(fn ($e) => $e->event_type === 'message_in' && $e->created_at < $threshold)
-            ->keys();
-
-        if ($urgentIds->isEmpty()) {
-            return ['count' => 0, 'items' => []];
-        }
-
-        $now = now();
-        $items = Lead::whereIn('id', $urgentIds)
-            ->with(['contact:id,name,phone', 'stage:id,name,color'])
-            ->get(['id', 'title', 'contact_id', 'stage_id', 'responsible_user_id'])
-            ->map(function ($l) use ($lastEvents, $now) {
-                $lastAt = $lastEvents[$l->id]->created_at;
-                $mins = (int) $now->diffInMinutes($lastAt, true);
-
-                return [
-                    'id' => $l->id,
-                    'title' => $l->title,
-                    'contact' => $l->contact ? ['name' => $l->contact->name, 'phone' => $l->contact->phone] : null,
-                    'stage' => $l->stage ? ['name' => $l->stage->name, 'color' => $l->stage->color] : null,
-                    'waiting_minutes' => $mins,
-                ];
-            })
-            ->sortByDesc('waiting_minutes')
-            ->values()
-            ->take(5); // top 5 mas urgentes en el widget
-
-        return ['count' => $urgentIds->count(), 'items' => $items->all()];
-    }
-
-    /**
-     * Adjunta la ventana de servicio de WhatsApp a cada lead del listado:
-     * en el dashboard es lo que dice a quién todavía se le puede escribir
-     * sin costo.
+     * Vuelve al layout por defecto del rol.
      *
-     * @param  Collection<int, Lead>  $leads
-     * @return Collection<int, Lead>
+     * Borrar las filas alcanza: sin filas, `layoutFor()` devuelve el default.
+     * Un tablero que el usuario rompió y no sabe restaurar es peor que uno fijo.
      */
-    private function withServiceWindow($leads)
+    public function resetLayout(Request $request): RedirectResponse
     {
-        $windows = app(ServiceWindow::class)->forLeads($leads);
+        DashboardWidget::where('user_id', $request->user()->id)->delete();
 
-        return $leads->each(
-            fn (Lead $lead) => $lead->setAttribute('service_window', $windows[$lead->id] ?? null)
-        );
+        return back()->with('success', 'Tablero restaurado.');
     }
 }

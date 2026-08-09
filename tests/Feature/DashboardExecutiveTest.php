@@ -63,11 +63,25 @@ class DashboardExecutiveTest extends TestCase
         return $lead->refresh();
     }
 
+    /**
+     * Props del dashboard.
+     *
+     * Desde T2 el tablero es por widgets: lo que antes vivía suelto en la raíz
+     * (`stats`, `deltas`, `forgottenLeads`) ahora llega dentro del payload de
+     * su widget. Las definiciones de cada métrica no cambiaron —los tests de
+     * abajo son los mismos— solo dónde viaja el dato.
+     */
     private function props(): array
     {
-        return $this->actingAs($this->owner)->get('/dashboard')
+        $widgets = $this->actingAs($this->owner)->get('/dashboard')
             ->assertOk()
-            ->viewData('page')['props'];
+            ->viewData('page')['props']['widgets'];
+
+        return [
+            'stats' => $widgets['kpis']['stats'],
+            'deltas' => $widgets['kpis']['deltas'],
+            'forgottenLeads' => $widgets['forgotten_leads']['items'],
+        ];
     }
 
     public function test_los_ganados_del_mes_se_comparan_con_el_mismo_tramo_del_mes_pasado(): void
