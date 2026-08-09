@@ -189,6 +189,19 @@ const navigation = [
         // Visible para todos: el agente difunde a SU cartera (el controlador
         // lo limita a sus leads asignados). Antes tenía que pedirle al admin
         // cada mensaje masivo a sus propios contactos.
+        // Las audiencias viven al lado de los envíos porque es donde se usan:
+        // se arma la lista y se difunde. Visible para todos — el agente arma
+        // audiencias de SU cartera (el servidor lo recorta).
+        name: 'Listas',
+        pattern: 'segments.*',
+        routeName: 'segments.index',
+        icon: (
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+            </svg>
+        ),
+    },
+    {
         name: 'Broadcasts',
         pattern: 'broadcasts*',
         routeName: 'broadcasts.index',

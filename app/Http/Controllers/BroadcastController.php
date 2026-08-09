@@ -10,7 +10,7 @@ use App\Models\Lead;
 use App\Models\SavedSegment;
 use App\Models\Tag;
 use App\Models\User;
-use App\Services\Leads\LeadFilter;
+use App\Services\Leads\SegmentQuery;
 use App\Services\WhatsApp\MessagingCost;
 use App\Services\WhatsApp\ServiceWindow;
 use Illuminate\Http\RedirectResponse;
@@ -253,9 +253,12 @@ class BroadcastController extends Controller
     {
         $user = $request->user();
 
-        // El corte del agente y la traducción de los filtros viven en
-        // `LeadFilter`, compartido con `/leads` y su CSV: una lista guardada
+        // El corte del agente y la traducción de los criterios viven en
+        // `SegmentQuery`, compartido con `/leads` y su CSV: una lista guardada
         // tiene que seleccionar exactamente los mismos leads acá que allá.
+        // Acepta tanto el formato plano viejo como el árbol de condiciones —
+        // `upgrade()` se encarga— así que las listas guardadas antes de T4
+        // siguen andando sin migrar la base.
         //
         // Va acá y no en la pantalla porque este método alimenta TANTO la vista
         // previa como el envío — filtrar solo en el front dejaría el `store`
@@ -265,8 +268,8 @@ class BroadcastController extends Controller
             ->with(['contact:id,name,phone_normalized', 'tags:id,name,color']);
 
         // `openOnly`: escribirle a un lead ya cerrado es un error caro, así que
-        // los cerrados quedan afuera salvo que los filtros lo pidan explícito.
-        $leads = LeadFilter::for($user)
+        // los cerrados quedan afuera salvo que la definición lo pida explícito.
+        $leads = SegmentQuery::for($user)
             ->apply($query, $filters, openOnly: true)
             ->get(['id', 'contact_id', 'responsible_user_id', 'title', 'source_ref', 'created_at']);
 

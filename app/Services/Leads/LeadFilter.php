@@ -8,7 +8,13 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use InvalidArgumentException;
 
 /**
- * Único lugar donde se traduce un conjunto de filtros a una consulta de leads.
+ * Adaptador de los filtros planos de la query string (`/leads?tag=…&source=…`)
+ * al formato de segmento que evalúa `SegmentQuery`.
+ *
+ * Desde T4 **no traduce a SQL por su cuenta**: normaliza, y delega. Mantener
+ * dos traductores es exactamente lo que hizo que una lista guardada
+ * seleccionara distinto en `/leads` que en un envío. Acá vive el contrato de
+ * la query string; en `SegmentQuery` vive el de las condiciones.
  *
  * Antes esta cadena estaba escrita tres veces —`LeadController@index`,
  * `LeadController@export` y `BroadcastController@recipientPhones`— y ya había
@@ -125,58 +131,6 @@ class LeadFilter
      */
     public function apply(Builder|Relation $query, array $filters, bool $openOnly = false): Builder|Relation
     {
-        $f = self::normalize($filters);
-        $isAdmin = $this->user->hasRoleAtLeast(User::ROLE_ADMIN);
-
-        // Corte de rol: el agente solo ve su cartera.
-        $query->when(! $isAdmin, fn ($q) => $q->where('responsible_user_id', $this->user->id));
-
-        // Elegir responsable es potestad del admin. Para un agente el filtro se
-        // descarta en vez de aplicarse: combinado con el corte de arriba
-        // devolvería una lista vacía, que se lee como «no hay leads» y no como
-        // «eso no es tuyo».
-        if ($isAdmin && isset($f['responsible'])) {
-            $query->when(
-                $f['responsible'] === 'none',
-                fn ($q) => $q->whereNull('responsible_user_id'),
-                fn ($q) => $q->where('responsible_user_id', $f['responsible']),
-            );
-        }
-
-        if (isset($f['source'])) {
-            $query->where('source', $f['source']);
-        }
-
-        if (isset($f['stage_id'])) {
-            $query->where('stage_id', $f['stage_id']);
-        }
-
-        if (isset($f['pipeline_id'])) {
-            $query->where('pipeline_id', $f['pipeline_id']);
-        }
-
-        if (isset($f['tags'])) {
-            $query->whereHas('tags', fn ($tq) => $tq->whereIn('tags.id', $f['tags']));
-        }
-
-        if (isset($f['no_task'])) {
-            $query->whereDoesntHave('tasks', fn ($t) => $t->whereNull('completed_at'));
-        }
-
-        if (isset($f['q'])) {
-            $term = $f['q'];
-            $query->where(fn ($qq) => $qq
-                ->where('title', 'like', "%{$term}%")
-                ->orWhereHas('contact', fn ($cq) => $cq
-                    ->where('name', 'like', "%{$term}%")
-                    ->orWhere('phone', 'like', "%{$term}%")
-                    ->orWhere('phone_normalized', 'like', "%{$term}%")));
-        }
-
-        if ($openOnly && ! ($f['include_closed'] ?? false)) {
-            $query->where('status', 'open');
-        }
-
-        return $query;
+        return SegmentQuery::for($this->user)->apply($query, self::normalize($filters), $openOnly);
     }
 }

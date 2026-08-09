@@ -57,8 +57,11 @@ Route::middleware('auth')->group(function () {
     Route::post('/leads', [\App\Http\Controllers\LeadController::class, 'store'])->name('leads.store');
     Route::post('/leads/bulk', [\App\Http\Controllers\LeadController::class, 'bulk'])->name('leads.bulk');
 
-    // Segments (listas guardadas de leads segmentados)
+    // Segments: audiencias definidas por una consulta, no por una lista fija.
+    Route::get('/segments', [\App\Http\Controllers\SavedSegmentController::class, 'index'])->name('segments.index');
     Route::post('/segments', [\App\Http\Controllers\SavedSegmentController::class, 'store'])->name('segments.store');
+    Route::post('/segments/count', [\App\Http\Controllers\SavedSegmentController::class, 'count'])->name('segments.count');
+    Route::patch('/segments/{savedSegment}', [\App\Http\Controllers\SavedSegmentController::class, 'update'])->name('segments.update');
     Route::delete('/segments/{savedSegment}', [\App\Http\Controllers\SavedSegmentController::class, 'destroy'])->name('segments.destroy');
     Route::get('/leads/{lead}', [\App\Http\Controllers\LeadController::class, 'show'])->name('leads.show');
     Route::patch('/leads/{lead}', [\App\Http\Controllers\LeadController::class, 'update'])->name('leads.update');

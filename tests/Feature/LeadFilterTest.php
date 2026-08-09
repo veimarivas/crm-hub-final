@@ -236,7 +236,14 @@ class LeadFilterTest extends TestCase
 
         $filters = \App\Models\SavedSegment::first()->filters;
 
-        $this->assertSame(['tags' => ['abc']], $filters);
+        // Desde T4 las listas se guardan como definición de segmento (v2): los
+        // vacíos siguen descartándose —que es lo que este test cuida— pero el
+        // criterio queda como condición y no como filtro plano.
+        $this->assertSame(2, $filters['version']);
+        $this->assertSame(
+            [['field' => 'tag_id', 'op' => 'in', 'value' => ['abc']]],
+            $filters['conditions'],
+        );
     }
 
     public function test_una_lista_guardada_con_clave_invalida_es_422(): void

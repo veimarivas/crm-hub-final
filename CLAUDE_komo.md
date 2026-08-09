@@ -2,6 +2,33 @@
 
 CRM de ventas centrado en **leads** inspirado en Kommo (kommo.com), hermano del **wacrm** (`C:\xampp_82_12\htdocs\laravel_crm_whatsapp`, CRM de WhatsApp). Son **dos proyectos separados integrados por API**: este maneja leads/tareas/pipeline; el wacrm es el motor de WhatsApp.
 
+## T4 — Segmentación dinámica (2026-08-08)
+
+Cuarta tarea de `mejoras2.md`. **Un segmento deja de ser una lista y pasa a ser una pregunta**: se guarda la condición y se contesta cada vez que se usa, así que un lead que ayer no calificaba y hoy sí, entra solo. Lo que sigue congelándose es el envío — `broadcast_recipients` es una foto del momento, porque quién recibió qué es un hecho histórico, no una consulta.
+
+- **`Services\Leads\SegmentQuery`** — árbol de condiciones con grupos Y/O (hasta 4 niveles), 19 criterios en 5 familias: atributos, marketing, comportamiento, copiloto y tiempo.
+- **`LeadFilter` ya no traduce a SQL**: normaliza la query string, la sube a árbol y delega. **Hay un solo evaluador** — mantener dos es exactamente lo que causó el bug de T0.
+- **`GET /segments`** (constructor visual con conteo en vivo), **`POST /segments/count`**, `PATCH` y `DELETE`. Entrada nueva **«Listas»** en el sidebar, junto a Broadcasts.
+
+### Compatibilidad hacia atrás, que era el riesgo real
+El formato viejo (JSON plano de `LeadFilter`) está en la base de producción. `SegmentQuery::upgrade()` lo sube al vuelo **sin migrar la columna**: migrar habría dejado sin listas a quien no corriera la migración de datos. Dos tests lo fijan, incluido que `no_task: 1` siga significando `has_pending_task = false` — invertir eso en silencio cambiaría la audiencia de todas las listas viejas.
+
+### Decisiones que cambian resultados
+- **`last_inbound older_than` incluye a los que nunca escribieron.** «Hace más de 30 días que no sé nada de este lead» es verdad también cuando nunca dijo nada, y excluirlos dejaría afuera justo a los más abandonados.
+- **`inbound_count lte 0`** se pregunta al revés (`whereDoesntHave`): `has(..., '<=', 0)` **no matchea** a los que no tienen la relación, así que la forma directa devolvería vacío.
+- **`service_window_open` NO es un criterio, a propósito.** La ventana se calcula en PHP desde eventos y no es expresable en SQL; filtrar por ella obligaría a traer todo y descartar en memoria, rompiendo el modelo de «un segmento es una consulta» y la paginación. La pantalla de envío ya muestra quién está dentro y fuera, y el costo.
+- **El conteo en vivo distingue `reachable`** (abierto + con teléfono) de `total`: evita la sorpresa de un segmento de 300 que termina alcanzando a 40.
+- **Compartir da lectura, no control.** Solo el creador edita o borra: si cualquiera reescribiera una lista compartida, el resto mandaría envíos a una audiencia que cambió sin avisar.
+
+### Trampas encontradas
+- **⚠️ `PHPUnit\Framework\Assert::matches()` existe y es `final`.** Un helper de test llamado `matches()` revienta con un fatal *antes* de correr un solo test, con un mensaje que no menciona tu archivo como culpable.
+- **⚠️ No reescribir fuentes con `Get-Content | Set-Content` en PowerShell 5.1**: lee como ANSI y escribe UTF-8 con BOM, con lo cual los acentos quedan en mojibake y PHP falla con «Namespace declaration statement has to be the very first statement». Editar con las herramientas de archivos, no con el shell.
+- **`Contact::saving` deriva `phone_normalized` de `phone`**: pasar `phone_normalized => null` no crea un contacto sin teléfono, hay que dejar `phone` vacío. Un test que no lo sepa mide otra cosa y pasa igual.
+
+**Pendiente declarado:** la «evolución del tamaño del segmento en el tiempo» que pedía `mejoras2.md` **no está**. Requiere snapshots periódicos — un segmento es una consulta sobre el estado actual y no se puede reconstruir hacia atrás. Queda para cuando se decida guardar la serie.
+
+Tests: `SegmentQueryTest` (19). Suite **303/303 (959 aserciones)**.
+
 ## T2 — Dashboard por widgets (2026-08-08)
 
 Tercera tarea de `mejoras2.md`. **No es solo personalización.** Hasta acá `DashboardController` calculaba **todo para todos en cada carga** —ocho agregados más el recorrido de los eventos de mensaje de la cuenta entera— aunque el usuario mirara dos tarjetas. Ahora el catálogo vive en `WidgetRegistry`, cada widget trae su `resolver`, y el controlador **solo ejecuta el de los visibles**: personalizar es, de paso, dejar de calcular lo que nadie mira.

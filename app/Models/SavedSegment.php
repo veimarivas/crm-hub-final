@@ -22,4 +22,10 @@ class SavedSegment extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    /** Alias legible: en las pantallas el `user` de un segmento es su dueño. */
+    public function owner(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
 }
