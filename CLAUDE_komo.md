@@ -17,9 +17,16 @@ El día de cada tarea lo calculaba el **navegador** a partir de `due_at`. Con `b
 - **Filtro por tipo de tarea** y, para el admin viendo al equipo, **por responsable**. El corte de rol sigue en el servidor: un `?mine=0` a mano no le abre la agenda del equipo a un agente.
 - **Días no laborables atenuados**, derivados del horario que ya se configura en `/settings/business-hours` — no hace falta un ajuste nuevo. Mover una tarea a un domingo suele ser un error de arrastre.
 
-**No incluido:** las vistas de **semana y día** con grilla de horas que pedía el plan. El mes + el panel lateral del día ya cubren la lectura diaria, y una grilla horaria es trabajo aparte; queda para cuando se pida.
+### Vistas de semana y día (grilla de horas)
+Completadas después: `?mode=month|week|day`. Una columna por día, una fila por hora, y cada celda es soltable con id `YYYY-MM-DD|HH:00` — arrastrar ahí reprograma **fecha y hora de una vez**, que es lo que el mes no puede hacer.
 
-Tests: `TaskCalendarTest` (13). Suite **362/362 (1093 aserciones)**.
+- **La franja horaria sale del horario comercial**, ensanchada una hora a cada lado: dibujar de 00 a 23 obliga a scrollear por catorce filas vacías para llegar a la mañana, y sin el margen una tarea puesta justo antes de abrir sería invisible.
+- **El rango se calcula en la zona de la cuenta**: «esta semana» empieza el lunes del usuario, no el del servidor. Los límites se convierten a la zona de la app **antes de consultar** — Eloquent liga el Carbon formateado en la zona del objeto, así que un rango en La Paz recortaría mal contra una columna en UTC (misma trampa que al guardar).
+- **Cambiar de modo mantiene la fecha** que se estaba mirando: pasar de mes a semana y aterrizar en «hoy» hace perder el lugar cada vez.
+- **⚠️ `new Date('YYYY-MM-DD')` interpreta el string como UTC**, así que en cualquier zona negativa devuelve el día anterior y la grilla arranca corrida. Hay un `parseYmd()` que construye la fecha a mano.
+- Un `?mode=` inválido cae al mes en vez de romper.
+
+Tests: `TaskCalendarTest` (19). Suite **368/368 (1111 aserciones)**.
 
 ## T5 — Feedback de la IA, lado Komo (2026-08-08)
 

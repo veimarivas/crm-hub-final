@@ -18,6 +18,19 @@ const TYPE_META = {
 const WEEKDAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
+/**
+ * `YYYY-MM-DD` → Date local.
+ *
+ * A mano y no con `new Date(s)`: el constructor interpreta ese formato como
+ * **UTC**, así que en cualquier zona negativa (como La Paz) devuelve el día
+ * anterior y el calendario arranca corrido.
+ */
+function parseYmd(s) {
+    const [y, m, d] = String(s).split('-').map(Number);
+
+    return new Date(y, (m || 1) - 1, d || 1);
+}
+
 function ymd(d) {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -143,22 +156,102 @@ function DayCell({ dayKey, children, className, onClick }) {
     );
 }
 
+/**
+ * Grilla de semana y día: una columna por día, una fila por hora.
+ *
+ * Cada celda es soltable con id `YYYY-MM-DD|HH:00`, así que arrastrar acá
+ * reprograma **fecha y hora** de una vez — que es lo que el mes no puede hacer.
+ *
+ * Las horas salen del horario comercial de la cuenta: dibujar de 00 a 23
+ * obligaría a scrollear por catorce filas vacías para llegar a la mañana.
+ */
+function HourGrid({ calendar, days, tasksByDay, onTaskClick, workingDays }) {
+    const { from, to } = calendar.hours ?? { from: 7, to: 21 };
+    const hours = useMemo(
+        () => Array.from({ length: Math.max(1, to - from + 1) }, (_, i) => from + i),
+        [from, to],
+    );
+
+    return (
+        <div className="overflow-x-auto">
+            <div className="min-w-[560px]">
+                <div className="grid border-b border-gray-100 bg-gray-50/60" style={{ gridTemplateColumns: `3.5rem repeat(${days.length}, minmax(0, 1fr))` }}>
+                    <div />
+                    {days.map((d) => {
+                        const key = ymd(d);
+                        const isToday = key === calendar.today;
+
+                        return (
+                            <div key={key} className={`px-2 py-2 text-center ${isToday ? 'bg-[#045474]/5' : ''}`}>
+                                <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                                    {WEEKDAYS[d.getDay() === 0 ? 6 : d.getDay() - 1]}
+                                </p>
+                                <p className={`text-sm font-extrabold tabular-nums ${isToday ? 'text-[#045474]' : 'text-gray-800'}`}>
+                                    {d.getDate()}
+                                </p>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                <div className="max-h-[32rem] overflow-y-auto">
+                    {hours.map((hour) => (
+                        <div key={hour} className="grid border-b border-gray-50" style={{ gridTemplateColumns: `3.5rem repeat(${days.length}, minmax(0, 1fr))` }}>
+                            <div className="px-2 py-1 text-[10px] font-semibold text-gray-400 tabular-nums text-right border-r border-gray-50">
+                                {String(hour).padStart(2, '0')}:00
+                            </div>
+                            {days.map((d) => {
+                                const key = ymd(d);
+                                const slot = `${key}|${String(hour).padStart(2, '0')}:00`;
+                                const isWorkday = workingDays.includes(d.getDay() === 0 ? 7 : d.getDay());
+                                const slotTasks = (tasksByDay[key] || []).filter(
+                                    (t) => Number((t.due_time ?? '00:00').slice(0, 2)) === hour,
+                                );
+
+                                return (
+                                    <DayCell
+                                        key={slot}
+                                        dayKey={slot}
+                                        className={`min-h-[2.5rem] p-0.5 border-r border-gray-50 flex flex-col gap-0.5 ${
+                                            isWorkday ? 'bg-white' : 'bg-gray-50/70'
+                                        }`}
+                                    >
+                                        {slotTasks.map((t) => (
+                                            <TaskDot
+                                                key={t.id}
+                                                task={t}
+                                                overdue={!t.completed_at && (t.due_date ?? '') < (calendar.today ?? '')}
+                                                onClick={(e) => { e.stopPropagation(); onTaskClick(t); }}
+                                            />
+                                        ))}
+                                    </DayCell>
+                                );
+                            })}
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function CalendarView({ calendar, onDayClick, onTaskClick, onReschedule, activeDay }) {
-    const from = new Date(calendar.from);
-    const to = new Date(calendar.to);
-    const anchor = new Date(calendar.anchor + '-01');
+    const mode = calendar.mode ?? 'month';
     const workingDays = calendar.workingDays ?? [1, 2, 3, 4, 5, 6, 7];
+    const anchorMonth = parseYmd(mode === 'month' ? `${calendar.anchor}-01` : calendar.anchor).getMonth();
 
     const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
     // Generar todos los días entre from y to
     const days = useMemo(() => {
         const list = [];
-        const cur = new Date(from);
-        while (cur <= to) {
+        const cur = parseYmd(calendar.from);
+        const last = parseYmd(calendar.to);
+        while (cur <= last) {
             list.push(new Date(cur));
             cur.setDate(cur.getDate() + 1);
         }
+
         return list;
     }, [calendar.from, calendar.to]);
 
@@ -170,15 +263,41 @@ function CalendarView({ calendar, onDayClick, onTaskClick, onReschedule, activeD
             const k = t.due_date ?? ymd(new Date(t.due_at));
             (map[k] = map[k] || []).push(t);
         });
+
         return map;
     }, [calendar.tasks]);
 
+    /**
+     * En el mes se suelta sobre un día (`YYYY-MM-DD`) y se conserva la hora;
+     * en semana y día se suelta sobre una franja (`YYYY-MM-DD|HH:00`) y se
+     * reprograma también la hora.
+     */
     const onDragEnd = ({ active, over }) => {
         if (!over) return;
         const task = (calendar.tasks || []).find((t) => t.id === active.id);
-        if (!task || task.due_date === over.id) return;
-        onReschedule(task, over.id);
+        if (!task) return;
+
+        const [date, time] = String(over.id).split('|');
+        if (task.due_date === date && (!time || task.due_time === time)) return;
+
+        onReschedule(task, date, time ?? null);
     };
+
+    if (mode !== 'month') {
+        return (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                    <HourGrid
+                        calendar={calendar}
+                        days={days}
+                        tasksByDay={tasksByDay}
+                        onTaskClick={onTaskClick}
+                        workingDays={workingDays}
+                    />
+                </div>
+            </DndContext>
+        );
+    }
 
     return (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
@@ -194,7 +313,7 @@ function CalendarView({ calendar, onDayClick, onTaskClick, onReschedule, activeD
                     {days.map((d) => {
                         const key = ymd(d);
                         const dayTasks = tasksByDay[key] || [];
-                        const inMonth = d.getMonth() === anchor.getMonth();
+                        const inMonth = d.getMonth() === anchorMonth;
                         const isToday = key === calendar.today;
                         const isActive = activeDay && sameDate(d, activeDay);
                         // Vencidas: comparar contra el día de hoy del servidor,
@@ -388,10 +507,32 @@ export default function Index({ view = 'calendar', calendar, tasks, filters, cou
 
     const apply = (patch) => router.get(route('tasks.index'), { ...filters, ...patch }, { preserveState: true, replace: true });
 
+    const mode = calendar?.mode ?? 'month';
+
+    /** Avanza o retrocede una unidad del modo actual (mes, semana o día). */
     const shiftMonth = (delta) => {
-        const [y, m] = (calendar?.anchor || '').split('-').map(Number);
-        const d = new Date(y, m - 1 + delta, 1);
-        apply({ month: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` });
+        if (mode === 'month') {
+            const [y, m] = (calendar?.anchor || '').split('-').map(Number);
+            const d = new Date(y, m - 1 + delta, 1);
+            apply({ month: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, mode });
+
+            return;
+        }
+
+        const d = parseYmd(calendar.anchor);
+        d.setDate(d.getDate() + delta * (mode === 'week' ? 7 : 1));
+        apply({ date: ymd(d), mode });
+    };
+
+    /**
+     * Cambiar de modo mantiene la fecha que se estaba mirando: pasar de mes a
+     * semana y aterrizar en «hoy» hace perder el lugar cada vez.
+     */
+    const setMode = (next) => {
+        const base = mode === 'month' ? `${calendar.anchor}-01` : calendar.anchor;
+        apply(next === 'month'
+            ? { mode: next, month: String(base).slice(0, 7), date: null }
+            : { mode: next, date: base });
     };
 
     const openNewForDay = (d) => {
@@ -402,20 +543,33 @@ export default function Index({ view = 'calendar', calendar, tasks, filters, cou
     };
 
     /**
-     * Arrastrar una tarea a otro día.
+     * Arrastrar una tarea a otro día (o a otra franja horaria).
      *
-     * Solo se manda la fecha: el servidor conserva la hora original, porque
+     * En el mes solo se manda la fecha y el servidor **conserva la hora**:
      * mover «llamar a Ana a las 10:00» del martes al jueves no debería
-     * convertirla en una tarea de medianoche.
+     * convertirla en una tarea de medianoche. En semana y día la franja sobre
+     * la que se suelta es una hora concreta, y entonces sí se manda.
      */
-    const reschedule = (task, date) => router.patch(
+    const reschedule = (task, date, time = null) => router.patch(
         route('tasks.reschedule', task.id),
-        { date },
+        time ? { date, time } : { date },
         { preserveScroll: true, preserveState: false },
     );
 
-    const anchor = calendar ? new Date(calendar.anchor + '-01') : new Date();
-    const monthLabel = `${MONTHS[anchor.getMonth()]} ${anchor.getFullYear()}`;
+    const anchor = calendar ? parseYmd(mode === 'month' ? `${calendar.anchor}-01` : calendar.anchor) : new Date();
+
+    // El encabezado dice qué se está mirando: «Agosto 2026» sirve para el mes,
+    // pero en semana o día hace falta el rango o la fecha concreta.
+    const monthLabel = (() => {
+        if (!calendar || mode === 'month') return `${MONTHS[anchor.getMonth()]} ${anchor.getFullYear()}`;
+        if (mode === 'day') {
+            return anchor.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' });
+        }
+
+        const end = parseYmd(calendar.to);
+
+        return `${anchor.getDate()} – ${end.getDate()} ${MONTHS[end.getMonth()]}`;
+    })();
 
     return (
         <AuthenticatedLayout>
@@ -496,9 +650,33 @@ export default function Index({ view = 'calendar', calendar, tasks, filters, cou
                             <button onClick={() => shiftMonth(-1)} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100">
                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
                             </button>
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-3 flex-wrap justify-center">
                                 <h2 className="text-lg font-bold text-gray-900 capitalize tabular-nums">{monthLabel}</h2>
-                                <button onClick={() => apply({ month: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}` })} className="text-xs font-bold text-emerald-600 hover:text-emerald-700 px-2 py-1 rounded-lg border border-emerald-200 bg-emerald-50">Hoy</button>
+                                <button
+                                    onClick={() => apply({
+                                        mode,
+                                        month: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
+                                        date: mode === 'month' ? null : calendar.today,
+                                    })}
+                                    className="text-xs font-bold text-emerald-600 hover:text-emerald-700 px-2 py-1 rounded-lg border border-emerald-200 bg-emerald-50"
+                                >
+                                    Hoy
+                                </button>
+
+                                {/* Mes / semana / día */}
+                                <div className="inline-flex bg-gray-50 border border-gray-200 rounded-xl p-0.5">
+                                    {[['month', 'Mes'], ['week', 'Semana'], ['day', 'Día']].map(([key, label]) => (
+                                        <button
+                                            key={key}
+                                            onClick={() => setMode(key)}
+                                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors ${
+                                                mode === key ? 'bg-white text-[#045474] shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                                            }`}
+                                        >
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
                             <button onClick={() => shiftMonth(1)} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100">
                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>

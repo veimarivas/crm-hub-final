@@ -235,4 +235,76 @@ class TaskCalendarTest extends TestCase
     {
         $this->assertSame([1, 2, 3, 4, 5, 6, 7], $this->calendar()['workingDays']);
     }
+
+    // ---- Modos mes / semana / día ----
+
+    public function test_la_semana_arranca_el_lunes_de_la_fecha_pedida(): void
+    {
+        $calendar = $this->calendar(['mode' => 'week', 'date' => '2026-08-13']); // jueves
+
+        $this->assertSame('week', $calendar['mode']);
+        $this->assertSame('2026-08-10', $calendar['from']); // lunes
+        $this->assertSame('2026-08-16', $calendar['to']);   // domingo
+    }
+
+    public function test_el_dia_trae_solo_ese_dia(): void
+    {
+        $this->makeTask(['due_at' => '2026-08-13 14:00:00', 'text' => 'Del jueves']);
+        $this->makeTask(['due_at' => '2026-08-14 14:00:00', 'text' => 'Del viernes']);
+
+        $calendar = $this->calendar(['mode' => 'day', 'date' => '2026-08-13']);
+
+        $this->assertSame('2026-08-13', $calendar['from']);
+        $this->assertSame('2026-08-13', $calendar['to']);
+        $this->assertCount(1, $calendar['tasks']);
+        $this->assertSame('Del jueves', $calendar['tasks'][0]['text']);
+    }
+
+    public function test_el_rango_del_dia_se_calcula_en_la_zona_de_la_cuenta(): void
+    {
+        // 2026-08-14 02:30 UTC = 2026-08-13 22:30 en La Paz: para el equipo es
+        // del jueves, así que la vista de ese día tiene que traerla.
+        $this->makeTask(['due_at' => '2026-08-14 02:30:00', 'text' => 'Tarde del jueves']);
+
+        $calendar = $this->calendar(['mode' => 'day', 'date' => '2026-08-13']);
+
+        $this->assertCount(1, $calendar['tasks']);
+        $this->assertSame('22:30', $calendar['tasks'][0]['due_time']);
+    }
+
+    public function test_un_modo_invalido_cae_al_mes(): void
+    {
+        $this->assertSame('month', $this->calendar(['mode' => 'trimestre'])['mode']);
+    }
+
+    public function test_la_franja_horaria_sale_del_horario_comercial(): void
+    {
+        $this->account->forceFill([
+            'business_hours_enabled' => true,
+            'business_hours_schedule' => [
+                'mon' => ['from' => '09:00', 'to' => '18:00'],
+                'tue' => ['from' => '09:00', 'to' => '18:00'],
+                'wed' => ['from' => '09:00', 'to' => '18:00'],
+                'thu' => ['from' => '09:00', 'to' => '18:00'],
+                'fri' => ['from' => '08:00', 'to' => '20:00'],
+                'sat' => null, 'sun' => null,
+            ],
+        ])->save();
+
+        // Se ensancha una hora a cada lado para que una tarea puesta justo
+        // antes de abrir siga siendo visible.
+        $this->assertSame(['from' => 7, 'to' => 21], $this->calendar(['mode' => 'week'])['hours']);
+    }
+
+    public function test_arrastrar_a_una_franja_reprograma_tambien_la_hora(): void
+    {
+        $task = $this->makeTask(['due_at' => '2026-08-13 14:00:00']);
+
+        $this->actingAs($this->owner)
+            ->patch(route('tasks.reschedule', $task), ['date' => '2026-08-14', 'time' => '09:00'])
+            ->assertRedirect();
+
+        $due = $task->refresh()->due_at->setTimezone('America/La_Paz');
+        $this->assertSame('2026-08-14 09:00', $due->format('Y-m-d H:i'));
+    }
 }

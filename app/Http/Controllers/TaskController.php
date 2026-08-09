@@ -38,19 +38,36 @@ class TaskController extends Controller
             ->when($responsible, fn ($qq, $v) => $qq->where('assigned_to', $v));
 
         if ($view === 'calendar') {
-            // Rango del mes visible (incluye dias de semanas parciales anteriores/posteriores)
-            $month = $request->query('month'); // YYYY-MM
-            $anchor = $month ? Carbon::createFromFormat('Y-m', $month)->startOfMonth() : now()->startOfMonth();
-            $from = $anchor->copy()->startOfMonth()->startOfWeek(Carbon::MONDAY);
-            $to = $anchor->copy()->endOfMonth()->endOfWeek(Carbon::SUNDAY);
-
             $tz = $request->user()->account->business_hours_timezone ?: config('app.timezone');
+
+            // Mes / semana / día. El rango se calcula EN LA ZONA DE LA CUENTA:
+            // «esta semana» empieza el lunes del usuario, no el del servidor.
+            $mode = in_array($request->query('mode'), ['month', 'week', 'day'], true)
+                ? $request->query('mode') : 'month';
+
+            $anchor = $this->calendarAnchor($request, $mode, $tz);
+
+            [$from, $to] = match ($mode) {
+                'day' => [$anchor->copy()->startOfDay(), $anchor->copy()->endOfDay()],
+                'week' => [$anchor->copy()->startOfWeek(Carbon::MONDAY), $anchor->copy()->endOfWeek(Carbon::SUNDAY)],
+                default => [
+                    $anchor->copy()->startOfMonth()->startOfWeek(Carbon::MONDAY),
+                    $anchor->copy()->endOfMonth()->endOfWeek(Carbon::SUNDAY),
+                ],
+            };
 
             $rangeTasks = Task::forAccount($accountId)
                 ->with(['lead:id,title', 'contact:id,name', 'assignee:id,name'])
                 ->when($mine, fn ($q) => $q->where('assigned_to', $userId))
                 ->tap($extraFilters)
-                ->whereBetween('due_at', [$from, $to])
+                // Los límites se convierten a la zona de la app antes de
+                // consultar: Eloquent liga el Carbon formateado en la zona que
+                // trae el objeto, así que un rango en La Paz recortaría mal
+                // contra una columna guardada en UTC.
+                ->whereBetween('due_at', [
+                    $from->copy()->setTimezone(config('app.timezone')),
+                    $to->copy()->setTimezone(config('app.timezone')),
+                ])
                 ->orderBy('due_at')
                 ->get()
                 ->map(function (Task $task) use ($tz) {
@@ -67,17 +84,20 @@ class TaskController extends Controller
             return Inertia::render('Tasks/Index', [
                 'view' => 'calendar',
                 'calendar' => [
-                    'anchor' => $anchor->format('Y-m'),
-                    'from' => $from->toIso8601String(),
-                    'to' => $to->toIso8601String(),
+                    'mode' => $mode,
+                    'anchor' => $mode === 'month' ? $anchor->format('Y-m') : $anchor->format('Y-m-d'),
+                    'from' => $from->format('Y-m-d'),
+                    'to' => $to->format('Y-m-d'),
                     'tasks' => $rangeTasks,
                     'today' => now()->setTimezone($tz)->format('Y-m-d'),
                     'timezone' => $tz,
                     // Días laborables, para atenuar los que no lo son: mover una
                     // tarea a un domingo suele ser un error de arrastre.
                     'workingDays' => $this->workingDays($request),
+                    // Franja horaria que dibuja la grilla de semana y día.
+                    'hours' => $this->calendarHours($request),
                 ],
-                'filters' => ['filter' => $filter, 'mine' => $mine, 'view' => 'calendar', 'type' => $type, 'responsible' => $responsible],
+                'filters' => ['filter' => $filter, 'mine' => $mine, 'view' => 'calendar', 'mode' => $mode, 'type' => $type, 'responsible' => $responsible],
                 'members' => User::where('account_id', $accountId)->get(['id', 'name']),
                 'isAdmin' => $isAdmin,
                 'counts' => [
@@ -114,6 +134,58 @@ class TaskController extends Controller
                     ->when($mine, $baseScope)->count(),
             ],
         ]);
+    }
+
+    /**
+     * Día de referencia del calendario, en la zona de la cuenta.
+     *
+     * El mes sigue viajando como `?month=YYYY-MM` (los enlaces viejos no se
+     * rompen); semana y día usan `?date=YYYY-MM-DD`.
+     */
+    private function calendarAnchor(Request $request, string $mode, string $tz): Carbon
+    {
+        if ($mode === 'month') {
+            $month = $request->query('month');
+
+            return $month
+                ? Carbon::createFromFormat('Y-m-d H:i:s', $month.'-01 00:00:00', $tz)->startOfMonth()
+                : now()->setTimezone($tz)->startOfMonth();
+        }
+
+        $date = $request->query('date');
+
+        return $date
+            ? Carbon::createFromFormat('Y-m-d H:i:s', $date.' 00:00:00', $tz)
+            : now()->setTimezone($tz)->startOfDay();
+    }
+
+    /**
+     * Franja horaria de la grilla de semana y día.
+     *
+     * Sale del horario comercial: dibujar de 00 a 23 obliga a scrollear por
+     * catorce horas vacías para llegar a la mañana. Se ensancha una hora a cada
+     * lado para que una tarea puesta justo antes de abrir siga siendo visible.
+     *
+     * @return array{from: int, to: int}
+     */
+    private function calendarHours(Request $request): array
+    {
+        $account = $request->user()->account;
+        $schedule = $account->business_hours_enabled
+            ? ($account->business_hours_schedule ?: \App\Services\BusinessHours\Schedule::DEFAULT_SCHEDULE)
+            : [];
+
+        $starts = collect($schedule)->filter()->pluck('from')->filter();
+        $ends = collect($schedule)->filter()->pluck('to')->filter();
+
+        if ($starts->isEmpty() || $ends->isEmpty()) {
+            return ['from' => 7, 'to' => 21];
+        }
+
+        $from = (int) $starts->map(fn ($h) => (int) explode(':', $h)[0])->min();
+        $to = (int) $ends->map(fn ($h) => (int) ceil((int) explode(':', $h)[0]))->max();
+
+        return ['from' => max(0, $from - 1), 'to' => min(23, $to + 1)];
     }
 
     /**
