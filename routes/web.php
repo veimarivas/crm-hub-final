@@ -145,6 +145,21 @@ Route::middleware('auth')->group(function () {
         Route::post('/team-messages', [\App\Http\Controllers\TeamMessageController::class, 'store'])->name('team-messages.store');
     });
 
+    // Workflows con inscripción dinámica (admin-only: configurar algo que le
+    // escribe a clientes no es trabajo diario del asesor).
+    Route::middleware('admin.only')->group(function () {
+        Route::get('/workflows', [\App\Http\Controllers\WorkflowController::class, 'index'])->name('workflows.index');
+        Route::post('/workflows', [\App\Http\Controllers\WorkflowController::class, 'store'])->name('workflows.store');
+        Route::patch('/workflows/pause', [\App\Http\Controllers\WorkflowController::class, 'togglePause'])->name('workflows.pause');
+        Route::get('/workflows/{workflow}', [\App\Http\Controllers\WorkflowController::class, 'edit'])->name('workflows.edit');
+        Route::patch('/workflows/{workflow}', [\App\Http\Controllers\WorkflowController::class, 'update'])->name('workflows.update');
+        Route::put('/workflows/{workflow}/steps', [\App\Http\Controllers\WorkflowController::class, 'saveSteps'])->name('workflows.steps');
+        Route::patch('/workflows/{workflow}/toggle', [\App\Http\Controllers\WorkflowController::class, 'toggle'])->name('workflows.toggle');
+        Route::post('/workflows/{workflow}/simulate', [\App\Http\Controllers\WorkflowController::class, 'simulate'])->name('workflows.simulate');
+        Route::post('/workflows/{workflow}/enrollment-count', [\App\Http\Controllers\WorkflowController::class, 'enrollmentCount'])->name('workflows.enrollment-count');
+        Route::delete('/workflows/{workflow}', [\App\Http\Controllers\WorkflowController::class, 'destroy'])->name('workflows.destroy');
+    });
+
     // Pipeline builder (admin-only)
     Route::middleware('admin.only')->group(function () {
         Route::get('/settings/pipelines', [\App\Http\Controllers\PipelineController::class, 'index'])->name('settings.pipelines');

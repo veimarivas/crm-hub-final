@@ -35,7 +35,25 @@ Además: índice único `(workflow_id, lead_id)` **en la base**; tope de 200 ins
 
 **Comandos:** `workflows:sweep` cada 10 min (inscribe, cierra metas, desinscribe) y `workflows:tick` cada minuto (retoma esperas vencidas), ambos `withoutOverlapping`.
 
-Tests: `WorkflowEngineTest` (18, los primeros 9 son guardarraíles). Suite **321/321 (1000 aserciones)**.
+Tests: `WorkflowEngineTest` (18, los primeros 9 son guardarraíles).
+
+### T3.b — Constructor visual, simulador y activación (2026-08-08)
+
+`/workflows` (admin-only). Lienzo **vertical** como el de Digital Pipeline: se lee como el recorrido del lead. Un grid en zig-zag no deja ver el orden, que es lo único que hay que entender de un workflow.
+
+- **`WorkflowSimulator`** — recorre el árbol **que está en pantalla** (no lo guardado) contra un lead real y **no escribe nada**: ni WhatsApp, ni tareas, ni notas, ni etiquetas, ni eventos. Dice los mismos motivos por los que el motor fallaría (integración inactiva, etiqueta borrada, etapa de otro pipeline) antes de que le llegue algo a un cliente. Marca como `later` lo que queda después de una espera y como `skipped` la rama no tomada.
+- **Activar exige que el servidor no reporte problemas** (`Guardrails::activationProblems`): sin pasos, con criterio vacío —que alcanzaría a todos los leads de la cuenta— o con re-inscripción sin enfriamiento suficiente, no se activa.
+- **Kill switch a la vista** en el índice, no escondido en configuración: si algo se descontroló hay que poder pararlo sin esperar un deploy.
+- **Conteo en vivo** del criterio de inscripción, avisando que el primer barrido entra por lotes.
+- El editor de criterios se extrajo a **`Components/SegmentBuilder.jsx`**, compartido con `/segments`: es el mismo `SegmentQuery` del servidor, así que la UI también tiene que ser una sola.
+
+**⚠️ El detalle que evita romper leads en vuelo:** `saveSteps` hace **upsert por id**, no borrar-y-recrear. Los pasos están referenciados por las esperas pendientes y por `current_step_id`; recrearlos en cada guardado dejaría a los leads que están esperando apuntando a un paso inexistente y su secuencia se cortaría **en silencio**. Los que sí quedaron sin su paso se cierran como `unenrolled` **diciendo por qué**. Hay un test por cada mitad.
+
+**⚠️ Con `Carbon::setTestNow` congelado, `latest('created_at')` no desempata** entre filas del mismo instante: las aserciones sobre la traza buscan en toda la colección, no en la última fila.
+
+**Fix aparte:** `BookingReuseLeadTest` fijaba una reserva en `now()->addHour()->setTime(10,0)`, que cae **en el pasado** en cualquier corrida posterior a las 09:00 — el test fallaba según la hora del día. Ahora usa `addDay()`, como su hermano.
+
+Tests: `WorkflowBuilderTest` (17). Suite **338/338 (1045 aserciones)**.
 
 ## T4 — Segmentación dinámica (2026-08-08)
 

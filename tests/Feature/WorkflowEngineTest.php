@@ -209,7 +209,11 @@ class WorkflowEngineTest extends TestCase
 
         $enrollment->refresh();
         $this->assertSame(WorkflowEnrollment::FAILED, $enrollment->status);
-        $this->assertStringContainsString('ciclo', $enrollment->stepRuns()->latest('created_at')->first()->detail);
+        // En toda la traza y no en la ultima fila: con el reloj congelado,
+        // `latest('created_at')` no desempata entre filas del mismo instante.
+        $this->assertTrue(
+            $enrollment->stepRuns->contains(fn ($run) => str_contains((string) $run->detail, 'ciclo')),
+        );
     }
 
     public function test_el_tope_diario_de_salientes_es_por_lead_y_cruza_workflows(): void

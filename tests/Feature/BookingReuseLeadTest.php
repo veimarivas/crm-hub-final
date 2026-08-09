@@ -86,7 +86,11 @@ $contact = $this->contact();
         $this->post(route('book.store', 'daniel'), [
             'guest_name' => 'Ana',
             'guest_phone' => '+59171234567',
-            'scheduled_at' => now()->addHour()->setTime(10, 0)->toISOString(),
+            // `addDay()` y no `addHour()`: con `addHour()->setTime(10,0)` la
+            // reserva cae en el pasado en cualquier corrida posterior a las
+            // 09:00, la validación la rechaza y el test falla según la hora del
+            // día. El test hermano de arriba ya usaba `addDay()`.
+            'scheduled_at' => now()->addDay()->setTime(10, 0)->toISOString(),
         ])->assertRedirect();
 
         $this->assertDatabaseHas('leads', ['title' => 'Ana', 'source' => 'booking']);
