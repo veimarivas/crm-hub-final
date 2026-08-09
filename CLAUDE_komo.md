@@ -2,6 +2,26 @@
 
 CRM de ventas centrado en **leads** inspirado en Kommo (kommo.com), hermano del **wacrm** (`C:\xampp_82_12\htdocs\laravel_crm_whatsapp`, CRM de WhatsApp). Son **dos proyectos separados integrados por API**: este maneja leads/tareas/pipeline; el wacrm es el motor de WhatsApp.
 
+## T5 — Feedback de la IA, lado Komo (2026-08-08)
+
+Última tarea de `mejoras2.md`. **Cross-repo**: la mitad del wacrm (endpoint + cola de revisión) va en `ae56439` de ese repo y tiene que desplegarse **primero** — Komo tolera su ausencia, al revés no.
+
+- **👍/👎 + «corregir» bajo cada respuesta de la IA en el chat del lead** (`Components/AiFeedbackControl.jsx`). Va ahí y no en una pantalla de configuración porque el agente que ve la respuesta mala es el único que tiene el contexto para arreglarla, **y lo tiene en ese momento**. Pedirle que después vaya a otro lado a reportarlo es garantizar que no lo haga.
+- El pulgar abajo abre el campo de corrección pero **no lo exige**: marcar que algo estuvo mal ya es información útil, y bloquear el voto detrás de un formulario haría que nadie vote.
+- **Solo bajo mensajes de la IA** (`payload.sender === 'bot'`), verificado también en el servidor: corregir un mensaje que escribió una persona no tiene sentido.
+- **Un voto por mensaje y por usuario.** El voto de otro agente no se muestra como propio — hay test.
+
+### Guardar primero, despachar después
+`ai_feedback` se guarda **local e inmediato**; el envío al wacrm va en `SendAiFeedbackJob` con reintentos (60 s → 1 h). Si el envío fuera sincrónico y el wacrm estuviera caído, el agente se tomaría el trabajo de escribir la corrección y **se perdería**. `synced_at` distingue lo entregado de lo pendiente; sin integración activa queda guardado y sin marcar, listo para reintentar.
+
+El job manda además **la pregunta que originó la respuesta** (el `message_in` inmediatamente anterior): sin ella la corrección no se puede juzgar — «el precio es 3.500» no dice nada si no se sabe de qué se estaba hablando.
+
+**La UI no promete lo que no pasa:** el texto dice «va a revisión antes de enseñarle a la IA». Del otro lado nada entra al conocimiento sin que un humano lo apruebe.
+
+**Trampa:** la columna de `integrations` es `wacrm_url`, no `wacrm_base_url` — el nombre del método `baseUrl()` invita al error y el fallo aparece como *«Field 'wacrm_url' doesn't have a default value»*, que no señala la causa.
+
+Tests: `AiFeedbackTest` (11). Suite **349/349 (1064 aserciones)**.
+
 ## T3 — Motor de workflows con inscripción dinámica (2026-08-08)
 
 Quinta tarea de `mejoras2.md`, la XL. **Esta entrega es el motor; el constructor visual va aparte.** Lo que se puede hacer hoy se hace por código o seeder: la UI llega en el próximo commit.

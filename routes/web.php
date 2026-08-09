@@ -64,6 +64,11 @@ Route::middleware('auth')->group(function () {
     Route::patch('/segments/{savedSegment}', [\App\Http\Controllers\SavedSegmentController::class, 'update'])->name('segments.update');
     Route::delete('/segments/{savedSegment}', [\App\Http\Controllers\SavedSegmentController::class, 'destroy'])->name('segments.destroy');
     Route::get('/leads/{lead}', [\App\Http\Controllers\LeadController::class, 'show'])->name('leads.show');
+
+    // Feedback sobre lo que contestó la IA, desde el chat del lead: el agente
+    // que ve la respuesta mala es quien tiene el contexto para corregirla.
+    Route::post('/leads/{lead}/ai-feedback', [\App\Http\Controllers\AiFeedbackController::class, 'store'])
+        ->name('leads.ai-feedback');
     Route::patch('/leads/{lead}', [\App\Http\Controllers\LeadController::class, 'update'])->name('leads.update');
     Route::patch('/leads/{lead}/move', [\App\Http\Controllers\LeadController::class, 'move'])->name('leads.move');
     Route::delete('/leads/{lead}', [\App\Http\Controllers\LeadController::class, 'destroy'])->name('leads.destroy');

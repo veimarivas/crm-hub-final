@@ -35,6 +35,20 @@ class Client
         return $this->unwrap($this->request()->get('/me'));
     }
 
+    /**
+     * Reporta al wacrm que una respuesta de la IA estuvo bien o mal.
+     *
+     * El endpoint del otro lado es idempotente por `external_ref`, así que
+     * reintentar no duplica. Allá **no entra al conocimiento**: queda en una
+     * cola que un humano revisa.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    public function sendAiFeedback(array $payload): array
+    {
+        return $this->unwrap($this->request()->post('/ai/feedback', $payload));
+    }
+
     public function contacts(int $page = 1, ?string $search = null): array
     {
         return $this->unwrap($this->request()->get('/contacts', array_filter([

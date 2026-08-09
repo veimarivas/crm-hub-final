@@ -1,6 +1,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { completeTask } from '@/Components/CompleteTaskModal';
 import ServiceWindowBadge, { ServiceWindowCard } from '@/Components/ServiceWindowBadge';
+import AiFeedbackControl from '@/Components/AiFeedbackControl';
 import CopilotPanel from '@/Components/CopilotPanel';
 import ImageModal from '@/Components/ImageModal';
 import Modal from '@/Components/Modal';
@@ -126,7 +127,7 @@ function TimelineEvent({ event }) {
     );
 }
 
-export default function Show({ lead, stages, events, tasks, notes, members, contacts, companies, allTags, customFields, customValues, whatsappEnabled, serviceWindow, copilot }) {
+export default function Show({ lead, stages, events, tasks, notes, members, contacts, companies, allTags, customFields, customValues, whatsappEnabled, serviceWindow, copilot, aiFeedback = {} }) {
     const { flash, auth } = usePage().props;
     const isAdmin = auth?.user?.account_role === 'owner' || auth?.user?.account_role === 'admin';
     const [tab, setTab] = useState('chat');
@@ -798,7 +799,25 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                                     )}
                                     {chatItems.map((it) => {
                                         if (it.kind === 'day') return <DateSeparator key={it.id} label={it.label} />;
-                                        if (it.kind === 'bubble') return <ChatBubble key={it.event.id} event={it.event} contactName={contactName} onOpenImage={setLightbox} />;
+                                        if (it.kind === 'bubble') {
+                                            // Solo bajo lo que escribió la IA: corregir un
+                                            // mensaje de una persona no tiene sentido.
+                                            const fromAi = it.event.event_type === 'message_out'
+                                                && it.event.payload?.sender === 'bot';
+
+                                            return (
+                                                <div key={it.event.id}>
+                                                    <ChatBubble event={it.event} contactName={contactName} onOpenImage={setLightbox} />
+                                                    {fromAi && (
+                                                        <AiFeedbackControl
+                                                            leadId={lead.id}
+                                                            eventId={it.event.id}
+                                                            current={aiFeedback?.[it.event.id]}
+                                                        />
+                                                    )}
+                                                </div>
+                                            );
+                                        }
                                         return <SystemEvent key={it.event.id} event={it.event} />;
                                     })}
                                     {lead.ai_pending && (

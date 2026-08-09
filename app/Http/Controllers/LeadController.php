@@ -375,6 +375,13 @@ class LeadController extends Controller
             'whatsappEnabled' => (bool) ($integration?->is_active && $lead->contact?->phone),
             'serviceWindow' => app(ServiceWindow::class)->forLead($lead),
             'copilot' => $this->copilotFor($lead),
+            // Voto propio por mensaje de la IA: el de otro agente no se muestra
+            // como si fuera de uno, y así cada quien puede corregir lo suyo.
+            'aiFeedback' => \App\Models\AiFeedback::where('lead_id', $lead->id)
+                ->where('user_id', $request->user()->id)
+                ->get(['lead_event_id', 'rating', 'correction'])
+                ->keyBy('lead_event_id')
+                ->map(fn ($f) => ['rating' => $f->rating, 'correction' => $f->correction]),
         ]);
     }
 
