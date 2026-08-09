@@ -23,6 +23,8 @@ class Account extends Model
         'business_hours_enabled' => 'boolean',
         'out_of_hours_reply_enabled' => 'boolean',
         'business_hours_schedule' => 'array',
+        // Kill switch de workflows: con fecha, el motor no ejecuta nada.
+        'workflows_paused_at' => 'datetime',
     ];
 
     public function owner(): BelongsTo

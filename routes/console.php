@@ -56,6 +56,44 @@ Artisan::command('copilot:score-leads', function () {
 
 Schedule::command('copilot:score-leads')->dailyAt('03:30');
 
+// Workflows — inscripción dinámica: evalúa los criterios e inscribe a quien
+// empezó a cumplirlos, cierra los que llegaron a la meta y saca a los que
+// dejaron de calificar. Cada 10 min: más seguido no aporta (los criterios se
+// mueven en horas) y multiplica el costo de las agregaciones.
+Artisan::command('workflows:sweep', function () {
+    $sweeper = app(\App\Services\Workflows\EnrollmentSweeper::class);
+    $totals = ['enrolled' => 0, 'goals' => 0, 'unenrolled' => 0];
+
+    \App\Models\Workflow::where('is_active', true)->with('account')->each(function ($workflow) use ($sweeper, &$totals) {
+        foreach ($sweeper->sweep($workflow) as $key => $value) {
+            $totals[$key] += $value;
+        }
+    });
+
+    $this->info("Inscritos: {$totals['enrolled']} · Meta: {$totals['goals']} · Salieron: {$totals['unenrolled']}");
+})->purpose('Barre los criterios de inscripción de los workflows activos');
+
+Schedule::command('workflows:sweep')->everyTenMinutes()->withoutOverlapping();
+
+// Workflows — esperas vencidas. Cada minuto: acá sí importa la precisión,
+// porque una espera de «2 horas» que se ejecuta 10 minutos tarde se nota.
+Artisan::command('workflows:tick', function () {
+    $engine = app(\App\Services\Workflows\WorkflowEngine::class);
+
+    $due = \App\Models\WorkflowPendingExecution::where('run_at', '<=', now())
+        ->with(['enrollment.workflow.account', 'step'])
+        ->limit(500)
+        ->get();
+
+    foreach ($due as $pending) {
+        $engine->resume($pending);
+    }
+
+    $this->info("Esperas retomadas: {$due->count()}");
+})->purpose('Retoma las esperas vencidas de los workflows');
+
+Schedule::command('workflows:tick')->everyMinute()->withoutOverlapping();
+
 // El envío de recordatorios por WhatsApp `komo:remind-daily-tasks` se dejó
 // en el código pero NO se agenda: Meta cobra por conversaciones iniciadas
 // desde el negocio fuera de la ventana de 24h (~$0.01-0.03 USD por agente

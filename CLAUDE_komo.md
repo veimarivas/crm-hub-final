@@ -2,6 +2,41 @@
 
 CRM de ventas centrado en **leads** inspirado en Kommo (kommo.com), hermano del **wacrm** (`C:\xampp_82_12\htdocs\laravel_crm_whatsapp`, CRM de WhatsApp). Son **dos proyectos separados integrados por API**: este maneja leads/tareas/pipeline; el wacrm es el motor de WhatsApp.
 
+## T3 — Motor de workflows con inscripción dinámica (2026-08-08)
+
+Quinta tarea de `mejoras2.md`, la XL. **Esta entrega es el motor; el constructor visual va aparte.** Lo que se puede hacer hoy se hace por código o seeder: la UI llega en el próximo commit.
+
+**La diferencia con `stage_automations` no son las ramas, es el modelo mental.** Aquello es reactivo a un evento puntual (pasó algo → se dispara). Esto es declarativo sobre un estado: se define *quién debe estar* en el workflow y el motor mete y saca leads a medida que la realidad cambia. Un lead creado hace tres meses que hoy empieza a cumplir el criterio, **entra hoy**, sin que nadie lo toque.
+
+### Los guardarraíles se escribieron ANTES que el motor
+`Services\Workflows\Guardrails` vive en clase propia y ninguno de sus topes se puede desactivar desde la configuración de un workflow: son del sistema, no del usuario. Hay dos formas de que esto se dispare solo, y las dos terminan en WhatsApp a personas reales y factura de Meta:
+
+- **El bucle** — un paso `change_stage` con disparador `stage_changed` se llama a sí mismo → tope de 50 pasos por inscripción, la corrida queda `failed` con el motivo.
+- **El barredor** — un filtro sin re-inscripción bien configurada reinscribe al mismo lead **cada 10 minutos** → sin re-inscripción no se reinscribe nunca, y con ella rige un enfriamiento mínimo del sistema (60 min) aunque se configure menos.
+
+Además: índice único `(workflow_id, lead_id)` **en la base**; tope de 200 inscripciones por pasada (activar un filtro que matchea 4.000 leads no puede disparar 4.000 secuencias de golpe); tope de **3 salientes por lead y por día cruzando todos los workflows** (al cliente no le importa cuántas automatizaciones tenga la empresa); idempotencia por `enrollment:enroll_count:step`; y kill switch por cuenta (`accounts.workflows_paused_at`) que para todo sin deploy.
+
+### Decisiones de esquema
+- **`branch_key` es string, no booleano**: HubSpot ramifica por valor, y un booleano obligaría a rehacer la tabla en la primera rama de tres salidas.
+- **La re-inscripción REUSA la fila** en vez de crear otra. Así el índice único vale siempre, sin índices parciales (que MariaDB no tiene); el historial vive en `workflow_step_runs` discriminado por `enroll_count`.
+- **`workflow_step_runs` es la traza**: hoy un fallo de automatización de etapa solo deja un `Log::warning` que nadie lee, y la pantalla muestra «Activa» sin que haya pasado nada.
+
+### Comportamiento que importa
+- **La meta se revisa antes de cada paso**, no solo en el barrido: si el lead se ganó mientras esperaba, no recibe el resto de la secuencia. Sin esto, quien ya compró sigue recibiendo «¿seguís interesado?» — la forma más rápida de que un equipo apague las automatizaciones para siempre.
+- **Un paso que falla no mata la inscripción.** Que no se pueda mandar el WhatsApp por falta de teléfono no es razón para no crear después la tarea de seguimiento.
+- **`send_whatsapp` fuera de la ventana de servicio no manda callado**: o crea una tarea (`outside_window: 'task'`) o falla. Un workflow no decide gastar por su cuenta.
+- **Las esperas respetan la ventana de ejecución del workflow**: una espera que vence 3 AM se corre a la próxima apertura. Un seguimiento automático que sale 3:40 AM se lee como spam de robot.
+- Las **ramas se evalúan con `SegmentQuery`**, el mismo motor que la inscripción: un criterio significa lo mismo en los dos lugares.
+
+### Tres bugs que encontraron los tests, no la lectura
+- **⚠️ Faltaba la relación `step()` en `WorkflowPendingExecution`.** `$pending->step` devolvía `null` **en silencio**, el motor daba la espera por inválida y **toda secuencia se cortaba después del primer `wait`**. El síntoma no apunta a la causa: parece que el paso siguiente «no hace nada».
+- **⚠️ `$config['clave'] ?: $default` revienta cuando la clave no existe**: Laravel convierte el warning en excepción y el paso falla por un campo que era opcional a propósito. Va `($config['clave'] ?? null) ?: $default`.
+- **`random_int` para teléfonos en tests colisiona** contra el único `(cuenta, teléfono)` de `contacts` cuando el test crea cientos de leads — el peor tipo de test, el que falla de a ratos. Secuencial.
+
+**Comandos:** `workflows:sweep` cada 10 min (inscribe, cierra metas, desinscribe) y `workflows:tick` cada minuto (retoma esperas vencidas), ambos `withoutOverlapping`.
+
+Tests: `WorkflowEngineTest` (18, los primeros 9 son guardarraíles). Suite **321/321 (1000 aserciones)**.
+
 ## T4 — Segmentación dinámica (2026-08-08)
 
 Cuarta tarea de `mejoras2.md`. **Un segmento deja de ser una lista y pasa a ser una pregunta**: se guarda la condición y se contesta cada vez que se usa, así que un lead que ayer no calificaba y hoy sí, entra solo. Lo que sigue congelándose es el envío — `broadcast_recipients` es una foto del momento, porque quién recibió qué es un hecho histórico, no una consulta.
