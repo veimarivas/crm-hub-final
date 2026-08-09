@@ -2,6 +2,30 @@
 
 CRM de ventas centrado en **leads** inspirado en Kommo (kommo.com), hermano del **wacrm** (`C:\xampp_82_12\htdocs\laravel_crm_whatsapp`, CRM de WhatsApp). Son **dos proyectos separados integrados por API**: este maneja leads/tareas/pipeline; el wacrm es el motor de WhatsApp.
 
+## T0 — Un solo traductor de filtros de leads (2026-08-08)
+
+Primera tarea de `mejoras2.md`. Prerequisito de la segmentación dinámica, pero **arregla un bug que ya estaba en producción**.
+
+**El bug:** la misma cadena de filtros estaba escrita tres veces (`LeadController@index`, `LeadController@export`, `BroadcastController@recipientPhones`) y ya había divergido:
+
+| Criterio | `/leads` | CSV | Broadcasts |
+|---|---|---|---|
+| `stage_id` | ✅ | ✅ | ❌ |
+| `tags[]` (varias) | ❌ (solo `tag`) | ❌ | ✅ |
+| `include_closed` | — | — | ✅ |
+| `q` busca en | título, contacto, teléfono, normalizado | título, contacto, teléfono | título, contacto |
+
+Como `saved_segments.filters` guarda ese mismo JSON, **una lista guardada desde `/leads` con filtro de etapa se ignoraba en silencio al usarla en un envío**: se veían 12 leads en pantalla y el mensaje salía a 300. El test `test_el_mismo_segmento_selecciona_los_mismos_leads_en_leads_y_en_broadcasts` fija exactamente eso.
+
+- **`Services\Leads\LeadFilter`**: único lugar donde un filtro se traduce a consulta. `LeadFilter::KEYS` es el contrato; **una clave desconocida lanza `InvalidArgumentException`**, no se ignora — ignorar en silencio es cómo se produjo la divergencia.
+- **El scope de rol vive en la clase**, no en cada llamador: un corte que hay que acordarse de repetir es un corte que algún día se olvida. De paso arregla `export`, que pasaba `responsible` crudo (un agent con `?responsible=<otro>` obtenía CSV vacío en vez de los suyos).
+- **`normalize()`** unifica `tag`/`tags`, castea `no_task` (llega como `0|1` desde los segmentos y como string desde la URL) y descarta vacíos. `SavedSegmentController@store` **guarda ya normalizado**: la forma degradada del JSON no vuelve a entrar a la base.
+- **Diferencias deliberadas que se conservaron**, ahora explícitas en el parámetro `openOnly`: el tablero muestra ganados y perdidos a propósito; el envío masivo excluye cerrados salvo `include_closed`, porque escribirle a un lead cerrado es un error caro. Hay un test por cada lado.
+- **⚠️ Trampa**: `$pipeline->leads()` devuelve una **relación**, no un `Builder`. El type hint estricto `Builder $query` reventaba `/leads` con un `TypeError` que en test aparece como *«The response is not a view»*. La firma acepta `Builder|Relation`.
+- Filtros inválidos desde el cliente son **422 con el motivo**, no 500: `/broadcasts/preview` lo llama en cada tecleo.
+
+Tests: `LeadFilterTest` (11). Suite **247/247 (821 aserciones)**.
+
 ## Ronda de analítica — reportes legibles y analizables (2026-08-07/08)
 
 Ejecución de `mejoras.md` (raíz del repo). Objetivo: que `/reports` deje de ser tablas y barras sueltas y pase a ser un dashboard analítico. **Ronda gemela**: el wacrm hizo la suya en paralelo con su propio `mejoras.md` (ver `CLAUDE_crm_whatsapp.md`, sección equivalente). Sin migraciones; todo sale de `leads`, `lead_events`, `tasks`. Suite **236/236 (800 aserciones)**.

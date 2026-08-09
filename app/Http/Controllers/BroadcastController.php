@@ -10,6 +10,7 @@ use App\Models\Lead;
 use App\Models\SavedSegment;
 use App\Models\Tag;
 use App\Models\User;
+use App\Services\Leads\LeadFilter;
 use App\Services\WhatsApp\MessagingCost;
 use App\Services\WhatsApp\ServiceWindow;
 use Illuminate\Http\RedirectResponse;
@@ -85,10 +86,15 @@ class BroadcastController extends Controller
      */
     public function preview(Request $request)
     {
-        $accountId = $request->user()->account_id;
         $filters = $request->input('filters', []);
 
-        $recipients = $this->recipientPhones($request, $filters);
+        // Filtros inválidos son un 422 con el motivo, no un 500: esto lo llama
+        // el front en cada tecleo de la pantalla de armado.
+        try {
+            $recipients = $this->recipientPhones($request, $filters);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
 
         $inWindow = array_values(array_filter($recipients, fn ($r) => $r->window['is_open']));
         $outOfWindow = array_values(array_filter($recipients, fn ($r) => ! $r->window['is_open']));
@@ -127,7 +133,12 @@ class BroadcastController extends Controller
         ]);
 
         $accountId = $request->user()->account_id;
-        $recipients = $this->recipientPhones($request, $validated['filters'] ?? []);
+
+        try {
+            $recipients = $this->recipientPhones($request, $validated['filters'] ?? []);
+        } catch (\InvalidArgumentException $e) {
+            throw ValidationException::withMessages(['filters' => $e->getMessage()]);
+        }
 
         // La seleccion de la pantalla manda: los filtros arman la lista, pero
         // quien recibe lo decide la persona destildando a mano. Se intersecta
@@ -241,40 +252,23 @@ class BroadcastController extends Controller
     private function recipientPhones(Request $request, array $filters): array
     {
         $user = $request->user();
-        $isAdmin = $user->hasRoleAtLeast(User::ROLE_ADMIN);
 
-        // `tags` (varias, OR) reemplaza a `tag` (una). Se sigue aceptando la
-        // vieja porque las listas guardadas la traen adentro.
-        $tagIds = array_filter((array) ($filters['tags'] ?? array_filter([$filters['tag'] ?? null])));
-
+        // El corte del agente y la traducción de los filtros viven en
+        // `LeadFilter`, compartido con `/leads` y su CSV: una lista guardada
+        // tiene que seleccionar exactamente los mismos leads acá que allá.
+        //
+        // Va acá y no en la pantalla porque este método alimenta TANTO la vista
+        // previa como el envío — filtrar solo en el front dejaría el `store`
+        // abierto a mandar un lead_id ajeno.
         $query = Lead::forAccount($user->account_id)
-            // El corte del agente: solo su cartera. Va acá y no en la pantalla
-            // porque este método alimenta TANTO la vista previa como el envío
-            // — filtrar solo en el front dejaría el `store` abierto a mandar
-            // un lead_id ajeno.
-            ->when(! $isAdmin, fn ($q) => $q->where('responsible_user_id', $user->id))
             ->whereHas('contact', fn ($q) => $q->whereNotNull('phone_normalized'))
-            ->with(['contact:id,name,phone_normalized', 'tags:id,name,color'])
-            ->when($filters['responsible'] ?? null, fn ($q, $v) => $isAdmin
-                ? ($v === 'none' ? $q->whereNull('responsible_user_id') : $q->where('responsible_user_id', $v))
-                : $q)
-            ->when($filters['source'] ?? null, fn ($q, $v) => $q->where('source', $v))
-            ->when($tagIds, fn ($q, $ids) => $q->whereHas('tags', fn ($tq) => $tq->whereIn('tags.id', $ids)))
-            ->when(! empty($filters['no_task']), fn ($q) => $q->whereDoesntHave('tasks', fn ($t) => $t->whereNull('completed_at')))
-            ->when(! empty($filters['q']), function ($q) use ($filters) {
-                $t = $filters['q'];
-                $q->where(function ($qq) use ($t) {
-                    $qq->where('title', 'like', "%{$t}%")
-                        ->orWhereHas('contact', fn ($cq) => $cq->where('name', 'like', "%{$t}%"));
-                });
-            });
+            ->with(['contact:id,name,phone_normalized', 'tags:id,name,color']);
 
-        // Solo leads abiertos por default
-        if (! isset($filters['include_closed']) || ! $filters['include_closed']) {
-            $query->where('status', 'open');
-        }
-
-        $leads = $query->get(['id', 'contact_id', 'responsible_user_id', 'title', 'source_ref', 'created_at']);
+        // `openOnly`: escribirle a un lead ya cerrado es un error caro, así que
+        // los cerrados quedan afuera salvo que los filtros lo pidan explícito.
+        $leads = LeadFilter::for($user)
+            ->apply($query, $filters, openOnly: true)
+            ->get(['id', 'contact_id', 'responsible_user_id', 'title', 'source_ref', 'created_at']);
 
         // Ventana de servicio de todos de una: dice a quien se le puede
         // escribir gratis y a quien no. Dos queries para la lista entera.

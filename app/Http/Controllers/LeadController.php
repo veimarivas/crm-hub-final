@@ -15,6 +15,7 @@ use App\Models\PipelineStage;
 use App\Models\SavedSegment;
 use App\Models\Tag;
 use App\Models\User;
+use App\Services\Leads\LeadFilter;
 use App\Services\Wacrm\Client;
 use App\Services\WhatsApp\ServiceWindow;
 use Illuminate\Http\JsonResponse;
@@ -40,13 +41,9 @@ class LeadController extends Controller
         $user = $request->user();
         $isAdmin = $user->hasRoleAtLeast(User::ROLE_ADMIN);
 
-        // Filtros (persisten via query string).
-        //
-        // El filtro por responsable es del admin: elige a cualquier asesor o
-        // los ve a todos juntos. Para un agente no aplica —ya solo ve los
-        // suyos— y dejarlo pasar significaba que un ?responsible=<otro> le
-        // devolviera una lista vacia, que se lee como "no hay leads" y no
-        // como "eso no es tuyo".
+        // Filtros (persisten via query string). El scope de rol y la traducción
+        // a consulta viven en `LeadFilter`: el listado, el CSV y los broadcasts
+        // tienen que entender exactamente lo mismo por «los del MBA sin tarea».
         $filters = [
             'responsible' => $isAdmin ? $request->query('responsible') : null,
             'tag' => $request->query('tag'),
@@ -58,23 +55,12 @@ class LeadController extends Controller
 
         $query = $selected?->leads()
             ->with(['contact:id,name,phone,phone_normalized', 'responsible:id,name', 'tags'])
-            ->withCount(['tasks as pending_tasks_count' => fn ($q) => $q->whereNull('completed_at')])
-            ->when(! $isAdmin, fn ($q) => $q->where('responsible_user_id', $user->id))
-            ->when($filters['responsible'], fn ($q, $v) => $v === 'none' ? $q->whereNull('responsible_user_id') : $q->where('responsible_user_id', $v))
-            ->when($filters['source'], fn ($q, $v) => $q->where('source', $v))
-            ->when($filters['stage_id'], fn ($q, $v) => $q->where('stage_id', $v))
-            ->when($filters['no_task'], fn ($q) => $q->whereDoesntHave('tasks', fn ($t) => $t->whereNull('completed_at')))
-            ->when($filters['tag'], fn ($q, $tagId) => $q->whereHas('tags', fn ($tq) => $tq->where('tags.id', $tagId)))
-            ->when($filters['q'] !== '', function ($q) use ($filters) {
-                $t = $filters['q'];
-                $q->where(function ($qq) use ($t) {
-                    $qq->where('title', 'like', "%{$t}%")
-                        ->orWhereHas('contact', fn ($cq) => $cq->where('name', 'like', "%{$t}%")->orWhere('phone', 'like', "%{$t}%")->orWhere('phone_normalized', 'like', "%{$t}%"));
-                });
-            })
-            ->orderByDesc('created_at');
+            ->withCount(['tasks as pending_tasks_count' => fn ($q) => $q->whereNull('completed_at')]);
 
-        $leads = $query ? $query->get() : collect();
+        // El tablero muestra ganados y perdidos a propósito: `openOnly` en false.
+        $leads = $query
+            ? LeadFilter::for($user)->apply($query, $filters)->orderByDesc('created_at')->get()
+            : collect();
 
         // Enriquecimiento SLA: ultimo mensaje entrante y minutos de espera
         $enrichedLeads = $this->enrichLeadsWithSla($leads);
@@ -199,13 +185,14 @@ class LeadController extends Controller
     {
         $accountId = $request->user()->account_id;
         $user = $request->user();
-        $isAdmin = $user->hasRoleAtLeast(User::ROLE_ADMIN);
 
         $pipelines = Pipeline::forAccount($accountId)->get();
         $selected = $pipelines->firstWhere('id', $request->query('pipeline'))
             ?? $pipelines->firstWhere('is_default', true)
             ?? $pipelines->first();
 
+        // `responsible` ya no se pasa crudo: `LeadFilter` lo descarta para un
+        // agente en vez de combinarlo con el corte de rol y devolver vacío.
         $filters = [
             'responsible' => $request->query('responsible'),
             'tag' => $request->query('tag'),
@@ -217,7 +204,7 @@ class LeadController extends Controller
 
         $filename = 'leads_'.now()->format('Ymd_His').'.csv';
 
-        return response()->streamDownload(function () use ($selected, $isAdmin, $user, $filters) {
+        return response()->streamDownload(function () use ($selected, $user, $filters) {
             $out = fopen('php://output', 'w');
             // BOM UTF-8 para que Excel abra bien acentos y emojis
             fwrite($out, "\xEF\xBB\xBF");
@@ -229,45 +216,36 @@ class LeadController extends Controller
                 'Creado', 'Cerrado',
             ]);
 
-            $selected?->leads()
-                ->with(['contact:id,name,phone,email', 'company:id,name', 'stage:id,name,stage_type', 'responsible:id,name', 'tags:id,name'])
-                ->when(! $isAdmin, fn ($q) => $q->where('responsible_user_id', $user->id))
-                ->when($filters['responsible'], fn ($q, $v) => $v === 'none' ? $q->whereNull('responsible_user_id') : $q->where('responsible_user_id', $v))
-                ->when($filters['source'], fn ($q, $v) => $q->where('source', $v))
-                ->when($filters['stage_id'], fn ($q, $v) => $q->where('stage_id', $v))
-                ->when($filters['no_task'], fn ($q) => $q->whereDoesntHave('tasks', fn ($t) => $t->whereNull('completed_at')))
-                ->when($filters['tag'], fn ($q, $tagId) => $q->whereHas('tags', fn ($tq) => $tq->where('tags.id', $tagId)))
-                ->when($filters['q'] !== '', function ($q) use ($filters) {
-                    $t = $filters['q'];
-                    $q->where(function ($qq) use ($t) {
-                        $qq->where('title', 'like', "%{$t}%")
-                            ->orWhereHas('contact', fn ($cq) => $cq->where('name', 'like', "%{$t}%")->orWhere('phone', 'like', "%{$t}%"));
+            $base = $selected?->leads()
+                ->with(['contact:id,name,phone,email', 'company:id,name', 'stage:id,name,stage_type', 'responsible:id,name', 'tags:id,name']);
+
+            if ($base) {
+                LeadFilter::for($user)->apply($base, $filters)
+                    ->orderByDesc('created_at')
+                    ->chunk(500, function ($chunk) use ($out) {
+                        foreach ($chunk as $lead) {
+                            fputcsv($out, [
+                                $lead->id,
+                                $lead->title,
+                                $lead->contact?->name ?? '',
+                                $lead->contact?->phone ?? '',
+                                $lead->contact?->email ?? '',
+                                $lead->company?->name ?? '',
+                                $lead->stage?->name ?? '',
+                                $lead->status,
+                                $lead->value,
+                                $lead->currency,
+                                $lead->source,
+                                $lead->utm_source ?? '',
+                                $lead->utm_campaign ?? '',
+                                $lead->responsible?->name ?? '',
+                                $lead->tags->pluck('name')->join(', '),
+                                $lead->created_at?->toDateTimeString(),
+                                $lead->closed_at?->toDateTimeString() ?? '',
+                            ]);
+                        }
                     });
-                })
-                ->orderByDesc('created_at')
-                ->chunk(500, function ($chunk) use ($out) {
-                    foreach ($chunk as $lead) {
-                        fputcsv($out, [
-                            $lead->id,
-                            $lead->title,
-                            $lead->contact?->name ?? '',
-                            $lead->contact?->phone ?? '',
-                            $lead->contact?->email ?? '',
-                            $lead->company?->name ?? '',
-                            $lead->stage?->name ?? '',
-                            $lead->status,
-                            $lead->value,
-                            $lead->currency,
-                            $lead->source,
-                            $lead->utm_source ?? '',
-                            $lead->utm_campaign ?? '',
-                            $lead->responsible?->name ?? '',
-                            $lead->tags->pluck('name')->join(', '),
-                            $lead->created_at?->toDateTimeString(),
-                            $lead->closed_at?->toDateTimeString() ?? '',
-                        ]);
-                    }
-                });
+            }
 
             fclose($out);
         }, $filename, [
