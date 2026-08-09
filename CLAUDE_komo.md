@@ -2,6 +2,25 @@
 
 CRM de ventas centrado en **leads** inspirado en Kommo (kommo.com), hermano del **wacrm** (`C:\xampp_82_12\htdocs\laravel_crm_whatsapp`, CRM de WhatsApp). Son **dos proyectos separados integrados por API**: este maneja leads/tareas/pipeline; el wacrm es el motor de WhatsApp.
 
+## T7 — Calendario de tareas: arrastrar, filtrar y zona horaria (2026-08-08)
+
+Primera de la ronda `7.b` de `mejoras2.md`. **El calendario mensual ya existía** (`/tasks?view=calendar`); lo que faltaba era poder *usarlo*: reprogramar, filtrar y que los días fueran los correctos.
+
+### La zona horaria era un bug real, no un preparativo
+El día de cada tarea lo calculaba el **navegador** a partir de `due_at`. Con `business_hours_timezone = America/La_Paz` y un servidor en UTC, una tarea de las **23:30 aparecía en el día siguiente**. Ahora el servidor manda `due_date` y `due_time` ya resueltos en la zona de la cuenta, y el cliente agrupa por ese string. También `today` viaja desde el servidor: el «hoy» y las vencidas se marcaban contra el reloj del navegador.
+
+**⚠️ Y la trampa que costó el doble desfase:** `Carbon::createFromFormat(..., $tz)` da el instante correcto, pero **Eloquent serializa el Carbon en la zona que trae el objeto, sin convertir**. Guardar uno en `America/La_Paz` mete «10:00» literal en una columna que se lee como UTC, y la tarea queda 4 h antes de lo pedido. Hace falta `->setTimezone(config('app.timezone'))` antes de guardar. Los tests lo fijan con una cuenta en UTC-4.
+
+### Lo nuevo
+- **`PATCH /tasks/{task}/reschedule`** + arrastrar la tarea a otro día (`@dnd-kit`, ya instalado en T2). **Conserva la hora** salvo que se mande otra: mover «llamar a Ana a las 10:00» del martes al jueves no puede convertirla en una tarea de medianoche.
+- **Queda en el timeline del lead** (`task_rescheduled`): una tarea que se corre tres veces cuenta una historia, y esa historia se pierde si reprogramar es silencioso. Además limpia `overdue_notified_at`, si no la tarea vence de nuevo y nadie se entera.
+- **Filtro por tipo de tarea** y, para el admin viendo al equipo, **por responsable**. El corte de rol sigue en el servidor: un `?mine=0` a mano no le abre la agenda del equipo a un agente.
+- **Días no laborables atenuados**, derivados del horario que ya se configura en `/settings/business-hours` — no hace falta un ajuste nuevo. Mover una tarea a un domingo suele ser un error de arrastre.
+
+**No incluido:** las vistas de **semana y día** con grilla de horas que pedía el plan. El mes + el panel lateral del día ya cubren la lectura diaria, y una grilla horaria es trabajo aparte; queda para cuando se pida.
+
+Tests: `TaskCalendarTest` (13). Suite **362/362 (1093 aserciones)**.
+
 ## T5 — Feedback de la IA, lado Komo (2026-08-08)
 
 Última tarea de `mejoras2.md`. **Cross-repo**: la mitad del wacrm (endpoint + cola de revisión) va en `ae56439` de ese repo y tiene que desplegarse **primero** — Komo tolera su ausencia, al revés no.

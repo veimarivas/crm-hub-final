@@ -5,6 +5,7 @@ import SnoozeButton from '@/Components/SnoozeButton';
 import { showUndo } from '@/Components/UndoToast';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
+import { DndContext, PointerSensor, closestCenter, useDraggable, useDroppable, useSensor, useSensors } from '@dnd-kit/core';
 
 const TYPE_META = {
     call: { icon: '📞', label: 'Llamada', color: 'bg-blue-100 text-blue-700 border-blue-200' },
@@ -91,30 +92,64 @@ function NewTaskModal({ open, onClose, members, defaultDate }) {
     );
 }
 
-function TaskDot({ task, onClick }) {
+/**
+ * Una tarea en la grilla. Arrastrable para reprogramarla.
+ *
+ * La hora que muestra es `due_time`, calculada por el servidor en la zona de
+ * la cuenta: formatearla en el navegador hacía que la misma tarea apareciera a
+ * otra hora según dónde estuviera abierto el CRM.
+ */
+function TaskDot({ task, onClick, overdue }) {
     const meta = TYPE_META[task.task_type] ?? TYPE_META.other;
-    const overdue = !task.completed_at && new Date(task.due_at) < new Date();
     const done = !!task.completed_at;
     const cls = done ? 'bg-emerald-500 text-white' : overdue ? 'bg-red-500 text-white' : meta.color;
 
+    const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+        id: task.id,
+        // Completar una tarea ya cumplida no se reprograma.
+        disabled: done,
+    });
+
     return (
         <button
+            ref={setNodeRef}
             type="button"
             onClick={onClick}
             title={task.text}
-            className={`w-full text-left px-1.5 py-0.5 rounded text-[10px] font-semibold border truncate transition-all hover:brightness-95 ${cls}`}
+            {...attributes}
+            {...listeners}
+            className={`w-full text-left px-1.5 py-0.5 rounded text-[10px] font-semibold border truncate transition-all hover:brightness-95 ${cls} ${
+                isDragging ? 'opacity-40' : ''
+            } ${done ? '' : 'cursor-grab active:cursor-grabbing'}`}
         >
             <span className="mr-0.5">{meta.icon}</span>
-            {new Date(task.due_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })} · {task.text}
+            {task.due_time ?? ''} · {task.text}
         </button>
     );
 }
 
-function CalendarView({ calendar, onDayClick, onTaskClick, activeDay }) {
+/** Celda de un día: recibe tareas arrastradas. */
+function DayCell({ dayKey, children, className, onClick }) {
+    const { setNodeRef, isOver } = useDroppable({ id: dayKey });
+
+    return (
+        <div
+            ref={setNodeRef}
+            onClick={onClick}
+            className={`${className} ${isOver ? 'ring-2 ring-[#045474] ring-inset bg-[#045474]/5' : ''}`}
+        >
+            {children}
+        </div>
+    );
+}
+
+function CalendarView({ calendar, onDayClick, onTaskClick, onReschedule, activeDay }) {
     const from = new Date(calendar.from);
     const to = new Date(calendar.to);
     const anchor = new Date(calendar.anchor + '-01');
-    const today = new Date();
+    const workingDays = calendar.workingDays ?? [1, 2, 3, 4, 5, 6, 7];
+
+    const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
     // Generar todos los días entre from y to
     const days = useMemo(() => {
@@ -127,60 +162,84 @@ function CalendarView({ calendar, onDayClick, onTaskClick, activeDay }) {
         return list;
     }, [calendar.from, calendar.to]);
 
-    // Agrupar tareas por yyyy-mm-dd
+    // Agrupar por el día que calculó el servidor en la zona de la cuenta:
+    // agruparlo acá ponía una tarea de las 23:30 en el día equivocado.
     const tasksByDay = useMemo(() => {
         const map = {};
         (calendar.tasks || []).forEach((t) => {
-            const k = ymd(new Date(t.due_at));
+            const k = t.due_date ?? ymd(new Date(t.due_at));
             (map[k] = map[k] || []).push(t);
         });
         return map;
     }, [calendar.tasks]);
 
-    return (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            {/* Header de días de la semana */}
-            <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50/60">
-                {WEEKDAYS.map((d) => (
-                    <div key={d} className="px-2 py-2 text-[11px] font-bold uppercase tracking-wider text-gray-500 text-center">{d}</div>
-                ))}
-            </div>
-            {/* Grid de días */}
-            <div className="grid grid-cols-7 auto-rows-fr">
-                {days.map((d) => {
-                    const key = ymd(d);
-                    const dayTasks = tasksByDay[key] || [];
-                    const inMonth = d.getMonth() === anchor.getMonth();
-                    const isToday = sameDate(d, today);
-                    const isActive = activeDay && sameDate(d, activeDay);
-                    const overdue = dayTasks.filter((t) => !t.completed_at && new Date(t.due_at) < new Date()).length;
+    const onDragEnd = ({ active, over }) => {
+        if (!over) return;
+        const task = (calendar.tasks || []).find((t) => t.id === active.id);
+        if (!task || task.due_date === over.id) return;
+        onReschedule(task, over.id);
+    };
 
-                    return (
-                        <button
-                            key={key}
-                            type="button"
-                            onClick={() => onDayClick(d)}
-                            className={`min-h-[96px] p-1.5 border-r border-b border-gray-50 text-left flex flex-col gap-1 transition-colors ${!inMonth ? 'bg-gray-50/50' : 'bg-white hover:bg-emerald-50/40'} ${isActive ? 'ring-2 ring-emerald-500 ring-inset bg-emerald-50/60' : ''}`}
-                        >
-                            <div className="flex items-center justify-between">
-                                <span className={`text-xs font-bold tabular-nums w-6 h-6 rounded-full flex items-center justify-center ${isToday ? 'bg-[#045474] text-white' : inMonth ? 'text-gray-800' : 'text-gray-400'}`}>
-                                    {d.getDate()}
-                                </span>
-                                {overdue > 0 && (
-                                    <span className="text-[9px] font-bold px-1 py-0 rounded-full bg-red-500 text-white">{overdue}</span>
-                                )}
-                            </div>
-                            <div className="flex flex-col gap-0.5 overflow-hidden">
-                                {dayTasks.slice(0, 3).map((t) => <TaskDot key={t.id} task={t} onClick={(e) => { e.stopPropagation(); onTaskClick(t); }} />)}
-                                {dayTasks.length > 3 && (
-                                    <span className="text-[9px] text-gray-500 font-semibold px-1">+{dayTasks.length - 3} más</span>
-                                )}
-                            </div>
-                        </button>
-                    );
-                })}
+    return (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                {/* Header de días de la semana */}
+                <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50/60">
+                    {WEEKDAYS.map((d) => (
+                        <div key={d} className="px-2 py-2 text-[11px] font-bold uppercase tracking-wider text-gray-500 text-center">{d}</div>
+                    ))}
+                </div>
+                {/* Grid de días */}
+                <div className="grid grid-cols-7 auto-rows-fr">
+                    {days.map((d) => {
+                        const key = ymd(d);
+                        const dayTasks = tasksByDay[key] || [];
+                        const inMonth = d.getMonth() === anchor.getMonth();
+                        const isToday = key === calendar.today;
+                        const isActive = activeDay && sameDate(d, activeDay);
+                        // Vencidas: comparar contra el día de hoy del servidor,
+                        // no contra el reloj del navegador.
+                        const overdueTasks = dayTasks.filter((t) => !t.completed_at && (t.due_date ?? '') < (calendar.today ?? ''));
+                        // Día no laborable según el horario de la cuenta: mover
+                        // una tarea a un domingo suele ser un error de arrastre.
+                        const isWorkday = workingDays.includes(d.getDay() === 0 ? 7 : d.getDay());
+
+                        return (
+                            <DayCell
+                                key={key}
+                                dayKey={key}
+                                onClick={() => onDayClick(d)}
+                                className={`min-h-[96px] p-1.5 border-r border-b border-gray-50 text-left flex flex-col gap-1 transition-colors cursor-pointer ${
+                                    !inMonth ? 'bg-gray-50/50' : isWorkday ? 'bg-white hover:bg-emerald-50/40' : 'bg-gray-50/70 hover:bg-gray-100/70'
+                                } ${isActive ? 'ring-2 ring-emerald-500 ring-inset bg-emerald-50/60' : ''}`}
+                            >
+                                <div className="flex items-center justify-between">
+                                    <span className={`text-xs font-bold tabular-nums w-6 h-6 rounded-full flex items-center justify-center ${isToday ? 'bg-[#045474] text-white' : inMonth ? 'text-gray-800' : 'text-gray-400'}`}>
+                                        {d.getDate()}
+                                    </span>
+                                    {overdueTasks.length > 0 && (
+                                        <span className="text-[9px] font-bold px-1 py-0 rounded-full bg-red-500 text-white">{overdueTasks.length}</span>
+                                    )}
+                                </div>
+                                <div className="flex flex-col gap-0.5 overflow-hidden">
+                                    {dayTasks.slice(0, 3).map((t) => (
+                                        <TaskDot
+                                            key={t.id}
+                                            task={t}
+                                            overdue={!t.completed_at && (t.due_date ?? '') < (calendar.today ?? '')}
+                                            onClick={(e) => { e.stopPropagation(); onTaskClick(t); }}
+                                        />
+                                    ))}
+                                    {dayTasks.length > 3 && (
+                                        <span className="text-[9px] text-gray-500 font-semibold px-1">+{dayTasks.length - 3} más</span>
+                                    )}
+                                </div>
+                            </DayCell>
+                        );
+                    })}
+                </div>
             </div>
-        </div>
+        </DndContext>
     );
 }
 
@@ -342,6 +401,19 @@ export default function Index({ view = 'calendar', calendar, tasks, filters, cou
         setShowNew(true);
     };
 
+    /**
+     * Arrastrar una tarea a otro día.
+     *
+     * Solo se manda la fecha: el servidor conserva la hora original, porque
+     * mover «llamar a Ana a las 10:00» del martes al jueves no debería
+     * convertirla en una tarea de medianoche.
+     */
+    const reschedule = (task, date) => router.patch(
+        route('tasks.reschedule', task.id),
+        { date },
+        { preserveScroll: true, preserveState: false },
+    );
+
     const anchor = calendar ? new Date(calendar.anchor + '-01') : new Date();
     const monthLabel = `${MONTHS[anchor.getMonth()]} ${anchor.getFullYear()}`;
 
@@ -372,6 +444,28 @@ export default function Index({ view = 'calendar', calendar, tasks, filters, cou
                                 />
                                 Solo mías
                             </label>
+                        )}
+
+                        <select
+                            value={filters.type ?? ''}
+                            onChange={(e) => apply({ type: e.target.value })}
+                            className="text-sm border-gray-200 rounded-xl py-1.5 focus:ring-[#045474] focus:border-[#045474]"
+                        >
+                            <option value="">Todos los tipos</option>
+                            {Object.entries(TYPE_META).map(([k, v]) => <option key={k} value={k}>{v.icon} {v.label}</option>)}
+                        </select>
+
+                        {/* Filtrar por responsable solo tiene sentido mirando al
+                            equipo: con «solo mías» no hay nada que elegir. */}
+                        {isAdmin && !filters.mine && (
+                            <select
+                                value={filters.responsible ?? ''}
+                                onChange={(e) => apply({ responsible: e.target.value })}
+                                className="text-sm border-gray-200 rounded-xl py-1.5 focus:ring-[#045474] focus:border-[#045474]"
+                            >
+                                <option value="">Todo el equipo</option>
+                                {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                            </select>
                         )}
                         {/* Toggle vista */}
                         <div className="inline-flex bg-white border border-gray-200 rounded-xl shadow-sm p-0.5">
@@ -417,6 +511,7 @@ export default function Index({ view = 'calendar', calendar, tasks, filters, cou
                                     calendar={calendar}
                                     onDayClick={(d) => setActiveDay(d)}
                                     onTaskClick={(t) => setActiveDay(new Date(t.due_at))}
+                                    onReschedule={reschedule}
                                     activeDay={activeDay}
                                 />
                                 {/* Leyenda */}

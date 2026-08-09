@@ -93,6 +93,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/tasks/{task}/complete', [\App\Http\Controllers\TaskController::class, 'complete'])->name('tasks.complete');
     Route::post('/tasks/{task}/uncomplete', [\App\Http\Controllers\TaskController::class, 'uncomplete'])->name('tasks.uncomplete');
     Route::post('/tasks/{task}/snooze', [\App\Http\Controllers\TaskController::class, 'snooze'])->name('tasks.snooze');
+    // Arrastrar una tarea a otro día del calendario.
+    Route::patch('/tasks/{task}/reschedule', [\App\Http\Controllers\TaskController::class, 'reschedule'])->name('tasks.reschedule');
     Route::delete('/tasks/{task}', [\App\Http\Controllers\TaskController::class, 'destroy'])->name('tasks.destroy');
 
     // Contactos y empresas

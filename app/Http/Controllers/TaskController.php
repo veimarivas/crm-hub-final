@@ -28,6 +28,15 @@ class TaskController extends Controller
 
         $baseScope = fn ($q) => $mine ? $q->where('assigned_to', $userId) : $q;
 
+        // Filtros del calendario. `responsible` solo lo aplica el admin y solo
+        // tiene sentido cuando mira al equipo entero.
+        $type = $request->query('type');
+        $responsible = $isAdmin && ! $mine ? $request->query('responsible') : null;
+
+        $extraFilters = fn ($q) => $q
+            ->when($type, fn ($qq, $v) => $qq->where('task_type', $v))
+            ->when($responsible, fn ($qq, $v) => $qq->where('assigned_to', $v));
+
         if ($view === 'calendar') {
             // Rango del mes visible (incluye dias de semanas parciales anteriores/posteriores)
             $month = $request->query('month'); // YYYY-MM
@@ -35,12 +44,25 @@ class TaskController extends Controller
             $from = $anchor->copy()->startOfMonth()->startOfWeek(Carbon::MONDAY);
             $to = $anchor->copy()->endOfMonth()->endOfWeek(Carbon::SUNDAY);
 
+            $tz = $request->user()->account->business_hours_timezone ?: config('app.timezone');
+
             $rangeTasks = Task::forAccount($accountId)
                 ->with(['lead:id,title', 'contact:id,name', 'assignee:id,name'])
                 ->when($mine, fn ($q) => $q->where('assigned_to', $userId))
+                ->tap($extraFilters)
                 ->whereBetween('due_at', [$from, $to])
                 ->orderBy('due_at')
-                ->get();
+                ->get()
+                ->map(function (Task $task) use ($tz) {
+                    // El día al que pertenece la tarea se calcula EN EL SERVIDOR,
+                    // en la zona de la cuenta. Agruparlo en el navegador ponía
+                    // una tarea de las 23:30 en el día siguiente (o anterior)
+                    // según dónde estuviera abierto el CRM.
+                    $local = $task->due_at->copy()->setTimezone($tz);
+
+                    return $task->setAttribute('due_date', $local->format('Y-m-d'))
+                        ->setAttribute('due_time', $local->format('H:i'));
+                });
 
             return Inertia::render('Tasks/Index', [
                 'view' => 'calendar',
@@ -49,8 +71,13 @@ class TaskController extends Controller
                     'from' => $from->toIso8601String(),
                     'to' => $to->toIso8601String(),
                     'tasks' => $rangeTasks,
+                    'today' => now()->setTimezone($tz)->format('Y-m-d'),
+                    'timezone' => $tz,
+                    // Días laborables, para atenuar los que no lo son: mover una
+                    // tarea a un domingo suele ser un error de arrastre.
+                    'workingDays' => $this->workingDays($request),
                 ],
-                'filters' => ['filter' => $filter, 'mine' => $mine, 'view' => 'calendar'],
+                'filters' => ['filter' => $filter, 'mine' => $mine, 'view' => 'calendar', 'type' => $type, 'responsible' => $responsible],
                 'members' => User::where('account_id', $accountId)->get(['id', 'name']),
                 'isAdmin' => $isAdmin,
                 'counts' => [
@@ -87,6 +114,76 @@ class TaskController extends Controller
                     ->when($mine, $baseScope)->count(),
             ],
         ]);
+    }
+
+    /**
+     * Días de la semana (ISO 1-7) en los que la cuenta atiende.
+     *
+     * Sale del horario comercial que ya se configura en `/settings/business-hours`:
+     * no hace falta un ajuste nuevo para saber qué días son laborables.
+     *
+     * @return array<int, int>
+     */
+    private function workingDays(Request $request): array
+    {
+        $account = $request->user()->account;
+
+        if (! $account->business_hours_enabled) {
+            return [1, 2, 3, 4, 5, 6, 7];
+        }
+
+        $schedule = $account->business_hours_schedule ?: \App\Services\BusinessHours\Schedule::DEFAULT_SCHEDULE;
+
+        return collect(\App\Services\BusinessHours\Schedule::DAYS)
+            ->map(fn (string $day, int $i) => ! empty($schedule[$day]['from'] ?? null) ? $i + 1 : null)
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Reprograma una tarea arrastrándola a otro día del calendario.
+     *
+     * **Conserva la hora** salvo que se mande una nueva: mover «llamar a Ana a
+     * las 10:00» del martes al jueves no debería convertirla en una tarea de
+     * medianoche, que es lo que pasa si solo se cambia la fecha.
+     *
+     * Queda registrado en el timeline del lead: una tarea que se corre tres
+     * veces cuenta una historia, y esa historia se pierde si reprogramar es
+     * silencioso.
+     */
+    public function reschedule(Request $request, Task $task): RedirectResponse
+    {
+        $this->authorizeTask($request, $task);
+
+        $validated = $request->validate([
+            'date' => 'required|date_format:Y-m-d',
+            'time' => 'nullable|date_format:H:i',
+        ]);
+
+        $tz = $request->user()->account->business_hours_timezone ?: config('app.timezone');
+        $previous = $task->due_at;
+
+        // La fecha llega tal como la ve el usuario en su calendario, así que se
+        // interpreta en la zona de la cuenta y recién ahí se guarda en UTC.
+        $time = $validated['time'] ?? $previous->copy()->setTimezone($tz)->format('H:i');
+
+        // ⚠️ El `setTimezone` final no es decorativo: Eloquent serializa el
+        // Carbon **en la zona que trae el objeto**, sin convertir. Guardar uno
+        // en `America/La_Paz` mete «10:00» literal en una columna que se lee
+        // como UTC, y la tarea aparece 4 horas antes de lo pedido.
+        $due = Carbon::createFromFormat('Y-m-d H:i', "{$validated['date']} {$time}", $tz)
+            ->setTimezone(config('app.timezone'));
+
+        $task->update(['due_at' => $due, 'overdue_notified_at' => null]);
+
+        $task->lead?->recordEvent('task_rescheduled', $request->user(), [
+            'text' => $task->text,
+            'from' => $previous->toIso8601String(),
+            'to' => $due->toIso8601String(),
+        ]);
+
+        return back()->with('success', 'Tarea reprogramada.');
     }
 
     public function store(Request $request): RedirectResponse
