@@ -57,6 +57,13 @@ class EventProcessor
 
         $lead = Lead::forAccount($integration->account_id)
             ->where('wacrm_conversation_id', $convId)
+            // **D5 — el lead ABIERTO manda.** Antes era `latest()` a secas, y
+            // cuando una misma conversación tenía dos leads (el cliente vuelve
+            // meses después y se abre uno nuevo) ganaba el más reciente aunque
+            // estuviera cerrado: mover la tarjeta en el wacrm reabría en
+            // silencio un negocio que el equipo ya había dado por terminado.
+            // Entre varios abiertos sigue ganando el más nuevo.
+            ->orderByRaw("CASE WHEN status = 'open' THEN 0 ELSE 1 END")
             ->latest()
             ->first();
 
@@ -64,7 +71,19 @@ class EventProcessor
             return;
         }
 
-        $stage = $lead->pipeline->stages()->where('name', $stageName)->first();
+        // **D5 — por uuid primero.** `stage_external_id` ES el id de la etapa
+        // acá (el wacrm lo guarda como `external_id` al sincronizar los
+        // pipelines). Hasta acá se buscaba solo por nombre: dos etapas
+        // homónimas en pipelines distintos podían aterrizar el movimiento en la
+        // columna equivocada, sin error y sin rastro. El nombre queda de
+        // respaldo — el payload es aditivo y los deploys no son simultáneos.
+        $stage = null;
+
+        if (! empty($data['stage_external_id'])) {
+            $stage = $lead->pipeline->stages()->whereKey($data['stage_external_id'])->first();
+        }
+
+        $stage ??= $lead->pipeline->stages()->where('name', $stageName)->first();
 
         if (! $stage || $lead->stage_id === $stage->id) {
             return;

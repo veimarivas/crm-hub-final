@@ -314,7 +314,31 @@ datos son distintas: `messages` vs `lead_events`); **la de definición no tendr�
 
 ---
 
-### D5 — Pipelines y objeto comercial: dueño único, espejo read-only
+### D5 — Pipelines y objeto comercial: dueño único, espejo read-only · ✅ HECHO (2026-09-01)
+
+> **D5a** en el wacrm (uuid en el webhook y en la API de etapa, estructura del pipeline
+> sincronizado no editable, controles ocultos en la UI) y **D5b** en Komo (manda el uuid, lo
+> usa al recibir, y el lead abierto gana sobre el más reciente).
+> Suites: wacrm **435/435**, Komo **401/401**.
+>
+> **Se hizo lo que el plan identificaba como el riesgo real y NO se hizo el resto**, que era la
+> parte cuestionable:
+>
+> - ✅ Correlación por `external_id` en las dos direcciones, con caída al nombre.
+> - ✅ La ambigüedad de `->latest()->first()`: era peor de lo que decía el plan. No es solo
+>   «gana el más nuevo en silencio» — es que **arrastrar la tarjeta reabría un negocio ya
+>   cerrado** si el más nuevo estaba cerrado. Ahora gana el abierto.
+> - ✅ Estructura del pipeline no editable en el wacrm (ya no sobrevivía al sync; ahora se dice).
+> - ❌ **`/pipelines` NO quedó read-only entero.** Mover un deal entre columnas sigue
+>   permitido: es el gesto operativo del asesor, se espeja bien en las dos direcciones y
+>   bloquearlo habría roto un flujo que funciona. El corte es sobre la estructura, no sobre la
+>   operación.
+> - ❌ **`DealController@store/destroy` no se tocó.** El plan proponía quitarlos de la UI, pero
+>   `Deal` está en `InboundProcessor`, `ResponseMetrics`, `ContactMergeController`,
+>   `TeamApiController`, `SyncDealAssignments`, 7 páginas JSX y 4 tests: es el refactor de
+>   T0.2b del omnicanal, no una tarea de deduplicación. Sigue pendiente y sigue sin ser urgente.
+
+
 
 **⚠️ Corrección respecto de la primera lectura.** La idea de «eliminar `Deal` del wacrm» era
 más barata en la conversación que en el código. `Deal` está usado por:
@@ -399,9 +423,11 @@ consecuencias, ninguna documentada:
 | ~~**D2** Taxonomía~~ ✅ | hecho | wacrm → Komo | — | Etiquetas y campos coherentes entre pantallas |
 | **D3** Paquete `crm-core` | 1-2 sem | ambos | decisión de hosting npm | 36 archivos dejan de ser dos; `ChannelRules` nace único |
 | **D4** Fixtures de gemelos | 3 d | ninguno | D3 | La convención pasa a ser garantía |
-| **D5** Pipeline read-only | 1-2 sem | wacrm → Komo | — | Se cierra la correlación por nombre |
+| ~~**D5** Pipeline read-only~~ ✅ | hecho | wacrm → Komo | — | Se cierra la correlación por nombre |
 
-**Total: 4-6 semanas.**
+**Quedan D3 y D4** (~2 semanas), las dos estructurales y las dos previas a F0 del omnicanal.
+**D3 sigue bloqueada** por la decisión #1 del §7 (hosting del paquete npm); su mitad PHP, que
+solo necesita composer `vcs`, no lo está.
 
 **Encaje con `plan_omnicanal.md`:**
 
@@ -438,6 +464,8 @@ Estas bloquean su fase y no las puede tomar el agente:
    deploy key? (Composer no tiene este problema: `vcs` sobre el repo git alcanza.)
 2. **D3 — `Modal.jsx` y `LiveInbound.jsx`:** difieren con el mismo largo. ¿Cuál de las dos
    versiones gana?
-3. **D5 — `/pipelines` del wacrm queda read-only.** Es un cambio de flujo para quien lo use hoy.
+3. ~~**D5 — `/pipelines` del wacrm queda read-only**~~ — resuelta en la ejecución: el corte
+   quedó sobre la estructura y no sobre la operación, así que no hay cambio de flujo que
+   consultar. Ver la nota de D5.
 4. ~~**D2 — fusión inicial de etiquetas**~~ — resuelta en la ejecución: no hace falta que gane
    ninguna, se enlazan. Ver la nota de D2.

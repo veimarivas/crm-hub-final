@@ -185,11 +185,20 @@ class Client
     /**
      * Mueve el deal de la conversación a la etapa del Komo (fuente de verdad
      * del pipeline). Requiere scope conversations:write.
+     *
+     * **D5 — `$stageId` es lo que hace fiable la correspondencia.** Hasta acá
+     * la etapa se buscaba del otro lado solo por NOMBRE: dos etapas homónimas
+     * en pipelines distintos podían aterrizar el movimiento en la columna
+     * equivocada, y renombrar una etapa rompía el espejo hasta el próximo
+     * sync. El uuid viaja como `external_id` allá desde `pipelines/sync`, así
+     * que ya existe la correspondencia — solo faltaba usarla. El nombre se
+     * sigue mandando: un wacrm sin desplegar tiene que seguir funcionando.
      */
-    public function setConversationStage(string $conversationId, string $stageName, ?string $status = null): array
+    public function setConversationStage(string $conversationId, string $stageName, ?string $status = null, ?string $stageId = null): array
     {
         return $this->unwrap($this->request()->patch("/conversations/{$conversationId}/stage", array_filter([
             'stage_name' => $stageName,
+            'stage_external_id' => $stageId,
             'status' => $status,
         ])));
     }

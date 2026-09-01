@@ -59,6 +59,9 @@ class SyncLeadStageToWacrmJob implements ShouldQueue
             $lead->wacrm_conversation_id,
             $lead->stage->name,
             $lead->status,
+            // D5: el uuid es la correspondencia fiable; el nombre queda de
+            // respaldo para un wacrm que todavía no tenga el cambio.
+            $lead->stage->id,
         );
     }
 }

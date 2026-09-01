@@ -2,6 +2,30 @@
 
 CRM de ventas centrado en **leads** inspirado en Kommo (kommo.com), hermano del **wacrm** (`C:\xampp_82_12\htdocs\laravel_crm_whatsapp`, CRM de WhatsApp). Son **dos proyectos separados integrados por API**: este maneja leads/tareas/pipeline; el wacrm es el motor de WhatsApp.
 
+## D5b — la etapa se correlaciona por uuid, y gana el lead abierto (2026-09-01)
+
+Tercera fase ejecutada de `plan_deduplicacion.md`. **Cross-repo**: D5a va en el wacrm y se despliega **primero**. **Arregla dos fallas silenciosas que ya estaban en producción**, no es mantenimiento.
+
+### 1. La etapa se correspondía por NOMBRE en las dos direcciones
+Komo → wacrm (`setConversationStage`) y wacrm → Komo (webhook `deal.stage_changed`) buscaban la etapa con `where('name', …)`. Dos etapas homónimas en pipelines distintos podían aterrizar el movimiento en la columna equivocada — sin error, sin log, sin rastro. El uuid **ya viajaba** al wacrm en `pipelines/sync` (se guarda allá como `external_id`); solo faltaba usarlo en el movimiento. Ahora va en los dos sentidos, con el nombre como respaldo: los deploys no son simultáneos y el payload es aditivo.
+
+### 2. `->latest()` podía reabrir un negocio cerrado
+`handleDealStageChanged` resolvía el lead de la conversación con `where('wacrm_conversation_id', …)->latest()->first()`. Cuando una misma conversación tiene **dos** leads —el cliente vuelve meses después y se abre uno nuevo— ganaba el más reciente **aunque estuviera cerrado**: arrastrar la tarjeta en el wacrm reabría en silencio un negocio que el equipo ya había dado por terminado, con su `reopened` en el timeline y todo.
+
+Ahora el lead **abierto** manda (`ORDER BY CASE WHEN status = 'open' THEN 0 ELSE 1 END`), y entre varios abiertos sigue ganando el más nuevo.
+
+**⚠️ Trampa del test que fija esto:** en el caso natural el lead abierto también es el más nuevo, así que el test pasaría con el código viejo. Hay que **invertir el orden de creación a mano** (`forceFill(['created_at' => …])`) para que la aserción signifique algo.
+
+Para saber si el caso existe hoy en producción:
+
+```sql
+SELECT wacrm_conversation_id, COUNT(*) FROM leads
+WHERE wacrm_conversation_id IS NOT NULL
+GROUP BY wacrm_conversation_id HAVING COUNT(*) > 1;
+```
+
+Tests: `StageCorrelationTest` (5). Suite **401/401 (1243 aserciones)**.
+
 ## D2b — Komo es el dueño de la taxonomía (2026-09-01)
 
 Segunda fase de `plan_deduplicacion.md`. **Cross-repo**: la mitad del wacrm (D2a: `POST /api/v1/taxonomy/sync`) va en ese repo y tiene que desplegarse **primero**.
