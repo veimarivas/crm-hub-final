@@ -2,6 +2,23 @@
 
 CRM de ventas centrado en **leads** inspirado en Kommo (kommo.com), hermano del **wacrm** (`C:\xampp_82_12\htdocs\laravel_crm_whatsapp`, CRM de WhatsApp). Son **dos proyectos separados integrados por API**: este maneja leads/tareas/pipeline; el wacrm es el motor de WhatsApp.
 
+## D2b — Komo es el dueño de la taxonomía (2026-09-01)
+
+Segunda fase de `plan_deduplicacion.md`. **Cross-repo**: la mitad del wacrm (D2a: `POST /api/v1/taxonomy/sync`) va en ese repo y tiene que desplegarse **primero**.
+
+Etiquetas y campos personalizados tenían catálogo propio en cada proyecto y **no se sincronizaban**, a diferencia de los pipelines. Era la inconsistencia más gratuita del sistema: el mecanismo ya estaba escrito y probado. `SyncTaxonomyToWacrmJob` es un calco de `SyncPipelinesToWacrmJob`, disparado desde `TagController` y `CustomFieldController`.
+
+- **Se manda el catálogo COMPLETO en cada pasada, no el cambio.** Así un envío perdido se corrige solo con la modificación siguiente, sin llevar registro de qué quedó pendiente. Es la misma decisión que en pipelines y por eso `tries = 1`.
+- **Solo viajan los campos personalizados de `entity = 'contact'`.** Los del wacrm cuelgan de `ContactCustomValue`, así que un campo de lead o de empresa sería allá una columna que nadie podría llenar nunca. El recorte va de este lado, que es el que sabe de entidades.
+- **Borrar una etiqueta acá no la borra allá incondicionalmente.** Si del otro lado está en uso —etiqueta contactos o alimenta una regla de auto-etiquetado— se desvincula y sobrevive como etiqueta local. Borrarla en cascada habría roto el auto-etiquetado del wacrm en silencio (`auto_tag_rules.tag_id` es `cascadeOnDelete`).
+
+### El comando existe por la primera pasada
+`komo:sync-taxonomy --dry-run` **no es un atajo del job**: después el sync lo dispara solo cada cambio, pero la primera vez los dos proyectos tienen catálogos que nunca se hablaron y la reconciliación puede enlazar por nombre, renombrar y borrar. El informe dice qué haría, con el motivo de lo que conserva («en uso: 12 contactos, 1 regla») — un total sin el número no se puede juzgar. El comando sale con código de error si algo falló: se corre en un deploy, donde nadie lee la salida entera.
+
+**Orden de la primera pasada en producción:** desplegar el wacrm, correr `--dry-run`, leer el informe, y recién entonces sin la bandera.
+
+Tests: `TaxonomySyncDispatchTest` (7). Suite **396/396 (1230 aserciones)**.
+
 ## D1b — Komo deja de tener motor de envíos propio (2026-09-01)
 
 Primera fase de `plan_deduplicacion.md`. **Cross-repo**: la mitad del wacrm (D1a: `body_type=text`, `audience=phones`, guardián de ventana) va en ese repo y tiene que desplegarse **primero**.

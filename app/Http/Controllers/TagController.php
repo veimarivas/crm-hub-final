@@ -2,12 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\SyncTaxonomyToWacrmJob;
 use App\Models\Tag;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
+/**
+ * Desde D2 este catálogo es el ÚNICO: cada cambio se replica al wacrm, que
+ * hasta ahora tenía etiquetas propias sin relación con estas. Una etiqueta
+ * puesta en el inbox no existía acá y viceversa.
+ */
 class TagController extends Controller
 {
     /** Paleta fija: elegir color a mano termina en 30 grises distintos. */
@@ -63,6 +69,8 @@ class TagController extends Controller
             'color' => $validated['color'] ?? '#10b981',
         ]);
 
+        SyncTaxonomyToWacrmJob::dispatch($accountId);
+
         return back()->with('success', 'Etiqueta creada.');
     }
 
@@ -75,13 +83,23 @@ class TagController extends Controller
             'color' => 'nullable|string|max:20',
         ]));
 
+        SyncTaxonomyToWacrmJob::dispatch($tag->account_id);
+
         return back()->with('success', 'Etiqueta actualizada.');
     }
 
     public function destroy(Request $request, Tag $tag): RedirectResponse
     {
         abort_if($tag->account_id !== $request->user()->account_id, 403);
+
+        $accountId = $tag->account_id;
         $tag->delete();
+
+        // Del otro lado, borrarla NO es incondicional: si allá está en uso
+        // (etiqueta contactos o alimenta una regla de auto-etiquetado) se
+        // desvincula y sobrevive como etiqueta local. Borrarla en cascada
+        // habría roto el auto-etiquetado del wacrm sin un solo aviso.
+        SyncTaxonomyToWacrmJob::dispatch($accountId);
 
         return back()->with('success', 'Etiqueta eliminada.');
     }

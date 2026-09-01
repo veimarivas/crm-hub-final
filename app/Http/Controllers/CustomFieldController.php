@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\SyncTaxonomyToWacrmJob;
 use App\Models\CustomField;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -46,6 +47,13 @@ class CustomFieldController extends Controller
             'position' => (CustomField::forAccount($accountId)->where('entity', $validated['entity'])->max('position') ?? -1) + 1,
         ]);
 
+        // Solo los campos de CONTACTO existen del otro lado (allá cuelgan de
+        // `ContactCustomValue`): uno de lead o de empresa sería una columna que
+        // nadie podría llenar nunca.
+        if ($validated['entity'] === 'contact') {
+            SyncTaxonomyToWacrmJob::dispatch($accountId);
+        }
+
         return back()->with('success', 'Campo creado.');
     }
 
@@ -53,7 +61,14 @@ class CustomFieldController extends Controller
     {
         abort_if($customField->account_id !== $request->user()->account_id, 403);
 
+        $accountId = $customField->account_id;
+        $entity = $customField->entity;
+
         $customField->delete(); // los valores caen por FK cascade
+
+        if ($entity === 'contact') {
+            SyncTaxonomyToWacrmJob::dispatch($accountId);
+        }
 
         return back()->with('success', 'Campo eliminado.');
     }

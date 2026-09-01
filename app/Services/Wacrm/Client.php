@@ -206,6 +206,27 @@ class Client
         ]));
     }
 
+    /**
+     * Replica en el wacrm el catálogo de etiquetas y campos personalizados
+     * (Komo es la fuente de verdad de la taxonomía, igual que de los
+     * pipelines). Requiere scope `conversations:write`.
+     *
+     * `dryRun` devuelve el informe sin tocar nada del otro lado: es lo que
+     * hace segura la primera pasada, donde el sync puede enlazar o borrar
+     * cosas que ya existían allá.
+     *
+     * @param  array<int, array<string, mixed>>  $tags
+     * @param  array<int, array<string, mixed>>  $customFields
+     */
+    public function syncTaxonomy(array $tags, array $customFields, bool $dryRun = false): array
+    {
+        return $this->unwrap($this->request()->post('/taxonomy/sync', [
+            'tags' => $tags,
+            'custom_fields' => $customFields,
+            'dry_run' => $dryRun,
+        ]));
+    }
+
     private function unwrap($response): array
     {
         if ($response->failed()) {

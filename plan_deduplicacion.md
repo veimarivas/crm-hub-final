@@ -178,7 +178,33 @@ sale sin plantilla fuera de ventana; `SendBroadcastMessageJob` no existe.
 
 ---
 
-### D2 — Taxonomía compartida: etiquetas y campos personalizados
+### D2 — Taxonomía compartida: etiquetas y campos personalizados · ✅ HECHO (2026-09-01)
+
+> **D2a** en el wacrm (`POST /api/v1/taxonomy/sync`, `external_id` en `tags`/`custom_fields`,
+> corte de escritura sobre lo que administra Komo) y **D2b** en Komo (`SyncTaxonomyToWacrmJob`,
+> disparo desde los dos controladores, comando `komo:sync-taxonomy --dry-run`).
+> Suites: wacrm **429/429**, Komo **396/396**.
+>
+> **Resuelta la decisión #4 del §7 sin preguntar, porque la respuesta correcta no era ninguna
+> de las dos opciones que se planteaban.** «Gana Komo» y «revisar caso por caso» daban por
+> sentado que la fusión implica que una fila sobreviva y la otra muera. No hace falta: ante un
+> nombre duplicado el sync **enlaza** —adopta el uuid de Komo sobre la fila que ya existía en el
+> wacrm— así que Komo pasa a ser dueño de la *definición* (nombre, color) y el wacrm conserva
+> su fila con todas sus asociaciones. Ningún contacto queda sin etiquetar y ninguna regla de
+> auto-tag se pierde.
+>
+> **Y la trampa era peor de lo que decía el plan.** No es que una regla de auto-tag quede
+> apuntando al vacío: `auto_tag_rules.tag_id` es `cascadeOnDelete`, así que borrar la etiqueta
+> **borra la regla**. El auto-etiquetado dejaría de funcionar sin un solo aviso. Por eso una
+> etiqueta en uso no se borra nunca: se desvincula y sigue siendo local.
+>
+> **Alcance menor que el planificado, a propósito:** el plan decía «`/tags` y `/custom-fields`
+> del wacrm pasan a read-only». Se hizo más fino — crear una etiqueta local sigue permitido
+> (un agente que necesita marcar algo en el momento no puede quedar bloqueado esperando a un
+> admin en otro sistema); lo que se bloquea es renombrar o borrar lo que administra Komo, que
+> es lo que el sync pisaría igual.
+
+
 
 **El problema:** los dos proyectos tienen catálogo propio de `Tag` y `CustomField`, y **no se
 sincronizan** — a diferencia de los pipelines, que sí. Una etiqueta puesta en el inbox del wacrm
@@ -370,7 +396,7 @@ consecuencias, ninguna documentada:
 | Fase | Esfuerzo | Deploy | Depende de | Gana |
 | --- | --- | --- | --- | --- |
 | ~~**D1** Broadcasts~~ ✅ | hecho | wacrm → Komo | — | Deja de facturar mal / envíos visibles en métricas |
-| **D2** Taxonomía | 3-4 d | wacrm → Komo | — | Etiquetas y campos coherentes entre pantallas |
+| ~~**D2** Taxonomía~~ ✅ | hecho | wacrm → Komo | — | Etiquetas y campos coherentes entre pantallas |
 | **D3** Paquete `crm-core` | 1-2 sem | ambos | decisión de hosting npm | 36 archivos dejan de ser dos; `ChannelRules` nace único |
 | **D4** Fixtures de gemelos | 3 d | ninguno | D3 | La convención pasa a ser garantía |
 | **D5** Pipeline read-only | 1-2 sem | wacrm → Komo | — | Se cierra la correlación por nombre |
@@ -413,5 +439,5 @@ Estas bloquean su fase y no las puede tomar el agente:
 2. **D3 — `Modal.jsx` y `LiveInbound.jsx`:** difieren con el mismo largo. ¿Cuál de las dos
    versiones gana?
 3. **D5 — `/pipelines` del wacrm queda read-only.** Es un cambio de flujo para quien lo use hoy.
-4. **D2 — fusión inicial de etiquetas por nombre normalizado:** ante «Interesado»/«interesado»,
-   ¿gana la de Komo siempre, o se revisa el reporte caso por caso?
+4. ~~**D2 — fusión inicial de etiquetas**~~ — resuelta en la ejecución: no hace falta que gane
+   ninguna, se enlazan. Ver la nota de D2.
