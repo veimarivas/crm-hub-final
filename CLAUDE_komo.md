@@ -2,6 +2,22 @@
 
 CRM de ventas centrado en **leads** inspirado en Kommo (kommo.com), hermano del **wacrm** (`C:\xampp_82_12\htdocs\laravel_crm_whatsapp`, CRM de WhatsApp). Son **dos proyectos separados integrados por API**: este maneja leads/tareas/pipeline; el wacrm es el motor de WhatsApp.
 
+## D3-red — guardián de deriva de los archivos compartidos (2026-09-01)
+
+**No es D3.** D3 —extraer los 36 archivos duplicados a un paquete compartido— **sigue bloqueada** por dónde alojar el paquete de npm, porque el build corre en el VPS. Esto es su red, para que la deriva no siga siendo invisible mientras tanto.
+
+`tests/Fixtures/twins/shared-files.json` lista los **36 archivos que deben ser byte-idénticos** en los dos proyectos: Breeze completo, componentes de UI, hooks. `SharedFilesDriftTest` los compara contra el repo hermano y falla nombrando **cuáles** se separaron y qué hacer con cada uno.
+
+- **Es un test y no un comando a propósito.** Un comando hay que acordarse de correrlo, que es la misma debilidad que la convención escrita. La suite se corre antes de cada deploy igual.
+- **Se salta solo donde el hermano no está** (VPS, CI), diciendo por qué, en vez de fallar por algo que no es culpa del código. En desarrollo los dos repos están uno al lado del otro en `htdocs/`, que es donde sirve. `TWIN_REPO_PATH` lo pisa.
+- **El manifiesto también se compara entre repos.** Sin eso, alguien saca un archivo de la lista de un solo lado y la red deja de cubrirlo sin que se note — justo la falla que este test existe para evitar.
+
+**Verificado que detecta**, no solo que pasa: se agregó una línea a `PrimaryButton.jsx` del wacrm con la suite en verde y el test de ESTE repo lo señaló por nombre. Después se revirtió.
+
+**Los 61 archivos que hoy divergen quedan fuera del manifiesto**, incluida la capa de gráficos (8 de 11 separados). Meterlos exige decidir cuál versión gana, archivo por archivo — es trabajo de D3, no de su red.
+
+Tests: `SharedFilesDriftTest` (2). Suite **407/407 (1380 aserciones)**.
+
 ## D4 — el contrato de los gemelos, fijado con fixtures (2026-09-01)
 
 Cuarta fase ejecutada de `plan_deduplicacion.md`. **Cross-repo, sin orden de deploy**: son solo tests.

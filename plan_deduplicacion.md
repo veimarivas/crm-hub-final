@@ -242,7 +242,31 @@ etiqueta reporta cuántos contactos afecta antes de confirmar.
 
 ---
 
-### D3 — Paquete compartido `crm-core` (infraestructura y presentación)
+### D3 — Paquete compartido `crm-core` (infraestructura y presentación) · ⏸ BLOQUEADA · red puesta (2026-09-01)
+
+> **Sigue pendiente** por la decisión #1 del §7: el `npm run build` corre en el VPS, así que el
+> paquete JS necesita un registry privado o git+ssh con deploy key. Es acceso a infraestructura,
+> no una decisión de diseño.
+>
+> **Lo que sí se hizo mientras tanto: la red.** `tests/Fixtures/twins/shared-files.json` (el
+> manifiesto de los 36 archivos que deben ser idénticos) + `SharedFilesDriftTest` en cada repo,
+> que los compara contra el hermano cuando lo encuentra al lado y se salta solo en el VPS y en
+> CI. Verificado que detecta: se derivó `PrimaryButton.jsx` a propósito con la suite en verde y
+> el test del otro repo lo señaló por nombre.
+>
+> Es explícitamente **menos** que D3: los archivos siguen siendo dos y hay que arreglarlos a
+> mano cuando el test avisa. Pero cubre la falla real —la deriva silenciosa, que ya había pasado
+> con la capa de gráficos— sin agregar una dependencia de despliegue que hoy no se puede
+> sostener.
+>
+> **Cuando D3 se haga**, el manifiesto es la lista de extracción, y además hay que mudar al
+> paquete las fixtures de D4 y borrar sus copias.
+>
+> **Los 61 archivos que hoy divergen quedan fuera del manifiesto**, incluida la capa de gráficos
+> (8 de 11 separados). Meterlos exige decidir cuál versión gana archivo por archivo — eso es
+> trabajo de D3, no de su red.
+
+
 
 **Qué se extrae:** solo lo que no tiene dueño de dominio.
 
@@ -444,7 +468,8 @@ consecuencias, ninguna documentada:
 | --- | --- | --- | --- | --- |
 | ~~**D1** Broadcasts~~ ✅ | hecho | wacrm → Komo | — | Deja de facturar mal / envíos visibles en métricas |
 | ~~**D2** Taxonomía~~ ✅ | hecho | wacrm → Komo | — | Etiquetas y campos coherentes entre pantallas |
-| **D3** Paquete `crm-core` | 1-2 sem | ambos | decisión de hosting npm | 36 archivos dejan de ser dos; `ChannelRules` nace único |
+| **D3** Paquete `crm-core` ⏸ | 1-2 sem | ambos | **decisión de hosting npm** | 36 archivos dejan de ser dos; `ChannelRules` nace único |
+| ~~D3-red~~ ✅ guardián de deriva | hecho | ninguno | — | La deriva de esos 36 deja de ser invisible |
 | ~~**D4** Fixtures de gemelos~~ ✅ | hecho | ninguno | ~~D3~~ | La convención pasa a ser garantía |
 | ~~**D5** Pipeline read-only~~ ✅ | hecho | wacrm → Komo | — | Se cierra la correlación por nombre |
 
