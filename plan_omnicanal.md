@@ -171,9 +171,22 @@ El 2026-07-28 se eliminó el módulo de **avisos por Telegram a los agentes** (c
 >   cuando ya hubiera código dependiendo de lo contrario. Fijada con dos casos de fixture
 >   enfrentados.
 >
+> **Avance 2026-09-01 (2) — `InboundProcessorParityTest`: ✅ HECHO** (wacrm, 15 tests).
+>
+> El test de caracterización que §T0.2b exige **antes** de mover una línea. **Todavía no se
+> refactorizó nada.** Congela el estado resultante y, sobre todo, **el orden exacto de la cola**,
+> escrito como un array literal.
+>
+> - **`Queue::fake()` no sirve** para esto: agrupa por clase y pierde la secuencia global, que es
+>   el dato que importa. Se usa la cola de base de datos y se lee la tabla `jobs` por `id`.
+> - Fija además la **forma exacta del payload de `message.received`** — el contrato con Komo. Si
+>   el refactor deja de mandar una clave, allá se rompe algo y acá no fallaría nada.
+> - **Verificado que detecta**: se simuló el bug histórico (IA encolada antes de los flows) con
+>   la suite en verde y **5 de los 15** salieron en rojo con el reordenamiento exacto.
+>
 > **Sigue pendiente de F0:** T0.1 (migraciones + `contact_identities` + `channel_configs`),
-> T0.2 (adapters + `ChannelRouter`), **T0.2b (el ingestor — el cambio más riesgoso, y va con
-> `InboundProcessorParityTest` ANTES de mover nada)**, T0.3, T0.4, T0.5.
+> T0.2 (adapters + `ChannelRouter`), **T0.2b (la extracción del ingestor en sí — ahora con la
+> red puesta)**, T0.3, T0.4, T0.5.
 
 
 
