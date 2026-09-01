@@ -2,6 +2,32 @@
 
 CRM de ventas centrado en **leads** inspirado en Kommo (kommo.com), hermano del **wacrm** (`C:\xampp_82_12\htdocs\laravel_crm_whatsapp`, CRM de WhatsApp). Son **dos proyectos separados integrados por API**: este maneja leads/tareas/pipeline; el wacrm es el motor de WhatsApp.
 
+## D1b — Komo deja de tener motor de envíos propio (2026-09-01)
+
+Primera fase de `plan_deduplicacion.md`. **Cross-repo**: la mitad del wacrm (D1a: `body_type=text`, `audience=phones`, guardián de ventana) va en ese repo y tiene que desplegarse **primero**.
+
+**Lo que se borró:** `Jobs\SendBroadcastMessageJob`, que mandaba texto suelto por `/api/v1/messages` — un request HTTP **por destinatario**, sin plantilla y sin mirar la ventana de servicio. Fuera de las 24 h de Meta eso se rechaza, y el envío tampoco aparecía en las métricas de broadcast del wacrm. Ahora sale **una sola llamada** con la audiencia entera.
+
+**La división, que es lo que hace que exista un solo motor:** Komo resuelve **a quién** (con `SegmentQuery`, que allá no se puede reproducir porque no conoce leads, etapas ni responsables) y el wacrm resuelve **cómo se manda** (plantillas, ventana, rate limit, métricas). Toda la lógica de selección de `BroadcastController` —el corte por rol, los filtros, la intersección con lo tildado a mano, el dedup por teléfono— **no se tocó**: era correcta y es lo único que este proyecto puede hacer mejor que el otro.
+
+### La tabla local cambia de significado
+`broadcasts` deja de ser el registro de qué se envió y pasa a ser el de **qué se pidió**: `wacrm_broadcast_id` apunta al envío real y `report` guarda el informe de audiencia de aquel día.
+
+- **`total_recipients` es lo que SALE, no lo pedido.** Si dijera 300 cuando salen 40, la barra de progreso se quedaría clavada en el 13 % para siempre.
+- **La audiencia completa se congela igual, incluidos los descartados**, con estado `skipped` y el motivo en castellano. «A quién se le quiso escribir y por qué no se pudo» es parte del hecho histórico — y es la única forma de saber a quién hay que alcanzar después con una plantilla. `skipped` no es `failed`: al primero todavía se le puede llegar.
+- Los broadcasts **anteriores a D1b** quedan con `wacrm_broadcast_id = null` y siguen mostrando sus contadores locales. Son historia; reescribirla sería mentir sobre lo que pasó. `isDelegated()` es el corte, y hay test.
+
+### Degradación en vez de pantalla rota
+`/broadcasts/{id}` consulta los contadores reales al wacrm en cada render (la pantalla se refresca sola cada 4 s mientras el envío está en curso, así que la llamada ocurre seguido). Si el wacrm no responde **la pantalla no se rompe**: muestra lo último que se supo y lo dice. Los contadores se cachean localmente porque el listado no consulta.
+
+Si el wacrm **rechaza** el envío, el motivo aterriza como error de validación en la pantalla («ninguno tiene la ventana abierta», «WhatsApp no está conectado») y **no queda un broadcast fantasma** diciendo «enviando» para siempre.
+
+**⚠️ Trampa de los tests, no del código:** `Queue::assertNothingPushed()` falla porque crear un lead encola `RunStageAutomationsJob`, y `Http::assertNothingSent()` falla porque las props compartidas consultan el estado de la IA al wacrm. Las dos aserciones tienen que apuntar a lo que el test afirma, no a «no pasó nada». La de «el motor local ya no existe» se escribe con `class_exists`, que además vuelve a fallar el día que alguien lo recree.
+
+`Tests\TestCase` estrena `fakeWacrmBroadcasts()` — integración + alta que acepta la audiencia entera. Lo necesita cualquier test que llegue a `broadcasts.store`; el doble acepta todo a propósito, porque esos tests miden la **selección**, no el envío.
+
+Tests: `BroadcastDelegationTest` (7). Suite **389/389 (1215 aserciones)**.
+
 ## T6 — Correo corporativo de Google Workspace (2026-08-08)
 
 Dos decisiones del usuario, ambas tomadas contra mi recomendación de «lo reversible» y ambas correctas para el caso: la institución tiene correos corporativos en Google, así que **OAuth con Workspace** (no contraseña de aplicación) y **el correo es un `message_in`/`message_out` más** (no un tipo de evento propio).

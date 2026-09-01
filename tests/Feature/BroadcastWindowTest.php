@@ -43,6 +43,8 @@ class BroadcastWindowTest extends TestCase
 
         $this->pipeline = Pipeline::create(['account_id' => $this->account->id, 'name' => 'Ventas', 'is_default' => true]);
         $this->stage = PipelineStage::create(['pipeline_id' => $this->pipeline->id, 'name' => 'Nuevo', 'stage_type' => 'open', 'position' => 0]);
+
+        $this->fakeWacrmBroadcasts($this->account->id);
     }
 
     private function lead(string $name, ?string $ultimoEntrante): Lead

@@ -2,15 +2,16 @@
 
 namespace App\Http\Controllers;
 
-use App\Jobs\SendBroadcastMessageJob;
 use App\Models\Broadcast;
 use App\Models\BroadcastRecipient;
-use App\Models\Contact;
+use App\Models\Integration;
 use App\Models\Lead;
 use App\Models\SavedSegment;
 use App\Models\Tag;
 use App\Models\User;
 use App\Services\Leads\SegmentQuery;
+use App\Services\Wacrm\Client;
+use App\Services\Wacrm\WacrmApiException;
 use App\Services\WhatsApp\MessagingCost;
 use App\Services\WhatsApp\ServiceWindow;
 use Illuminate\Http\RedirectResponse;
@@ -158,13 +159,61 @@ class BroadcastController extends Controller
             ]);
         }
 
-        // Guarda la imagen del broadcast (se reutiliza para cada destinatario).
+        // El envío lo hace el wacrm, que es el único que habla con Meta: sabe de
+        // plantillas, de la ventana de 24 h, del rate limit y de las métricas.
+        // Komo resuelve a QUIÉN (con `SegmentQuery`, que allá no existe) y
+        // delega el CÓMO. Hasta D1b había acá un motor paralelo que mandaba
+        // texto suelto sin mirar la ventana: fuera de las 24 h, Meta lo
+        // rechazaba y el envío no aparecía en ninguna métrica.
+        $integration = Integration::forAccount($accountId)->first();
+
+        if (! $integration || ! $integration->wacrm_url || ! $integration->wacrm_api_key) {
+            throw ValidationException::withMessages([
+                'name' => 'La integración con WhatsApp no está configurada: sin ella no se puede enviar. Revisá /settings/integration.',
+            ]);
+        }
+
+        // Guarda la imagen del broadcast. Queda también acá porque la pantalla
+        // de detalle la muestra desde este dominio; la copia que se envía viaja
+        // en el alta y el wacrm la sube a Meta una sola vez para todos.
         $mediaPath = null;
         if ($request->hasFile('image')) {
             $mediaPath = $request->file('image')->store('broadcasts');
         }
 
-        DB::transaction(function () use ($request, $validated, $accountId, $recipients, &$broadcast, $mediaPath) {
+        try {
+            $remote = Client::for($integration)->createBroadcast(array_filter([
+                'name' => $validated['name'],
+                'body_type' => 'text',
+                'body_text' => $validated['message'],
+                'media_base64' => $mediaPath
+                    ? base64_encode(Storage::disk('local')->get($mediaPath))
+                    : null,
+                'media_mime' => $mediaPath ? Storage::disk('local')->mimeType($mediaPath) : null,
+                'audience' => 'phones',
+                // El `external_ref` es el lead: es lo que permite marcar de
+                // vuelta la fila exacta que quedó afuera, sin adivinar por
+                // teléfono.
+                'recipients' => array_map(fn ($r) => [
+                    'phone' => $r->phone,
+                    'external_ref' => $r->lead_id,
+                ], $recipients),
+            ]));
+        } catch (WacrmApiException $e) {
+            // El motivo del otro lado aterriza en la pantalla («ninguno tiene la
+            // ventana abierta», «WhatsApp no está conectado»). Un fallo mudo acá
+            // sería un botón que no hace nada.
+            throw ValidationException::withMessages(['name' => $e->getMessage()]);
+        }
+
+        $report = $remote['report'] ?? [];
+
+        // Motivo por lead de los que quedaron afuera, para marcar cada fila.
+        $excluded = collect($report['excluded'] ?? [])
+            ->filter(fn ($e) => ! empty($e['external_ref']))
+            ->keyBy('external_ref');
+
+        DB::transaction(function () use ($request, $validated, $accountId, $recipients, &$broadcast, $mediaPath, $remote, $report, $excluded) {
             $broadcast = Broadcast::create([
                 'account_id' => $accountId,
                 'user_id' => $request->user()->id,
@@ -173,48 +222,119 @@ class BroadcastController extends Controller
                 'media_path' => $mediaPath,
                 'filters' => $validated['filters'] ?? [],
                 'status' => 'running',
-                'total_recipients' => count($recipients),
+                'wacrm_broadcast_id' => $remote['id'] ?? null,
+                'report' => $report,
+                // Los que realmente salen, no los pedidos: si el total dijera
+                // 300 y solo salen 40, la barra de progreso mentiría para
+                // siempre.
+                'total_recipients' => $report['sending_to'] ?? count($recipients),
                 'sent_at' => now(),
             ]);
 
+            // La audiencia COMPLETA se congela igual, incluidos los descartados:
+            // «a quién se le quiso escribir y por qué no se pudo» es parte del
+            // hecho histórico, y es la única forma de saber a quién hay que
+            // alcanzar con una plantilla.
             $now = now();
-            $rows = array_map(fn ($r) => [
-                'id' => (string) Str::uuid(),
-                'broadcast_id' => $broadcast->id,
-                'lead_id' => $r->lead_id,
-                'contact_id' => $r->contact_id,
-                'phone_normalized' => $r->phone,
-                'status' => 'pending',
-                'created_at' => $now,
-                'updated_at' => $now,
-            ], $recipients);
+            $rows = array_map(function ($r) use ($broadcast, $now, $excluded) {
+                $out = $excluded->get($r->lead_id);
+
+                return [
+                    'id' => (string) Str::uuid(),
+                    'broadcast_id' => $broadcast->id,
+                    'lead_id' => $r->lead_id,
+                    'contact_id' => $r->contact_id,
+                    'phone_normalized' => $r->phone,
+                    'status' => $out ? 'skipped' : 'pending',
+                    'error' => $out ? self::EXCLUSION_REASONS[$out['reason']] ?? $out['reason'] : null,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            }, $recipients);
 
             foreach (array_chunk($rows, 500) as $chunk) {
                 BroadcastRecipient::insert($chunk);
             }
-
-            // Dispatchear un job por recipient para paralelismo con throttle del queue worker
-            BroadcastRecipient::where('broadcast_id', $broadcast->id)
-                ->pluck('id')
-                ->each(fn ($id) => SendBroadcastMessageJob::dispatch($id));
         });
 
-        return redirect()->route('broadcasts.show', $broadcast)->with('success', 'Broadcast en curso — se procesa en segundo plano.');
+        $mensaje = ($report['out_of_window'] ?? 0) > 0
+            ? "Broadcast en curso — sale a {$report['sending_to']} de {$report['requested']}: el resto tiene la ventana de 24 h cerrada."
+            : 'Broadcast en curso — se procesa en segundo plano.';
+
+        return redirect()->route('broadcasts.show', $broadcast)->with('success', $mensaje);
     }
+
+    /** Motivos que devuelve el wacrm, en el idioma de la pantalla. */
+    private const EXCLUSION_REASONS = [
+        'ventana_cerrada' => 'Ventana de 24 h cerrada — hace falta una plantilla aprobada.',
+        'sin_conversacion' => 'Nunca escribió por WhatsApp: no hay ventana abierta.',
+    ];
 
     public function show(Request $request, Broadcast $broadcast): Response
     {
         $this->authorizeBroadcast($request, $broadcast);
         $broadcast->refresh();
 
+        $remoteError = $broadcast->isDelegated() ? $this->syncFromWacrm($broadcast) : null;
+
         return Inertia::render('Broadcasts/Show', [
             'broadcast' => $broadcast->load('user:id,name'),
             'recipients' => $broadcast->recipients()
                 ->with(['lead:id,title', 'contact:id,name'])
-                ->orderByRaw("CASE status WHEN 'failed' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END")
+                ->orderByRaw("CASE status WHEN 'failed' THEN 0 WHEN 'skipped' THEN 1 WHEN 'pending' THEN 2 ELSE 3 END")
                 ->limit(200)
                 ->get(),
+            // Motivos de fallo agrupados del lado del wacrm: sin esto «12
+            // fallaron» no dice si fue la ventana, un teléfono inválido o que
+            // Meta cortó el envío entero.
+            'failureReasons' => $broadcast->failure_reasons ?? [],
+            'remoteError' => $remoteError,
         ]);
+    }
+
+    /**
+     * Trae los contadores reales del wacrm, que es quien envía.
+     *
+     * Los contadores locales se actualizan como caché para que el listado (que
+     * no consulta al wacrm) muestre algo razonable. La pantalla se refresca
+     * sola cada 4 s mientras el envío está en curso, así que esta llamada
+     * ocurre seguido: si el wacrm no responde, la pantalla NO se rompe — sigue
+     * mostrando lo último que se supo y lo dice.
+     *
+     * @return string|null  motivo, si no se pudo consultar
+     */
+    private function syncFromWacrm(Broadcast $broadcast): ?string
+    {
+        $integration = Integration::forAccount($broadcast->account_id)->first();
+
+        if (! $integration || ! $integration->wacrm_url || ! $integration->wacrm_api_key) {
+            return 'La integración con WhatsApp no está configurada; los números pueden estar desactualizados.';
+        }
+
+        try {
+            $remote = Client::for($integration)->broadcast($broadcast->wacrm_broadcast_id);
+        } catch (\Throwable $e) {
+            return 'No se pudo consultar el estado del envío: '.$e->getMessage();
+        }
+
+        $broadcast->forceFill([
+            'sent_count' => $remote['sent_count'] ?? $broadcast->sent_count,
+            'failed_count' => $remote['failed_count'] ?? $broadcast->failed_count,
+            // `sending|scheduled` allá es «en curso» acá; `sent` es completado.
+            'status' => match ($remote['status'] ?? null) {
+                'sent' => 'completed',
+                'failed' => 'failed',
+                default => 'running',
+            },
+            'completed_at' => in_array($remote['status'] ?? null, ['sent', 'failed'], true)
+                ? ($broadcast->completed_at ?? now())
+                : null,
+        ])->save();
+
+        // No es columna: viaja solo a la vista.
+        $broadcast->failure_reasons = $remote['failure_reasons'] ?? [];
+
+        return null;
     }
 
     /** Sirve la imagen adjunta al broadcast (autorizada por pertenencia a la cuenta). */

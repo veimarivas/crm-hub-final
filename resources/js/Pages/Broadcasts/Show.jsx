@@ -6,14 +6,21 @@ const STATUS_ROW = {
     pending: { label: 'Pendiente', color: 'bg-gray-100 text-gray-600 ring-gray-200' },
     sent: { label: 'Enviado', color: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
     failed: { label: 'Fallido', color: 'bg-red-50 text-red-700 ring-red-200' },
+    // No se intentó: la ventana de 24 h estaba cerrada. Es distinto de fallido
+    // — a este todavía se le puede llegar, pero con plantilla aprobada.
+    skipped: { label: 'No enviado', color: 'bg-amber-50 text-amber-700 ring-amber-200' },
 };
 
-export default function Show({ broadcast, recipients }) {
+export default function Show({ broadcast, recipients, failureReasons = {}, remoteError = null }) {
     useEffect(() => {
         if (broadcast.status !== 'running') return;
-        const id = setInterval(() => router.reload({ only: ['broadcast', 'recipients'] }), 4000);
+        const id = setInterval(() => router.reload({ only: ['broadcast', 'recipients', 'failureReasons', 'remoteError'] }), 4000);
         return () => clearInterval(id);
     }, [broadcast.status]);
+
+    const report = broadcast.report ?? null;
+    const excluidos = report?.out_of_window ?? 0;
+    const motivos = Object.entries(failureReasons);
 
     const pct = broadcast.total_recipients > 0 ? Math.round(((broadcast.sent_count + broadcast.failed_count) / broadcast.total_recipients) * 100) : 0;
     const successPct = broadcast.total_recipients > 0 ? Math.round((broadcast.sent_count / broadcast.total_recipients) * 100) : 0;
@@ -70,6 +77,42 @@ export default function Show({ broadcast, recipients }) {
                                             {pct}% procesado {broadcast.status === 'running' && <span className="text-amber-600 font-semibold">· actualizando cada 4s</span>}
                                         </p>
                                     </div>
+
+                                    {/* La diferencia entre lo pedido y lo que sale. Va arriba y
+                                        no al pie: «se mandó a 40 de 300» es la primera pregunta
+                                        que hace quien arma el envío, no la última. */}
+                                    {excluidos > 0 && (
+                                        <div className="p-3 rounded-xl bg-amber-50 border border-amber-100">
+                                            <p className="text-xs font-bold text-amber-800">
+                                                Sale a {report.sending_to} de {report.requested} seleccionados
+                                            </p>
+                                            <p className="text-[11px] text-amber-700 mt-1">
+                                                {excluidos} {excluidos === 1 ? 'quedó' : 'quedaron'} afuera porque su ventana de 24 h está cerrada
+                                                {report.unknown_contacts > 0 && ` (${report.unknown_contacts} nunca escribió por WhatsApp)`}.
+                                                Para alcanzarlos hace falta una plantilla aprobada por Meta.
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {motivos.length > 0 && (
+                                        <div className="p-3 rounded-xl bg-red-50 border border-red-100">
+                                            <p className="text-xs font-bold text-red-800 mb-1.5">Motivos de fallo</p>
+                                            <ul className="space-y-1">
+                                                {motivos.map(([motivo, total]) => (
+                                                    <li key={motivo} className="text-[11px] text-red-700 flex gap-2">
+                                                        <span className="font-bold tabular-nums shrink-0">{total}×</span>
+                                                        <span className="min-w-0">{motivo}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+
+                                    {remoteError && (
+                                        <p className="text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded-xl p-3">
+                                            ⚠️ {remoteError}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                         </div>

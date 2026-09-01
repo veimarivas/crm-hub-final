@@ -85,6 +85,34 @@ class Client
         ])));
     }
 
+    /**
+     * Crea un broadcast EN EL WACRM y devuelve el broadcast con su informe de
+     * audiencia. Requiere scope `broadcasts:write`.
+     *
+     * Komo resuelve **a quién** (con `SegmentQuery`, que el wacrm no puede
+     * reproducir porque no conoce leads ni etapas) y el wacrm resuelve **cómo
+     * se manda**: plantillas, ventana de servicio, rate limit y métricas. Es la
+     * división que hace que exista un solo motor de envíos.
+     *
+     * El timeout es largo a propósito: con adjunto, el cuerpo lleva el archivo
+     * en base64 y una audiencia de miles de teléfonos.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    public function createBroadcast(array $payload): array
+    {
+        return $this->unwrap($this->request()->timeout(120)->post('/broadcasts', $payload));
+    }
+
+    /**
+     * Estado real de un broadcast delegado: contadores, motivos de fallo e
+     * informe de audiencia. Requiere scope `broadcasts:read`.
+     */
+    public function broadcast(string $id): array
+    {
+        return $this->unwrap($this->request()->get("/broadcasts/{$id}"));
+    }
+
     /** Obtiene las plantillas rápidas compartidas del equipo (para el composer). */
     public function quickReplies(): array
     {
