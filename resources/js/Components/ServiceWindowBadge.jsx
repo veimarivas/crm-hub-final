@@ -17,6 +17,19 @@ export function windowCountdown(seconds) {
     return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+/**
+ * Un canal SIN plazo (Telegram, correo, SMS, webchat) llega con
+ * `window_hours: null` desde el servidor. No es un dato faltante: es la señal
+ * de «acá no hay cuenta regresiva que dibujar».
+ *
+ * Sin esta guarda, la barra hace `remaining_seconds / (null * 3600)` — o sea
+ * división por cero— y el contador muestra «Cerrada» sobre una conversación
+ * que en realidad está abierta para siempre.
+ */
+export function windowIsUnlimited(w) {
+    return !!w?.is_open && (w.window_hours === null || w.window_hours === undefined);
+}
+
 export function windowTone(w) {
     if (!w?.is_open) return { badge: 'bg-red-50 text-red-700 ring-red-200', bar: 'bg-red-500', text: 'text-red-700' };
     if (w.is_expiring) return { badge: 'bg-amber-50 text-amber-700 ring-amber-200', bar: 'bg-amber-500', text: 'text-amber-700' };
@@ -27,6 +40,9 @@ export function windowTitle(w) {
     if (!w) return '';
     if (!w.is_open) {
         return 'Ventana cerrada: escribirle ahora requiere una plantilla aprobada y tiene costo.';
+    }
+    if (windowIsUnlimited(w)) {
+        return 'Este canal no tiene ventana de servicio: podés escribirle cuando quieras, sin costo.';
     }
     const origen = w.source === 'meta_ad' ? ', abierta por un anuncio de Facebook' : '';
 
@@ -46,8 +62,8 @@ export default function ServiceWindowBadge({ window: w, showOrigin = false }) {
             className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold ring-1 ${tone.badge}`}
         >
             <span>{fromAd ? '📣' : '💬'}</span>
-            {w.is_open ? windowCountdown(w.remaining_seconds) : 'Cerrada'}
-            {showOrigin && <span className="font-normal opacity-70">{fromAd ? '72h' : '24h'}</span>}
+            {windowIsUnlimited(w) ? 'Sin límite' : (w.is_open ? windowCountdown(w.remaining_seconds) : 'Cerrada')}
+            {showOrigin && !windowIsUnlimited(w) && <span className="font-normal opacity-70">{fromAd ? '72h' : '24h'}</span>}
         </span>
     );
 }
@@ -70,8 +86,11 @@ export function ServiceWindowCard({ window: w }) {
 
     const tone = windowTone(w);
     const fromAd = w.source === 'meta_ad';
+    const sinLimite = windowIsUnlimited(w);
+    // Sin ventana no hay proporción que calcular: la barra va llena. Dividir
+    // por `null * 3600` daría Infinity y la barra quedaría en un estado raro.
     const totalSeconds = w.window_hours * 3600;
-    const pct = Math.max(0, Math.min(100, (w.remaining_seconds / totalSeconds) * 100));
+    const pct = sinLimite ? 100 : Math.max(0, Math.min(100, (w.remaining_seconds / totalSeconds) * 100));
 
     const fmt = (iso) => (iso ? new Date(iso).toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—');
 
@@ -81,11 +100,11 @@ export function ServiceWindowCard({ window: w }) {
                 <div>
                     <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Ventana de WhatsApp</p>
                     <p className={`text-2xl font-extrabold mt-1 tabular-nums leading-none ${tone.text}`}>
-                        {w.is_open ? windowCountdown(w.remaining_seconds) : 'Cerrada'}
+                        {sinLimite ? 'Sin límite' : (w.is_open ? windowCountdown(w.remaining_seconds) : 'Cerrada')}
                     </p>
                 </div>
                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold ring-1 shrink-0 ${tone.badge}`}>
-                    {fromAd ? '📣 Anuncio · 72 h' : '💬 WhatsApp · 24 h'}
+                    {sinLimite ? `💬 ${w.source}` : (fromAd ? '📣 Anuncio · 72 h' : '💬 WhatsApp · 24 h')}
                 </span>
             </div>
 
@@ -94,7 +113,9 @@ export function ServiceWindowCard({ window: w }) {
             </div>
 
             <p className="text-xs text-gray-500 mt-2.5 leading-relaxed">
-                {w.is_open ? (
+                {sinLimite ? (
+                    <>Este canal <strong>no tiene ventana de servicio</strong>: podés escribirle cuando quieras, sin costo.</>
+                ) : w.is_open ? (
                     <>Podés escribirle sin costo hasta el <strong>{fmt(w.expires_at)}</strong>.</>
                 ) : (
                     <>Venció el <strong>{fmt(w.expires_at)}</strong>. Escribirle ahora requiere una plantilla aprobada y <strong>tiene costo</strong>.</>

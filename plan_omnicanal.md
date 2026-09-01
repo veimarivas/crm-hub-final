@@ -151,6 +151,32 @@ El 2026-07-28 se eliminó el módulo de **avisos por Telegram a los agentes** (c
 
 ## F0 — Refactor multi-canal (wacrm + Komo) · base obligatoria
 
+> **Avance 2026-09-01 — `ChannelRules` + corte de canal en `ServiceWindow` y `MessagingCost`: ✅ HECHO** (los dos repos, mismo día).
+>
+> Se hizo **primero** dentro de F0, y no como parte de T0.2, porque es la pieza que no depende
+> de nada: ni del esquema, ni del ingestor, ni de los adapters. Y porque `plan_deduplicacion.md`
+> D4 acababa de poner fixtures sobre `ServiceWindow::build()` — hacerlo con la red puesta en vez
+> de sin ella.
+>
+> - `ChannelRules` nace como **gemelo** (byte-idéntico, dentro del manifiesto de
+>   `SharedFilesDriftTest`), tal como pedía la §T0.2.
+> - El corte va en `build()` con default `'whatsapp'`: **ningún llamador cambió**.
+> - **Trampa 6 confirmada como real:** la rama «siempre abierta» devuelve todas las claves, y
+>   `window_hours: null` es la señal que la UI lee para no dibujar una cuenta regresiva. Sin
+>   eso el badge decía «Cerrada» sobre una conversación abierta para siempre.
+> - **Trampa 7 (`MessagingCost`) resuelta**: costo cero para canales sin tarifa, con `has_cost`
+>   en el retorno para que la pantalla explique por qué.
+> - La distinción de la **§F2** (Messenger/Instagram tienen 24 h pero NO las 72 h del anuncio)
+>   se adelantó: es una regla, no un adapter, y dejarla para después significaba escribirla
+>   cuando ya hubiera código dependiendo de lo contrario. Fijada con dos casos de fixture
+>   enfrentados.
+>
+> **Sigue pendiente de F0:** T0.1 (migraciones + `contact_identities` + `channel_configs`),
+> T0.2 (adapters + `ChannelRouter`), **T0.2b (el ingestor — el cambio más riesgoso, y va con
+> `InboundProcessorParityTest` ANTES de mover nada)**, T0.3, T0.4, T0.5.
+
+
+
 Sin canales nuevos todavía. Todo lo existente sigue funcionando idéntico. **[REV] F0 se parte en dos commits** porque toca los dos repos y el orden de deploy importa: **F0a wacrm** (esquema + capa de canales + ingestor + endpoint por conversación) y **F0b Komo** (identidades, `payload.channel`, direccionamiento, UI). Cada uno deja su suite en verde por separado.
 
 ### T0.1 Migraciones (wacrm)

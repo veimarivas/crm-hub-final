@@ -2,6 +2,29 @@
 
 CRM de ventas centrado en **leads** inspirado en Kommo (kommo.com), hermano del **wacrm** (`C:\xampp_82_12\htdocs\laravel_crm_whatsapp`, CRM de WhatsApp). Son **dos proyectos separados integrados por API**: este maneja leads/tareas/pipeline; el wacrm es el motor de WhatsApp.
 
+## F0 (1/n) — los gemelos se vuelven conscientes del canal (2026-09-01)
+
+Primer paso de `plan_omnicanal.md` §F0. **Sin canales nuevos todavía: todo lo existente se comporta idéntico.** Se hizo justo después de D4 y no antes, a propósito — este cambio toca `ServiceWindow::build()` en los dos repos, que es exactamente lo que las fixtures de D4 protegen.
+
+**`Services\Channels\ChannelRules` es un GEMELO nuevo** y nace como tal: archivo byte-idéntico en los dos proyectos, dentro del manifiesto de `SharedFilesDriftTest` desde el día uno. Es una clase **sin dependencias** (constantes + estáticos), y eso es lo que la hace posible: si dependiera de los adapters del wacrm, acá no podría existir.
+
+### Las cuatro preguntas que separan un canal de otro
+- **¿tiene ventana de servicio?** Solo los canales de Meta. En Telegram, correo o SMS no hay plazo que vencer.
+- **¿tiene las 72 h del anuncio?** **Solo WhatsApp.** Es la regla más fácil de generalizar mal: Messenger e Instagram comparten la app de Meta y las 24 h, pero **no** las 72 h del free entry point. Dárselas diría «todavía es gratis» cuando ya no lo es. El plan lo marcaba como el cambio de definición de gemelos más delicado; queda fijado con dos casos de fixture enfrentados (mismo escenario en messenger y en whatsapp, resultado opuesto).
+- **¿exige plantilla aprobada?** Solo WhatsApp.
+- **¿se puede escribir primero?** Telegram no (un bot solo alcanza a quien lo inició — lección del módulo de avisos eliminado el 2026-07-28), webchat tampoco.
+
+### El corte va en `build()` y en ningún otro lado
+Los cuatro métodos públicos de `ServiceWindow` terminan ahí, así que una sola línea cubre la ficha, los listados y los contactos. `$channel` tiene default `'whatsapp'`: **ningún llamador actual cambió**, y las 9 fixtures que ya existían prueban precisamente ese default.
+
+**⚠️ La trampa que el plan anticipaba y era real:** la rama «siempre abierta» tiene que devolver **todas** las claves del contrato. La tarjeta hace `w.window_hours * 3600` y divide `remaining_seconds` por eso — con `window_hours` ausente es una división por cero, y con `remaining_seconds: 0` el badge diría **«Cerrada» sobre una conversación abierta para siempre**. `window_hours: null` es la señal de «sin límite» y `ServiceWindowBadge` la lee para escribir *«Sin límite»* y llenar la barra.
+
+**`MessagingCost` recibe el canal** (trampa 7 del plan): costo cero para canales sin tarifa, y viaja `has_cost` para que la pantalla pueda decir **por qué** el total es cero — un «USD 0,00» suelto se lee como un error.
+
+**Un canal desconocido no rompe nada.** Los canales nacen en el wacrm y los deploys no son simultáneos: este proyecto va a recibir eventos de canales que todavía no conoce. Todas las reglas contestan que no, que es el criterio conservador — como mucho no ofrece algo, nunca gasta de más. Hay fixture y test.
+
+Tests: `TwinContractTest` sube a 6 (211 aserciones). Suite **409/409 (1454 aserciones)**.
+
 ## D3-red — guardián de deriva de los archivos compartidos (2026-09-01)
 
 **No es D3.** D3 —extraer los 36 archivos duplicados a un paquete compartido— **sigue bloqueada** por dónde alojar el paquete de npm, porque el build corre en el VPS. Esto es su red, para que la deriva no siga siendo invisible mientras tanto.
