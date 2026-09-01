@@ -284,7 +284,30 @@ duplicada; un cambio en `PrimaryButton` se ve en las dos apps con un bump de ver
 
 ---
 
-### D4 — Gemelos con fixtures compartidas
+### D4 — Gemelos con fixtures compartidas · ✅ HECHO (2026-09-01)
+
+> `tests/Fixtures/twins/{service-window,response-metrics}.json`, byte-idénticos en los dos
+> repos, más `TwinContractTest` en cada uno. **133 aserciones de cada lado, el mismo número** —
+> la evidencia de que hoy los gemelos están de acuerdo de verdad, midiendo desde fuentes
+> distintas (`messages` vs `lead_events`).
+> Suites: wacrm **439/439**, Komo **405/405**.
+>
+> **Se hizo sin esperar a D3, que era la dependencia declarada.** El plan ponía las fixtures
+> dentro del paquete compartido, y D3 sigue bloqueada por el hosting del npm. Pero el archivo
+> duplicado ya cierra el caso real —alguien toca la definición que tiene enfrente y su propia
+> suite se pone roja— y F0 del omnicanal está por meter `ChannelRules` justo en
+> `ServiceWindow::build()`. Esperar habría dejado ese cambio sin red.
+>
+> **Lo que queda sin cubrir, dicho en el propio test:** editar las fixtures de los dos repos de
+> forma inconsistente sigue siendo posible. Se cierra cuando el archivo viva una sola vez, o
+> sea al hacer D3. Cuando pase, las dos copias se borran y el test apunta al paquete.
+>
+> **Se verificó que el guardián detecta, no solo que pasa.** Con la suite verde se rompió la
+> definición a propósito dos veces —`WARNING_HOURS` 4→3 y `max($adExpiry)`→`min()`— y las dos
+> salieron en rojo con el caso nombrado. Un test que nunca se vio fallar es una intención, no
+> una garantía.
+
+
 
 **El problema:** `ServiceWindow` y `ResponseMetrics` están documentados como «si cambia una
 definición hay que tocar los dos» (`plan_omnicanal.md` §1). El mecanismo que lo garantiza es
@@ -422,12 +445,14 @@ consecuencias, ninguna documentada:
 | ~~**D1** Broadcasts~~ ✅ | hecho | wacrm → Komo | — | Deja de facturar mal / envíos visibles en métricas |
 | ~~**D2** Taxonomía~~ ✅ | hecho | wacrm → Komo | — | Etiquetas y campos coherentes entre pantallas |
 | **D3** Paquete `crm-core` | 1-2 sem | ambos | decisión de hosting npm | 36 archivos dejan de ser dos; `ChannelRules` nace único |
-| **D4** Fixtures de gemelos | 3 d | ninguno | D3 | La convención pasa a ser garantía |
+| ~~**D4** Fixtures de gemelos~~ ✅ | hecho | ninguno | ~~D3~~ | La convención pasa a ser garantía |
 | ~~**D5** Pipeline read-only~~ ✅ | hecho | wacrm → Komo | — | Se cierra la correlación por nombre |
 
-**Quedan D3 y D4** (~2 semanas), las dos estructurales y las dos previas a F0 del omnicanal.
-**D3 sigue bloqueada** por la decisión #1 del §7 (hosting del paquete npm); su mitad PHP, que
-solo necesita composer `vcs`, no lo está.
+**Queda solo D3** (~1-2 semanas), la última estructural. **Sigue bloqueada** por la decisión #1
+del §7 (hosting del paquete npm); su mitad PHP, que solo necesita composer `vcs`, no lo está.
+
+Cuando D3 se haga, además de extraer los 36 archivos idénticos hay que **mover ahí las fixtures
+de D4** y borrar las dos copias: es lo que cierra el único agujero que D4 dejó abierto.
 
 **Encaje con `plan_omnicanal.md`:**
 

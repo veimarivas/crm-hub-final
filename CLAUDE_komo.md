@@ -2,6 +2,26 @@
 
 CRM de ventas centrado en **leads** inspirado en Kommo (kommo.com), hermano del **wacrm** (`C:\xampp_82_12\htdocs\laravel_crm_whatsapp`, CRM de WhatsApp). Son **dos proyectos separados integrados por API**: este maneja leads/tareas/pipeline; el wacrm es el motor de WhatsApp.
 
+## D4 — el contrato de los gemelos, fijado con fixtures (2026-09-01)
+
+Cuarta fase ejecutada de `plan_deduplicacion.md`. **Cross-repo, sin orden de deploy**: son solo tests.
+
+`ServiceWindow` y `ResponseMetrics` existen acá y en el wacrm con definiciones que **deben** coincidir. Hasta hoy el mecanismo que lo garantizaba era **acordarse**, y nada lo comprobaba. Ya había pasado con la capa de gráficos, que nació como «una sola» y en un mes tenía dos `format.js`.
+
+`tests/Fixtures/twins/*.json` son **byte-idénticos en los dos repos**. Cada uno construye el estado con **su propia fuente** —acá `lead_events`, allá `messages`— y compara contra los mismos números. **133 aserciones de cada lado, el mismo número.**
+
+- `ServiceWindow::build()` es función pura de dos fechas en los dos repos: 9 casos, incluidas las 72 h que no se reinician y el de «toca el anuncio y escribe en la hora 71 → llega a la hora 95».
+- `ResponseMetrics`: el reloj arranca en el primer mensaje de la ráfaga, la IA no cierra la espera, un saliente sin espera abierta es seguimiento proactivo y no entra en los promedios, el SLA se incumple **al** llegar a los 30 min.
+- Única diferencia declarada: `first_responder` es `'responsable'` acá y `'asignado'` allá. La fixture usa el token `__owner__` y cada repo lo traduce — la diferencia queda escrita, no escondida.
+
+**Se verificó que el guardián detecta**, rompiendo la definición a propósito con la suite en verde: una constante (`WARNING_HOURS`) y un comportamiento (`max()`→`min()` en la selección de ventana). Los dos salen en rojo con el caso nombrado. Un test que nunca se vio fallar no es una garantía.
+
+**⚠️ Lo que NO protege:** editar las fixtures de los dos repos de forma inconsistente. Para eso el archivo tiene que vivir **una** vez — es D3. Lo que sí se cierra es el caso real: alguien toca la definición que tiene enfrente y su propia suite se pone roja.
+
+**⚠️ Trampa (la de siempre, y por eso está comentada en el test):** `created_at` no es fillable en `LeadEvent`; pasarlo en el `create()` se ignora **en silencio** y todos los eventos quedan con la hora del test, con lo cual toda medición de tiempo da cero y el test pasa por casualidad. Va con `forceFill()->save()` después de crear.
+
+Tests: `TwinContractTest` (4, 133 aserciones). Suite **405/405 (1376 aserciones)**.
+
 ## D5b — la etapa se correlaciona por uuid, y gana el lead abierto (2026-09-01)
 
 Tercera fase ejecutada de `plan_deduplicacion.md`. **Cross-repo**: D5a va en el wacrm y se despliega **primero**. **Arregla dos fallas silenciosas que ya estaban en producción**, no es mantenimiento.
