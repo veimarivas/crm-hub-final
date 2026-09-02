@@ -4,11 +4,13 @@ namespace App\Services\Wacrm;
 
 use App\Models\AppNotification;
 use App\Models\Contact;
+use App\Models\ContactIdentity;
 use App\Models\Integration;
 use App\Models\Lead;
 use App\Models\Pipeline;
 use App\Models\User;
 use App\Services\BusinessHours\Schedule;
+use App\Services\Channels\ChannelRules;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -231,17 +233,46 @@ class EventProcessor
             });
     }
 
-    private function syncContact(Integration $integration, array $remote): ?Contact
+    /**
+     * El contacto detrás de un evento del wacrm.
+     *
+     * **F0b/T0.4 — el cambio de fondo, no un `default`.** Este método arrancaba
+     * descartando todo evento sin teléfono:
+     *
+     *     if (! $normalized) { return null; }
+     *
+     * Un mensaje de Telegram llega sin teléfono, así que este proyecto lo tiraba
+     * **en silencio**: sin contacto, sin lead, sin evento. El wacrm lo procesaba
+     * bien y acá desaparecía sin dejar rastro — la peor forma de fallar, porque
+     * no hay error que investigar.
+     *
+     * El orden nuevo: **identidad primero**, teléfono como respaldo, y recién
+     * si no hay ninguno de los dos se descarta.
+     */
+    private function syncContact(Integration $integration, array $remote, string $channel = ChannelRules::DEFAULT): ?Contact
     {
+        $externalId = $remote['channel_external_id'] ?? null;
         $normalized = Contact::normalizePhone($remote['phone'] ?? null);
 
-        if (! $normalized) {
-            return null;
+        // En WhatsApp el identificador del canal ES el teléfono normalizado, y
+        // los eventos viejos no traen `channel_external_id`. Derivarlo acá
+        // mantiene funcionando a un wacrm sin desplegar.
+        if (! $externalId && $channel === ChannelRules::WHATSAPP) {
+            $externalId = $normalized;
         }
 
-        $contact = Contact::forAccount($integration->account_id)
-            ->where('phone_normalized', $normalized)
-            ->first();
+        $contact = $externalId
+            ? ContactIdentity::resolverContacto($integration->account_id, $channel, $externalId)
+            : null;
+
+        // Respaldo por teléfono: cubre a los contactos anteriores a F0 cuya
+        // identidad creó el backfill y a cualquiera que haya entrado por otra
+        // vía (formulario web, importación, alta manual).
+        if (! $contact && $normalized) {
+            $contact = Contact::forAccount($integration->account_id)
+                ->where('phone_normalized', $normalized)
+                ->first();
+        }
 
         if ($contact) {
             // Completa datos que falten sin pisar lo editado aquí.
@@ -251,21 +282,46 @@ class EventProcessor
                 'wacrm_contact_id' => $remote['id'] ?? null,
             ]));
 
+            if ($externalId) {
+                ContactIdentity::registrar($contact, $channel, $externalId, $remote['name'] ?? null);
+            }
+
             return $contact;
         }
 
-        return Contact::create([
+        // Sin identidad y sin teléfono no hay a quién atribuirle el mensaje: es
+        // el único caso que se sigue descartando, y ya no es «no trae teléfono»
+        // sino «no trae NINGÚN identificador».
+        if (! $externalId && ! $normalized) {
+            return null;
+        }
+
+        $contact = Contact::create([
             'account_id' => $integration->account_id,
+            // Un contacto sin teléfono cae al nombre del perfil del canal. Antes
+            // caía al teléfono, que en estos canales sería null.
             'name' => $remote['name'] ?: ($remote['phone'] ?? 'Sin nombre'),
             'phone' => $remote['phone'] ?? null,
             'email' => $remote['email'] ?? null,
             'wacrm_contact_id' => $remote['id'] ?? null,
         ]);
+
+        if ($externalId) {
+            ContactIdentity::registrar($contact, $channel, $externalId, $remote['name'] ?? null);
+        }
+
+        return $contact;
     }
 
     private function handleInboundMessage(Integration $integration, array $data): void
     {
-        $contact = $this->syncContact($integration, $data['contact'] ?? []);
+        // El canal llega en el payload desde F0. Los eventos anteriores no lo
+        // traen y son todos de WhatsApp, así que el default los cubre sin
+        // migrar nada. Un canal DESCONOCIDO se guarda crudo y no rompe: los
+        // canales nacen en el wacrm y los deploys no son simultáneos.
+        $channel = $data['channel'] ?? ChannelRules::DEFAULT;
+
+        $contact = $this->syncContact($integration, $data['contact'] ?? [], $channel);
 
         if (! $contact) {
             return;
@@ -299,8 +355,11 @@ class EventProcessor
                 'pipeline_id' => $pipeline->id,
                 'stage_id' => $firstStage->id,
                 'contact_id' => $contact->id,
-                'title' => 'WhatsApp: '.$contact->name,
-                'source' => 'whatsapp',
+                // El título y la fuente dicen el canal real. Un lead de
+                // Telegram rotulado «WhatsApp:» haría que los reportes por
+                // fuente mientan desde el primer día.
+                'title' => ucfirst($channel).': '.$contact->name,
+                'source' => $channel,
                 'source_ref' => $referral['source_id'] ?? null,
                 'source_url' => $referral['source_url'] ?? null,
                 'wacrm_conversation_id' => $data['conversation_id'] ?? null,
@@ -322,18 +381,21 @@ class EventProcessor
             }
 
             $lead->recordEvent('created', null, array_filter([
-                'source' => 'whatsapp',
+                'source' => $channel,
+                'channel' => $channel,
                 'ad_id' => $referral['source_id'] ?? null,
                 'utm_source' => $lead->utm_source,
             ]));
 
-            // Aviso al owner: entró un lead nuevo por WhatsApp.
+            // Aviso al owner: entró un lead nuevo. La categoría se mantiene
+            // (`lead_created_whatsapp`) porque hay filtros y pantallas que la
+            // usan; lo que cambia es el texto, que ahora dice la verdad.
             AppNotification::notify(
                 $integration->account_id,
                 $integration->account->owner_user_id,
                 'lead_created_whatsapp',
-                'Nuevo lead de WhatsApp',
-                "{$contact->name} escribió por WhatsApp",
+                'Nuevo lead de '.ucfirst($channel),
+                "{$contact->name} escribió por ".ucfirst($channel),
                 $lead->id,
             );
         }
@@ -353,6 +415,12 @@ class EventProcessor
         }
 
         $lead->recordEvent('message_in', null, [
+            // El canal en el payload del evento: es lo que permite que la
+            // ventana de servicio, la supervisión y los segmentos sepan de qué
+            // están hablando. Los eventos viejos no lo traen y se leen como
+            // WhatsApp, que es lo que eran.
+            'channel' => $channel,
+            'conversation_id' => $data['conversation_id'] ?? null,
             'text' => mb_substr($data['message']['text'] ?? '', 0, 500),
             'type' => $data['message']['type'] ?? 'text',
             'wamid' => $data['message']['wamid'] ?? null,

@@ -2,6 +2,37 @@
 
 CRM de ventas centrado en **leads** inspirado en Kommo (kommo.com), hermano del **wacrm** (`C:\xampp_82_12\htdocs\laravel_crm_whatsapp`, CRM de WhatsApp). Son **dos proyectos separados integrados por API**: este maneja leads/tareas/pipeline; el wacrm es el motor de WhatsApp.
 
+## F0b/T0.4 — Komo deja de descartar los eventos sin teléfono (2026-09-01)
+
+**Era el bloqueante del E2E de Telegram, y fallaba de la peor manera posible.** `EventProcessor::syncContact()` arrancaba con:
+
+```php
+$normalized = Contact::normalizePhone($remote['phone'] ?? null);
+if (! $normalized) { return null; }
+```
+
+Un mensaje de Telegram llega **sin teléfono**, así que este proyecto lo tiraba **en silencio**: sin contacto, sin lead, sin evento. El wacrm lo procesaba bien y acá desaparecía sin dejar rastro — no había error que investigar.
+
+### El orden nuevo: identidad → teléfono → descartar
+`contact_identities` (espejo del wacrm, con backfill en la migración) y `syncContact()` reescrito:
+
+1. **Por identidad** (`channel` + `channel_external_id`).
+2. **Respaldo por teléfono**, que cubre a los contactos anteriores a F0 y a cualquiera que haya entrado por otra vía (alta manual, importación, formulario web) — y de paso les deja la identidad que faltaba.
+3. Solo se descarta si no hay **ninguno de los dos**. Ya no es «no trae teléfono» sino «no trae ningún identificador».
+
+**En WhatsApp el identificador del canal ES el teléfono normalizado**, así que si el evento no trae `channel_external_id` se deriva: un wacrm sin desplegar sigue funcionando.
+
+### El canal viaja y da forma al lead
+`payload.channel` y `payload.conversation_id` quedan en cada `message_in`. El lead nace con `source = $channel` y título `«Telegram: Ana»` — un lead de Telegram rotulado «WhatsApp:» haría que los reportes por fuente mientan desde el primer día. Un **canal desconocido se guarda crudo y no rompe**: los canales nacen en el wacrm y los deploys no son simultáneos.
+
+**`ServiceWindow::forLeads` ya resuelve el canal de cada lead** desde el último entrante que lo declare (una query más, ordenada ascendente porque `pluck` va pisando la clave y gana el más reciente). Un lead de Telegram muestra «sin límite»; uno de WhatsApp sigue venciendo a las 24 h. Hay un test por cada lado.
+
+**`ContactIdentity` entra al manifiesto de gemelos**: es el mismo concepto y hoy el mismo código en los dos repos.
+
+**Del lado del wacrm** (aditivo, misma ronda): el payload lleva `channel` en la raíz y `contact.channel_external_id`. Sin ese segundo campo, un contacto de Telegram llegaría acá sin ningún identificador y se descartaría — o sea, todo lo anterior no habría servido de nada.
+
+Tests: `InboundChannelTest` (9). Suite **418/418 (1494 aserciones)**.
+
 ## F0 (1/n) — los gemelos se vuelven conscientes del canal (2026-09-01)
 
 Primer paso de `plan_omnicanal.md` §F0. **Sin canales nuevos todavía: todo lo existente se comporta idéntico.** Se hizo justo después de D4 y no antes, a propósito — este cambio toca `ServiceWindow::build()` en los dos repos, que es exactamente lo que las fixtures de D4 protegen.

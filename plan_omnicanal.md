@@ -219,9 +219,25 @@ El 2026-07-28 se eliminó el módulo de **avisos por Telegram a los agentes** (c
 > - **Trampa:** `DealAssignmentSyncTest` alcanzaba `createLeadDeal` por reflexión. Un privado
 >   llamado así es un acoplamiento que ninguna búsqueda de «usos» encuentra.
 >
-> **Sigue pendiente de F0:** T0.2 (adapters de salida + `ChannelRouter`), T0.3 (puntos de
-> salida + `channel` en los payloads de webhook), **T0.4 (Komo: identidades, `payload.channel`,
-> `sendToConversation`)**, T0.5 (UI).
+> **Avance 2026-09-01 (5) — T0.4 (Komo) + el `channel` en los payloads: ✅ HECHO** (ambos repos).
+>
+> **El bloqueante 1 del §3 está levantado.** `syncContact()` resuelve por identidad, cae al
+> teléfono como respaldo y solo descarta si no hay **ninguno** de los dos. Un mensaje sin
+> teléfono crea contacto, identidad, lead y evento.
+>
+> - `payload.channel` y `payload.conversation_id` en cada `message_in`; el lead nace con
+>   `source = $channel` y título del canal real.
+> - Un **canal desconocido se guarda crudo y no rompe** (test).
+> - `ServiceWindow::forLeads` resuelve el canal por lead: un lead de Telegram muestra «sin
+>   límite», uno de WhatsApp sigue venciendo a las 24 h.
+> - **Del lado del wacrm** (aditivo): `channel` en la raíz del payload y
+>   `contact.channel_external_id`. **Sin ese segundo campo nada de lo anterior sirve**: un
+>   contacto de Telegram llegaría a Komo sin identificador y se descartaría igual.
+> - `ContactIdentity` entra al manifiesto de gemelos.
+>
+> **Sigue pendiente de F0:** T0.2/T0.3 (adapters de **salida** + `ChannelRouter`;
+> `Wacrm\Client::sendToConversation` — el bloqueante 2, direccionar por conversación en vez de
+> por teléfono), T0.5 (UI: badge de canal y filtro `?channel=`).
 
 
 

@@ -85,6 +85,17 @@ class ServiceWindow
             ->groupBy('lead_id')
             ->pluck('last_at', 'lead_id');
 
+        // F0 — el canal de cada lead, del último entrante que lo declare.
+        // Ordenado ascendente a propósito: `pluck` va pisando la clave, así que
+        // gana el más reciente. Los eventos anteriores a F0 no traen canal y
+        // caen al default, que es lo que eran.
+        $channels = LeadEvent::whereIn('lead_id', $ids)
+            ->where('event_type', 'message_in')
+            ->whereNotNull('payload->channel')
+            ->orderBy('created_at')
+            ->selectRaw("lead_id, JSON_UNQUOTE(JSON_EXTRACT(payload, '$.channel')) as channel")
+            ->pluck('channel', 'lead_id');
+
         $out = [];
 
         foreach ($leads as $lead) {
@@ -100,6 +111,7 @@ class ServiceWindow
             $out[$lead->id] = $this->build(
                 isset($lastInbound[$lead->id]) ? Carbon::parse($lastInbound[$lead->id]) : null,
                 $adAt,
+                $channels[$lead->id] ?? ChannelRules::DEFAULT,
             );
         }
 
