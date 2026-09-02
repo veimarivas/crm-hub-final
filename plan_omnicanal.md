@@ -277,10 +277,33 @@ El 2026-07-28 se eliminó el módulo de **avisos por Telegram a los agentes** (c
 >   ficha y en los listados, un hilo de Telegram mostraba una cuenta regresiva de 24 h inventada
 >   y decía «Cerrada» sobre una conversación abierta para siempre.
 >
-> **Queda de F0, no bloqueante para F1:** `/settings/channels` (lo va a necesitar F1 para
-> conectar el bot, y se construye ahí con algo real que conectar), los puntos de salida internos
-> que todavía llaman a `Messenger` directo (`AiAutoReplyJob`, `Automations\Engine`,
-> `Flows\Runner`) y el `channel` en los broadcasts.
+> **Avance 2026-09-02 — T0.3, los puntos de salida internos: ✅ HECHO** (wacrm).
+>
+> **No era cosmético: era un bug esperando a F1.** `AiAutoReplyJob` se encola para TODOS los
+> canales pero enviaba por Meta; con Telegram andando habría intentado responderle a un contacto
+> sin teléfono. Ídem `Automations\Engine` y `Flows\Runner`. Los tres pasan por
+> `ChannelRouter::forConversation()`.
+>
+> - `Engine` ya no abre un hilo de WhatsApp por defecto: usa la conversación del contacto con
+>   actividad más reciente, cualquiera sea su canal.
+> - Los pasos interactivos de los flows quedan en `Messenger` **con guarda por canal**: en otro
+>   canal se manda el texto de la pregunta. Perder los botones degrada; mandarla por WhatsApp a
+>   quien escribió por otro lado la manda a la persona equivocada.
+> - ⚠️ **El router no puede ser singleton** (y lo era): capturaba el `Messenger` del primer uso.
+>   El síntoma no se parecía a la causa — un contador de fallas de la IA en 2 en vez de 0.
+>
+> ---
+>
+> ### 🏁 F0 CERRADA
+>
+> Entrada, salida, esquema, identidades, reglas de canal y UI. **Para Telegram falta solo lo
+> propio de Telegram**: `TelegramApi`, `TelegramAdapter`, el controlador de webhook que arma un
+> `InboundMessage`, y `/settings/channels` para pegar el bot token.
+>
+> **Diferido con criterio:** el `channel` en broadcasts. Hoy no cambiaría ningún comportamiento
+> —solo hay un canal con tráfico— y la audiencia alcanzable por canal (nota 12: Telegram no
+> soporta outbound-first) se diseña mejor cuando exista el adapter que dice quién es
+> alcanzable.
 
 
 
