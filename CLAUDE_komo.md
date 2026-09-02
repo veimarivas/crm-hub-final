@@ -2,6 +2,17 @@
 
 CRM de ventas centrado en **leads** inspirado en Kommo (kommo.com), hermano del **wacrm** (`C:\xampp_82_12\htdocs\laravel_crm_whatsapp`, CRM de WhatsApp). Son **dos proyectos separados integrados por API**: este maneja leads/tareas/pipeline; el wacrm es el motor de WhatsApp.
 
+## F0 — responder EN la conversación, no al teléfono (2026-09-01)
+
+**El bloqueante 2 del plan omnicanal, levantado.** Todo lo que salía de acá direccionaba por teléfono (`Client::sendMessage($phone, $text)`), así que a un lead de Telegram no se le podía contestar desde su ficha: no tiene número. El botón fallaba con *«El lead no tiene un contacto con teléfono»*.
+
+- **`Client::sendToConversation($conversationId, $text)`** contra el `POST /api/v1/messages` del wacrm, que desde esta ronda acepta `conversation_id` como alternativa a `to`.
+- **El chat del lead la usa cuando hay `wacrm_conversation_id`**, y cae al teléfono si no. El respaldo no es opcional: los leads anteriores a la integración nunca guardaron ese id.
+- Direccionar por conversación es además **más preciso** aunque haya teléfono: un mismo número puede corresponder a más de un hilo cuando hay varios canales.
+- El único caso que sigue fallando es **sin conversación y sin teléfono**, y lo dice con esas palabras.
+
+Tests: `LeadReplyByConversationTest` (4). Suite **422/422 (1503 aserciones)**.
+
 ## F0b/T0.4 — Komo deja de descartar los eventos sin teléfono (2026-09-01)
 
 **Era el bloqueante del E2E de Telegram, y fallaba de la peor manera posible.** `EventProcessor::syncContact()` arrancaba con:

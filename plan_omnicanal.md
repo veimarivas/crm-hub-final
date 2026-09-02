@@ -235,9 +235,38 @@ El 2026-07-28 se eliminó el módulo de **avisos por Telegram a los agentes** (c
 >   contacto de Telegram llegaría a Komo sin identificador y se descartaría igual.
 > - `ContactIdentity` entra al manifiesto de gemelos.
 >
-> **Sigue pendiente de F0:** T0.2/T0.3 (adapters de **salida** + `ChannelRouter`;
-> `Wacrm\Client::sendToConversation` — el bloqueante 2, direccionar por conversación en vez de
-> por teléfono), T0.5 (UI: badge de canal y filtro `?channel=`).
+> **Avance 2026-09-01 (6) — la salida: `ChannelRouter`, `WhatsAppAdapter` y direccionamiento
+> por conversación: ✅ HECHO** (ambos repos).
+>
+> **El bloqueante 2 está levantado.** `POST /api/v1/messages` acepta `conversation_id` como
+> alternativa a `to`; `Wacrm\Client::sendToConversation()` la usa y el chat del lead direcciona
+> por conversación, con el teléfono de respaldo para los leads viejos.
+>
+> - `Messenger` **no se reescribe: se envuelve**. Lo usan directo el composer del Inbox y la API
+>   de media; reemplazarlo sería reescribir código probado para no ganar nada.
+> - La interfaz `ChannelAdapter` sale **corta a propósito**: sin `sendInteractive` ni
+>   `sendTypingIndicator`, porque con una sola implementación esos métodos se diseñarían a
+>   ciegas. Entran con el adapter de Telegram.
+> - **`ChannelRouter::adapter()` lanza en vez de caer a WhatsApp**: caer sería mandarle el
+>   mensaje al teléfono de alguien que escribió por otro canal.
+> - **El chequeo de «WhatsApp conectado» solo aplica a WhatsApp**: si no, un canal quedaría
+>   bloqueado por la configuración de otro.
+> - ⚠️ `Messenger::resolveConversation` necesitaba el canal en la clave: con el índice único de
+>   T0.1 podía devolver el hilo de otro canal, y el mensaje habría salido por donde no era.
+>
+> ---
+>
+> ### 🏁 F0 cerrada en lo esencial
+>
+> El motor es canal-agnóstico **de entrada y de salida**. Los dos bloqueantes del §3 están
+> levantados y sus trampas (3, 5, 6, 7) resueltas. **F1 (Telegram) ya no necesita tocar el
+> motor**: es un `TelegramApi`, un `TelegramAdapter` y un controlador de webhook que arma un
+> `InboundMessage` y llama al `Ingestor`.
+>
+> **Queda de F0, no bloqueante para F1:** T0.5 (UI — badge de canal en `/inbox`, `/leads` y la
+> ficha; filtro `?channel=` server-side; `/settings/channels`), los puntos de salida internos
+> que todavía llaman a `Messenger` directo (`AiAutoReplyJob`, `Automations\Engine`,
+> `Flows\Runner`) y el `channel` en los broadcasts.
 
 
 

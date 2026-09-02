@@ -73,6 +73,25 @@ class Client
         return $this->unwrap($this->request()->post('/messages', ['to' => $phone, 'text' => $text]));
     }
 
+    /**
+     * Responde EN una conversación, sin pasar por el teléfono.
+     *
+     * **F0 — era el bloqueante 2 del plan omnicanal.** Todo lo que sale de acá
+     * direccionaba por teléfono, así que a un lead de Telegram no había forma
+     * de contestarle: no tiene número. Direccionar por conversación es lo que
+     * vuelve el chat del lead independiente del canal.
+     *
+     * El camino por teléfono (`sendMessage`) se conserva como respaldo para los
+     * leads viejos que no guardaron su `wacrm_conversation_id`.
+     */
+    public function sendToConversation(string $conversationId, string $text): array
+    {
+        return $this->unwrap($this->request()->post('/messages', [
+            'conversation_id' => $conversationId,
+            'text' => $text,
+        ]));
+    }
+
     /** Envía un archivo (imagen/audio/video/documento) por WhatsApp. */
     public function sendMedia(string $phone, string $fileBase64, string $mimeType, ?string $filename = null, ?string $caption = null): array
     {

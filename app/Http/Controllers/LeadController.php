@@ -665,15 +665,28 @@ class LeadController extends Controller
             throw ValidationException::withMessages(['text' => 'La integración con el CRM de WhatsApp no está activa.']);
         }
 
-        if (! $lead->contact?->phone) {
-            throw ValidationException::withMessages(['text' => 'El lead no tiene un contacto con teléfono.']);
+        // F0 — se responde EN la conversación, no al teléfono. Era el
+        // bloqueante 2 del plan omnicanal: a un lead de Telegram no había forma
+        // de contestarle porque no tiene número. El camino por teléfono queda
+        // de respaldo para los leads viejos que nunca guardaron su
+        // `wacrm_conversation_id`.
+        if (! $lead->wacrm_conversation_id && ! $lead->contact?->phone) {
+            throw ValidationException::withMessages([
+                'text' => 'Este lead no tiene una conversación abierta ni un teléfono al que escribir.',
+            ]);
         }
 
         try {
-            Client::for($integration)->sendMessage(
-                $lead->contact->phone_normalized ?? $lead->contact->phone,
-                $validated['text'],
-            );
+            $client = Client::for($integration);
+
+            if ($lead->wacrm_conversation_id) {
+                $client->sendToConversation($lead->wacrm_conversation_id, $validated['text']);
+            } else {
+                $client->sendMessage(
+                    $lead->contact->phone_normalized ?? $lead->contact->phone,
+                    $validated['text'],
+                );
+            }
         } catch (\RuntimeException $e) {
             throw ValidationException::withMessages(['text' => $e->getMessage()]);
         }
