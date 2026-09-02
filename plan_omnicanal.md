@@ -488,9 +488,25 @@ final readonly class InboundMessage {
 > corresponde improvisar dentro de un adapter. Mientras tanto, un adjunto deja rastro visible
 > en la conversación en vez de un salto inexplicable.
 >
-> **Falta también:** `/settings/channels` para pegar el bot token desde la UI y el comando
-> `wacrm:telegram-setup-webhook`. Hoy la conexión se hace creando la fila de `channel_configs`
-> a mano — suficiente para probar con un bot real, no para entregarlo.
+> **Avance 2026-09-02 (2) — `/settings/channels` + comando: ✅ HECHO** (wacrm).
+>
+> Conectar el bot ya no exige tocar la base: se pega el token, se **valida contra Telegram
+> antes de guardarlo** y se registra el webhook solo.
+>
+> - Si el token es válido pero el webhook no se puede registrar (URL sin HTTPS), la fila queda
+>   **deshabilitada**: mostrar «Conectado» sin que llegue nada es la peor forma de fallar.
+> - El `webhook_secret` lo genera el servidor: una clave elegida a mano termina siendo
+>   «telegram123».
+> - Desconectar avisa a Telegram y **borra las credenciales**; solo apagarlas dejaría un bot
+>   token que ya nadie va a usar.
+> - `wacrm:telegram-setup-webhook` no duplica la pantalla: repara un webhook que Telegram
+>   desactivó o lo reapunta tras un cambio de dominio. **Se niega si falta el secreto.**
+> - ⚠️ **Dos bugs que encontró la suite:** `setWebhook` devuelve `result: true` (booleano, no
+>   objeto) y reventaba el tipo de retorno con un error que hablaba de PHP y no de que el
+>   webhook sí se había registrado; y `$coleccion['clave']` inexistente **lanza** en una
+>   Collection en vez de devolver null, así que el `?->` posterior nunca actuaba.
+>
+> **Único pendiente de F1: los adjuntos.**
 
 ### Backend wacrm
 
