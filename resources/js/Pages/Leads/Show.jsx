@@ -1,6 +1,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { completeTask } from '@/Components/CompleteTaskModal';
 import ServiceWindowBadge, { ServiceWindowCard } from '@/Components/ServiceWindowBadge';
+import ChannelBadge from '@/Components/ChannelBadge';
 import AiFeedbackControl from '@/Components/AiFeedbackControl';
 import CopilotPanel from '@/Components/CopilotPanel';
 import ImageModal from '@/Components/ImageModal';
@@ -297,6 +298,10 @@ export default function Show({ lead, stages, events, tasks, notes, members, cont
                     {/* La ventana de servicio queda siempre a la vista: decide
                         si escribir ahora sale gratis, y eso no debería exigir
                         cambiar de pestaña. */}
+                    {/* Por dónde llegó. El badge se calla cuando es WhatsApp:
+                        mientras casi todo entra por ahí, marcarlo en cada ficha
+                        sería ruido. Lo que informa es lo que NO es lo habitual. */}
+                    <ChannelBadge channel={lead.source} />
                     <ServiceWindowBadge window={serviceWindow} showOrigin />
                 </div>
 

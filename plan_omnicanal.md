@@ -263,8 +263,22 @@ El 2026-07-28 se eliminó el módulo de **avisos por Telegram a los agentes** (c
 > motor**: es un `TelegramApi`, un `TelegramAdapter` y un controlador de webhook que arma un
 > `InboundMessage` y llama al `Ingestor`.
 >
-> **Queda de F0, no bloqueante para F1:** T0.5 (UI — badge de canal en `/inbox`, `/leads` y la
-> ficha; filtro `?channel=` server-side; `/settings/channels`), los puntos de salida internos
+> **Avance 2026-09-01 (7) — T0.5, el canal se ve y se filtra: ✅ HECHO** (ambos repos).
+>
+> - `ChannelBadge` gemelo. **Se calla cuando es WhatsApp**: mientras casi todo entra por ahí, un
+>   badge en cada fila es ruido. Lo que informa es lo que *no* es lo habitual.
+> - **Filtro `?channel=` server-side** en el Inbox: el listado se corta en 100, así que filtrar
+>   en pantalla daría un número que se lee como dato y es un artefacto del recorte.
+> - En Komo el badge sale de **`lead.source`, sin columna nueva**: desde T0.4 un lead de
+>   mensajería nace con `source = $channel`, y filtrar por canal en `/leads` ya funciona con el
+>   `?source=` que `SegmentQuery` tiene desde siempre.
+> - ⚠️ **`ServiceWindow` tenía tres puertas y solo una sabía del canal.** El corte vive en
+>   `build()`, pero `for()`, `forMany()` y `forContacts()` lo llamaban **sin pasarlo**: en la
+>   ficha y en los listados, un hilo de Telegram mostraba una cuenta regresiva de 24 h inventada
+>   y decía «Cerrada» sobre una conversación abierta para siempre.
+>
+> **Queda de F0, no bloqueante para F1:** `/settings/channels` (lo va a necesitar F1 para
+> conectar el bot, y se construye ahí con algo real que conectar), los puntos de salida internos
 > que todavía llaman a `Messenger` directo (`AiAutoReplyJob`, `Automations\Engine`,
 > `Flows\Runner`) y el `channel` en los broadcasts.
 

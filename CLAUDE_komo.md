@@ -2,6 +2,14 @@
 
 CRM de ventas centrado en **leads** inspirado en Kommo (kommo.com), hermano del **wacrm** (`C:\xampp_82_12\htdocs\laravel_crm_whatsapp`, CRM de WhatsApp). Son **dos proyectos separados integrados por API**: este maneja leads/tareas/pipeline; el wacrm es el motor de WhatsApp.
 
+## F0/T0.5 — el canal se ve en la ficha del lead (2026-09-01)
+
+`ChannelBadge.jsx`, gemelo con el wacrm (byte-idéntico, dentro del manifiesto de `SharedFilesDriftTest`), en la ficha del lead junto al badge de ventana.
+
+**Sale de `lead.source`, sin columna nueva.** Desde T0.4 un lead de mensajería nace con `source = $channel`, así que la fuente **es** el canal para estos leads — y filtrar por canal en `/leads` ya funciona con el `?source=` que `SegmentQuery` tiene desde siempre. Agregar una columna `channel` habría sido duplicar un dato que ya estaba.
+
+**El badge se calla cuando es WhatsApp.** Mientras casi todo entra por ahí, marcarlo en cada ficha es ruido; lo que informa es lo que *no* es lo habitual.
+
 ## F0 — responder EN la conversación, no al teléfono (2026-09-01)
 
 **El bloqueante 2 del plan omnicanal, levantado.** Todo lo que salía de acá direccionaba por teléfono (`Client::sendMessage($phone, $text)`), así que a un lead de Telegram no se le podía contestar desde su ficha: no tiene número. El botón fallaba con *«El lead no tiene un contacto con teléfono»*.
