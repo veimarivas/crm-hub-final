@@ -184,9 +184,25 @@ El 2026-07-28 se eliminó el módulo de **avisos por Telegram a los agentes** (c
 > - **Verificado que detecta**: se simuló el bug histórico (IA encolada antes de los flows) con
 >   la suite en verde y **5 de los 15** salieron en rojo con el reordenamiento exacto.
 >
-> **Sigue pendiente de F0:** T0.1 (migraciones + `contact_identities` + `channel_configs`),
-> T0.2 (adapters + `ChannelRouter`), **T0.2b (la extracción del ingestor en sí — ahora con la
-> red puesta)**, T0.3, T0.4, T0.5.
+> **Avance 2026-09-01 (3) — T0.1 migraciones + identidades + configs: ✅ HECHO** (wacrm).
+>
+> `contacts.phone` nullable, `channel`/`channel_conversation_id` en `conversations`,
+> `channel`/`external_message_id` en `messages`, `contact_identities` y `channel_configs`, con
+> los backfills en la propia migración. **Nada cambió de comportamiento**: el parity test pasó
+> sin tocarlo.
+>
+> - **La migración se niega a correr** si detecta datos que chocarían con los índices únicos, y
+>   nombra el comando que los arregla: `wacrm:channel-precheck [--fix]`. Los dos casos fallarían
+>   **en producción y no en local**, que es la peor forma de enterarse.
+> - Al fusionar conversaciones gana **la más antigua**; los no leídos se suman y la atribución
+>   del anuncio original se conserva. Los `message_id` duplicados **no borran el mensaje**: le
+>   quitan el id.
+> - ⚠️ **Trampa nueva, no estaba en el plan:** `channel_configs.credentials` tiene que ser
+>   `text` y no `json`. MariaDB valida las columnas `json` con un CHECK y el cast `encrypted`
+>   guarda un blob que no es JSON — la fila se rechaza con un error que no menciona el cifrado.
+>
+> **Sigue pendiente de F0:** T0.2 (adapters + `ChannelRouter`), **T0.2b (la extracción del
+> ingestor en sí — ahora con la red puesta y el esquema listo)**, T0.3, T0.4 (Komo), T0.5.
 
 
 
