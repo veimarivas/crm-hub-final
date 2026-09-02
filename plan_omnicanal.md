@@ -201,8 +201,27 @@ El 2026-07-28 se eliminó el módulo de **avisos por Telegram a los agentes** (c
 >   `text` y no `json`. MariaDB valida las columnas `json` con un CHECK y el cast `encrypted`
 >   guarda un blob que no es JSON — la fila se rechaza con un error que no menciona el cifrado.
 >
-> **Sigue pendiente de F0:** T0.2 (adapters + `ChannelRouter`), **T0.2b (la extracción del
-> ingestor en sí — ahora con la red puesta y el esquema listo)**, T0.3, T0.4 (Komo), T0.5.
+> **Avance 2026-09-01 (4) — T0.2b, la extracción del ingestor: ✅ HECHO** (wacrm).
+>
+> `InboundMessage` (DTO) + `Services\Channels\Ingestor` se llevan todo lo que vivía de
+> `DB::transaction` para abajo. `InboundProcessor` pasa de **406 a 213 líneas** y queda como el
+> parser del sobre de Meta.
+>
+> - **El contacto se resuelve por IDENTIDAD**, con respaldo por teléfono para los canales que lo
+>   traen. Un canal sin teléfono ya es representable.
+> - ⚠️ **`message_id` se escribe SOLO para WhatsApp**: es la columna vieja de Meta y hay
+>   consultas que la usan sin filtrar por canal. Un id de Telegram ahí las haría matchear de más.
+> - **`InboundProcessorParityTest` pasó 15/15 sin tocar una aserción.** Ese es todo el valor de
+>   haberlo escrito primero: sin él, «anda igual» habría sido una opinión.
+> - `IngestorMultiChannelTest` prueba lo otro: idempotencia **por canal**, una persona con dos
+>   identidades tiene un historial y dos hilos, y **el orden de la cola es idéntico** al de
+>   WhatsApp — el orden es del motor, no del canal.
+> - **Trampa:** `DealAssignmentSyncTest` alcanzaba `createLeadDeal` por reflexión. Un privado
+>   llamado así es un acoplamiento que ninguna búsqueda de «usos» encuentra.
+>
+> **Sigue pendiente de F0:** T0.2 (adapters de salida + `ChannelRouter`), T0.3 (puntos de
+> salida + `channel` en los payloads de webhook), **T0.4 (Komo: identidades, `payload.channel`,
+> `sendToConversation`)**, T0.5 (UI).
 
 
 
