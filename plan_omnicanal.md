@@ -465,6 +465,33 @@ final readonly class InboundMessage {
 
 ## F1 — Telegram (mensajería completa)
 
+> **Avance 2026-09-02 — entrada y salida de TEXTO: ✅ HECHO** (wacrm). `TelegramApi`,
+> `TelegramAdapter`, `POST /webhooks/telegram/{account}`. Komo no necesitó **ni una línea**:
+> los eventos llegan con `payload.channel='telegram'` y contacto sin teléfono, que es lo que
+> F0b dejó listo.
+>
+> - Cuenta en la URL, `secret_token` con `hash_equals`, **404 y no 403** cuando no está
+>   conectado, idempotencia por `update_id`, y **siempre 200** (otra cosa hace que Telegram
+>   reintente para siempre y termine desactivando el webhook).
+> - `callback_query` entra como respuesta interactiva: lo que importa es el `data`, no el
+>   rótulo.
+> - Un mensaje **editado** se trata como nuevo: descartarlo dejaría la conversación mostrando
+>   el texto que el cliente corrigió.
+> - ⚠️ **Trampas de test que hacían pasar tests que medían lo contrario:** `$this->fail()`
+>   dentro de un `catch (\RuntimeException)` **se atrapa a sí mismo** (la excepción de PHPUnit
+>   extiende RuntimeException); y `Http::fake()` llamado dos veces **acumula** stubs y gana el
+>   primero, así que un fake de fallo tras uno de éxito nunca se aplica.
+>
+> **Pendiente de F1, con motivo:** los **adjuntos**. El link de `getFile` caduca y **lleva el
+> bot token adentro**, así que —a diferencia de Meta, que se resuelve por proxy en vivo— hay
+> que descargarlos a almacenamiento propio. Es una decisión de almacenamiento que no
+> corresponde improvisar dentro de un adapter. Mientras tanto, un adjunto deja rastro visible
+> en la conversación en vez de un salto inexplicable.
+>
+> **Falta también:** `/settings/channels` para pegar el bot token desde la UI y el comando
+> `wacrm:telegram-setup-webhook`. Hoy la conexión se hace creando la fila de `channel_configs`
+> a mano — suficiente para probar con un bot real, no para entregarlo.
+
 ### Backend wacrm
 
 - `config/channels.php` nuevo con `enabled` por canal; el `bot_token` **no va en `config/services.php`** — **[REV]** es por cuenta y va cifrado en `channel_configs.credentials` (multi-tenant, §1). Un token en `.env` sería un solo bot para todas las cuentas.
