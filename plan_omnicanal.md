@@ -506,7 +506,25 @@ final readonly class InboundMessage {
 >   webhook sí se había registrado; y `$coleccion['clave']` inexistente **lanza** en una
 >   Collection en vez de devolver null, así que el `?->` posterior nunca actuaba.
 >
-> **Único pendiente de F1: los adjuntos.**
+> **Avance 2026-09-02 (3) — adjuntos: ✅ HECHO.** Con esto **F1 queda cerrada**.
+>
+> `messages.media_path`/`media_mime` para la copia local, `DownloadTelegramMediaJob` en cola
+> (bajarlo en el webhook demoraría el 200 y Telegram reintenta lo que tarda), ruta
+> `/channel-media/{message}` con el corte por cuenta **en el controlador** —un uuid de mensaje
+> es adivinable de a poco—, y envío de archivos que también deja copia.
+>
+> - `photo` es un **array de tamaños**: se toma el último. El primero es una miniatura.
+> - **La transcripción cierra el círculo del audio**: el ingestor no encola la IA para audios
+>   para que no conteste algo que no escuchó, y con Telegram no había quién la reactivara. Ahora
+>   la descarga dispara `TranscribeAudioJob`, que **usa la copia local** en vez de pedírsela a
+>   Meta — pedírsela fallaría, porque ese `media_url` es un `file_id` de otro proveedor.
+>
+> ---
+>
+> ### 🏁 F1 CERRADA
+>
+> Telegram funciona completo: texto, botones, adjuntos, transcripción, conexión desde la
+> pantalla. **Komo no necesitó ni una línea en toda la fase.**
 
 ### Backend wacrm
 
